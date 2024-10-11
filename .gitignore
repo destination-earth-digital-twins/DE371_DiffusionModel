@@ -12,3 +12,7 @@
 .idea
 model
 *.out
+config/*
+!config/config_train.yml
+!config/config_sample.yml
+!config/rr_dataset_config.yml
