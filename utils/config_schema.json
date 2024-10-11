@@ -1,0 +1,275 @@
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": [
+        "Train",
+        "Sample"
+      ],
+      "description": "Execution mode: Choose between Train or Sample"
+    },
+    "run_name": {
+      "type": "string",
+      "default": "run",
+      "description": "Name for the training run"
+    },
+    "batch_size": {
+      "type": "integer",
+      "default": 32,
+      "description": "Batch size for training or sampling"
+    },
+    "any_time": {
+      "type": "integer",
+      "default": 400,
+      "description": "Frequency (in epochs) to save snapshots and generate samples during training"
+    },
+    "model_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Path to the model for loading and resuming training. If null, training starts from scratch."
+    },
+    "ddim_timesteps": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "If not None, samples from the ddim method with the specified number of timesteps"
+    },
+    "plot": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable plotting during training"
+    },
+    "sampling_mode": {
+      "type": "string",
+      "enum": [
+        "simple",
+        "conditioned",
+        "guided"
+      ],
+      "default": "simple",
+      "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
+    },
+    "guiding_col": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Column to use for guided sampling. Required when using guided sampling mode."
+    },
+    "n_sample": {
+      "type": "integer",
+      "default": 10,
+      "description": "Number of samples to generate during training"
+    },
+    "random_noise": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use random noise for x_start in guided sampling"
+    },
+    "data_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Directory containing the input data"
+    },
+    "output_dir": {
+      "type": "string",
+      "default": "",
+      "description": "Directory where the output data is saved"
+    },
+    "csv_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Path to the CSV file containing label data (required for guided sampling)"
+    },
+    "v_i": {
+      "type": "integer",
+      "default": 3,
+      "description": "Number of variable indices"
+    },
+    "var_indexes": {
+      "type": "array",
+      "default": [
+        "u",
+        "v",
+        "t2m"
+      ],
+      "description": "List of variable indices for input data"
+    },
+    "crop": {
+      "type": "array",
+      "default": [
+        78,
+        206,
+        55,
+        183
+      ],
+      "description": "Crop parameters for input images [left, right, top, bottom]"
+    },
+    "auto_normalize": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically normalize input images"
+    },
+    "invert_norm": {
+      "type": "boolean",
+      "default": false,
+      "description": "Invert normalization of input image samples"
+    },
+    "mean_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Constant mean file for normalisation (overriden by dataset_handler_config if latter is used)"
+    },
+    "max_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Constant max file for normalisation (overriden by dataset_handler_config if latter is used)"
+    },
+    "image_size": {
+      "type": "integer",
+      "default": 128,
+      "description": "Size of the input image"
+    },
+    "scheduler": {
+      "type": "string",
+      "enum": [
+        "ReduceLROnPlateau",
+        "OneCycleLR"
+      ],
+      "default": "OneCycleLR",
+      "description": "Use scheduler for learning rate during training"
+    },
+    "scheduler_epoch": {
+      "type": "integer",
+      "default": 150,
+      "description": "Number of epochs for the scheduler to downscale (save for resume)"
+    },
+    "resume": {
+      "type": "boolean",
+      "default": false,
+      "description": "Resume training from a checkpoint"
+    },
+    "lr": {
+      "type": "number",
+      "default": 0.0005,
+      "description": "Learning rate for the optimizer"
+    },
+    "dim": {
+      "type": "integer",
+      "default": 64,
+      "description": "dim of Unet"
+    },
+    "dim_mults": {
+      "type": "array",
+      "default": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "description": "dim_mults for Unet"
+    },
+    "adam_betas": {
+      "type": "array",
+      "default": [
+        0.9,
+        0.99
+      ],
+      "description": "Betas for the Adam optimizer"
+    },
+    "epochs": {
+      "type": "integer",
+      "default": 150,
+      "description": "Number of epochs to train the model"
+    },
+    "num_workers": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of workers to load data"
+    },
+    "guidance_loss_scale": {
+      "type": "integer",
+      "default": 0,
+      "description": "Scale factor for guidance loss in guided sampling"
+    },
+    "beta_schedule": {
+      "type": "string",
+      "enum": [
+        "cosine",
+        "linear"
+      ],
+      "default": "linear",
+      "description": "Type of beta schedule (cosine or linear)"
+    },
+    "dataset_handler_config": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Yaml configuration file for dataset handler"
+    },
+    "wandbproject": {
+      "type": "string",
+      "default": "meteoDDPM",
+      "description": "Wandb project name for logging"
+    },
+    "use_mlflow": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use mlflow for logging"
+    },
+    "use_wandb": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use Wandb for logging"
+    },
+    "entityWDB": {
+      "type": "string",
+      "default": "your_entity",
+      "description": "Wandb entity name for logging"
+    },
+    "dataset_config_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Path to the dataset configuration file"
+    },
+    "n_ensemble": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of ensemble members"
+    },
+    "log_by_iteration": {
+      "type": "boolean",
+      "default": false,
+      "description": "add metric logging every iteration"
+    }
+  },
+  "required": [
+    "mode",
+    "run_name",
+    "batch_size"
+  ]
+}
