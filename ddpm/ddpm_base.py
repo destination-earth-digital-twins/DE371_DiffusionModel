@@ -16,7 +16,7 @@ class Ddpm_base:
         model: torch.nn.Module,
         config,
         dataloader=None,
-        inversion_transforms=None,
+        inversion_transforms=None
     ) -> None:
         """
         Initialize the Trainer.
@@ -40,6 +40,8 @@ class Ddpm_base:
             if is_main_gpu():
                 self.logger.info(f"Loading snapshot")
             self._load_snapshot(self.snapshot_path)
+        else:
+            self.epochs_run = 0
 
         # Move model to GPU
         model.to(torch.device(self.gpu_id))

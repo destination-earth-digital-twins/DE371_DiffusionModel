@@ -35,4 +35,4 @@ apptainer run --nv /project/scratch/p200177/DE_371/resources/apptainer_container
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u102230/code/DDPM-weather/config/config_train_conditioned.yml"
+    --yaml_path= $SOURCE_DIR/config/config/config_train_conditioned.yml
