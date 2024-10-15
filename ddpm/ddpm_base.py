@@ -29,7 +29,10 @@ class Ddpm_base:
         self.scheduler = None
         self.config = config
         self.gpu_id = get_rank()
-        self.timesteps = model.num_timesteps
+        if self.config.elucidated_diffusion_sampler == True:
+            self.timesteps = model.num_sample_steps
+        else:
+            self.timesteps = model.num_timesteps
         self.dataloader = dataloader
         self.snapshot_path = self.config.model_path
         self.model = model
@@ -85,7 +88,16 @@ class Ddpm_base:
         if "WANDB_ID" in snapshot:
             self.wandb_id = snapshot["WANDB_ID"]
 
-        self.model.load_state_dict(snapshot["MODEL_STATE"])
+
+        if self.config.elucidated_diffusion_sampler == True:
+            #Keys from classic Gaussia diffusion that are not used in the elucidated diffusion sampling
+            unwanted_keys = ["betas", "alphas_cumprod", "alphas_cumprod_prev", "sqrt_alphas_cumprod", "sqrt_one_minus_alphas_cumprod", "log_one_minus_alphas_cumprod", "sqrt_recip_alphas_cumprod", "sqrt_recipm1_alphas_cumprod", "posterior_variance", "posterior_log_variance_clipped", "posterior_mean_coef1", "posterior_mean_coef2", "loss_weight"]
+            filterd_state_dict = {k: v for k, v in snapshot["MODEL_STATE"].items() if k not in unwanted_keys}
+            self.model.load_state_dict(filterd_state_dict)
+        else:
+            self.model.load_state_dict(snapshot["MODEL_STATE"])
+        
+        #self.model.load_state_dict(snapshot["MODEL_STATE"])
         self.epochs_run = snapshot["EPOCHS_RUN"]
 
         if self.optimizer is not None:

@@ -55,6 +55,11 @@
       "default": "simple",
       "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
     },
+    "elucidated_diffusion_sampler": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable the elucidated diffusion sampler"
+    },
     "guiding_col": {
       "type": [
         "string",
