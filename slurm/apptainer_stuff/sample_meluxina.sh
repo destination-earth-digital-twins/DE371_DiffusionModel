@@ -5,8 +5,8 @@
 #SBATCH -G 4
 #SBATCH -p gpu
 #SBATCH --ntasks-per-node=4
-#SBATCH --time=48:00:00
-#SBATCH --qos=default
+#SBATCH --time=2:00:00
+#SBATCH --qos=short
 
 
 export TORCH_DISTRIBUTED_DEBUG=INFO 
@@ -27,12 +27,12 @@ source .env
 set -x
 
 # Ensure the logs directory exists or create it if not
-if [ ! -d "$LOG_DIR" ]; then
-  mkdir "$LOG_DIR"
-fi
+# if [ ! -d "$LOG_DIR" ]; then
+#   mkdir "$LOG_DIR"
+# fi
 
 apptainer run --nv /project/scratch/p200177/DE_371/resources/apptainer_container/container_diffusion.sif \
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path= $SOURCE_DIR/config/config_sample_unconditioned.yml
+    --yaml_path="/home/users/u102230/code/DDPM-weather/config/config_sample_conditioned.yml"
