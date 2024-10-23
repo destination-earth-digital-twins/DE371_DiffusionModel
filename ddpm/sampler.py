@@ -84,7 +84,8 @@ class Sampler(Ddpm_base):
 
             if is_main_gpu():
                 self.logger.info(
-                    f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    #f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    f"Sampling {self.config.n_sample} images...")
             with tqdm(total=self.config.n_sample // self.config.batch_size, desc="Sampling ", unit="batch",
                       disable= not is_main_gpu()) as pbar:
                 b = 0

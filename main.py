@@ -131,16 +131,16 @@ def load_train_objs(config):
             image_size=config.image_size,
             channels = 3,
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
-            sigma_min = 0.002,     # min noise level
-            sigma_max = 80,        # max noise level
-            sigma_data = 0.5,      # standard deviation of data distribution
-            rho = 7,               # controls the sampling schedule
-            P_mean = -1.2,         # mean of log-normal distribution from which noise is drawn for training
-            P_std = 1.2,           # standard deviation of log-normal distribution from which noise is drawn for training
-            S_churn = 80,          # parameters for stochastic sampling - depends on dataset, Table 5 in apper
-            S_tmin = 0.05,
-            S_tmax = 50,
-            S_noise = 1.003,
+            sigma_min = config.sigma_min,      # min noise level
+            sigma_max = config.sigma_max,       # max noise level
+            sigma_data = config.sigma_data,       # standard deviation of data distribution
+            rho = config.rho,                # controls the sampling schedule
+            P_mean = config.P_mean,          # mean of log-normal distribution from which noise is drawn for training
+            P_std = config.P_std,            # standard deviation of log-normal distribution from which noise is drawn for training
+            S_churn = config.S_churn,           # parameters for stochastic sampling - depends on dataset, Table 5 in apper
+            S_tmin = config.S_tmin,
+            S_tmax = config.S_tmax,
+            S_noise = config.S_noise,
         )
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas

@@ -39,17 +39,17 @@ class ElucidatedDiffusion(nn.Module):
         *,
         image_size,
         channels = 3,
-        num_sample_steps = 30, # number of sampling steps
-        sigma_min = 0.002,     # min noise level
-        sigma_max = 80,        # max noise level
-        sigma_data = 0.5,      # standard deviation of data distribution
-        rho = 7,               # controls the sampling schedule
-        P_mean = -1.2,         # mean of log-normal distribution from which noise is drawn for training
-        P_std = 1.2,           # standard deviation of log-normal distribution from which noise is drawn for training
+        num_sample_steps = 100, # number of sampling steps
+        sigma_min = 0.002,      # min noise level
+        sigma_max = 0.80,       # max noise level
+        sigma_data = 0.5,       # standard deviation of data distribution
+        rho = 7,                # controls the sampling schedule
+        P_mean = -1.2,          # mean of log-normal distribution from which noise is drawn for training
+        P_std = 1.2,            # standard deviation of log-normal distribution from which noise is drawn for training
         S_churn = 80,          # parameters for stochastic sampling - depends on dataset, Table 5 in apper
         S_tmin = 0.05,
         S_tmax = 50,
-        S_noise = 1.003,
+        S_noise = 0.0,
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
@@ -79,7 +79,7 @@ class ElucidatedDiffusion(nn.Module):
         self.S_tmin = S_tmin
         self.S_tmax = S_tmax
         self.S_noise = S_noise
-
+        
     @property
     def device(self):
         return next(self.model.parameters()).device
@@ -119,7 +119,6 @@ class ElucidatedDiffusion(nn.Module):
 
         if clamp:
             out = out.clamp(-1., 1.)
-
         return out
 
     # sampling
@@ -140,7 +139,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, clamp = True):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = True):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
 
         shape = (batch_size, self.channels, self.image_size, self.image_size)
@@ -244,20 +243,20 @@ class ElucidatedDiffusion(nn.Module):
     def noise_distribution(self, batch_size):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
-    def forward(self, images):
-        batch_size, c, h, w, device, image_size, channels = *images.shape, images.device, self.image_size, self.channels
+    def forward(self, img):
+        batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
 
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
 
-        images = normalize_to_neg_one_to_one(images)
+        img = normalize_to_neg_one_to_one(img)
 
         sigmas = self.noise_distribution(batch_size)
         padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        noise = torch.randn_like(images)
+        noise = torch.randn_like(img)
 
-        noised_images = images + padded_sigmas * noise  # alphas are 1. in the paper
+        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
 
         self_cond = None
 
@@ -269,7 +268,7 @@ class ElucidatedDiffusion(nn.Module):
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
 
-        losses = F.mse_loss(denoised, images, reduction = 'none')
+        losses = F.mse_loss(denoised, img, reduction = 'none')
         losses = reduce(losses, 'b ... -> b', 'mean')
 
         losses = losses * self.loss_weight(sigmas)

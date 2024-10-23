@@ -143,6 +143,7 @@ class Ddpm_base:
         if nb_img <= 0:
             return []  # No images to sample, return an empty list
         if condition is None:
+            #sampled_images = self.model.sample_using_dpmpp(batch_size=nb_img)
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
             sampled_images = self.model.sample(
