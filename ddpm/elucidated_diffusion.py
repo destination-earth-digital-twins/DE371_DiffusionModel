@@ -53,9 +53,10 @@ class ElucidatedDiffusion(nn.Module):
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
+        self.model = model
         self.self_condition = model.self_condition
 
-        self.model = model
+
 
         # image dimensions
 
@@ -176,7 +177,7 @@ class ElucidatedDiffusion(nn.Module):
             sigma_hat = sigma + gamma * sigma
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
 
-            self_cond = x_start if self.self_condition else None
+            self_cond = condition if self.self_condition else None
 
             model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat
@@ -186,7 +187,7 @@ class ElucidatedDiffusion(nn.Module):
             # second order correction, if not the last timestep
 
             if sigma_next != 0:
-                self_cond = model_output if self.self_condition else None
+                self_cond = condition if self.self_condition else None
 
                 model_output_next = self.preconditioned_network_forward(images_next, sigma_next, self_cond, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
@@ -243,7 +244,7 @@ class ElucidatedDiffusion(nn.Module):
     def noise_distribution(self, batch_size):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
-    def forward(self, img):
+    def forward(self, img, *args, **kwargs):
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
 
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
