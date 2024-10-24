@@ -139,7 +139,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = True):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = False):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
 
         shape = (batch_size, self.channels, self.image_size, self.image_size)
@@ -195,7 +195,7 @@ class ElucidatedDiffusion(nn.Module):
             images = images_next
             x_start = model_output_next if sigma_next != 0 else model_output
 
-        images = images.clamp(-1., 1.)
+        #images = images.clamp(-1., 1.)
         return unnormalize_to_zero_to_one(images)
 
     @torch.no_grad()
