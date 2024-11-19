@@ -245,6 +245,7 @@ class ElucidatedDiffusion(nn.Module):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
     def forward(self, img, *args, **kwargs):
+        #TODO change terminology from self_cond to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
 
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
@@ -261,11 +262,17 @@ class ElucidatedDiffusion(nn.Module):
 
         self_cond = None
 
-        if self.self_condition and random() < 0.5:
-            # from hinton's group's bit diffusion paper
+        # Conditioned diffusion :
+        if self.self_condition:
             with torch.no_grad():
-                self_cond = self.preconditioned_network_forward(noised_images, sigmas)
+                self_cond = kwargs.get('condition')
                 self_cond.detach_()
+                
+        # if self.self_condition and random() < 0.5:
+        #     # from hinton's group's bit diffusion paper
+        #     with torch.no_grad():
+        #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
+        #         self_cond.detach_()
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
 

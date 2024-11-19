@@ -28,9 +28,7 @@ class Sampler(Ddpm_base):
         self.loss_func = loss_dict["L1Loss"]
 
     @torch.no_grad()
-    def _guided_sample_batch(
-        self, truth_sample_batch, guidance_loss_scale=100, random_noise=False
-    ):
+    def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
         """
         Perform guided sampling of a batch of images.
         Args:
@@ -120,7 +118,7 @@ class Sampler(Ddpm_base):
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
 
         if self.config.plot and is_main_gpu():
-            self.plot_grid("last_samples.jpg", samples)
+            self.plot_grid("../last_samples.jpg", samples)
 
         self.logger.info(
             f"Sampling done. Images saved in {self.config.output_dir}/{self.config.run_name}/samples/")
