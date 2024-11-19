@@ -96,7 +96,7 @@ class ISDataset(Dataset):
             [
                 transforms.Normalize(
                     mean=[0.0] * len(self.config.var_indexes),
-                    std=[1 / el for el in self.value_sup],
+                    std=[1 / (el*0.95*0.95) for el in self.value_sup], ##### corriger denorm *00.95
                 ),
                 transforms.Normalize(
                     mean=[-el for el in self.value_inf],
@@ -124,7 +124,8 @@ class ISDataset(Dataset):
                 )
 
         means = list(tuple(means))
-        stds = list(tuple((1.0 / 0.95) * (maxs)))
+        stds = list(tuple((1.0 / 0.95) * (maxs)))      #Erreur de normalisation ???
+        #stds = list(tuple(0.95 * (maxs)))
 
         return stds, means
 
