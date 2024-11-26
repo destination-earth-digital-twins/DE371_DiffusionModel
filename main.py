@@ -22,6 +22,7 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+from utils.utils import batch_output_sample_files
 import numpy as np
 
 warnings.filterwarnings(
@@ -158,9 +159,7 @@ def prepare_dataloader(config, path, csv_file, num_workers=None):
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
-    if (
-        "rr" in config.var_indexes
-    ):  # TODO :  make the "var_indexes" be "variables"
+    if ("rr" in config.var_indexes):  # TODO :  make the "var_indexes" be "variables"
         train_set = dataSet_Handler.rrISDataset(config, path, csv_file)
     else:
         train_set = dataSet_Handler.ISDataset(config, path, csv_file)
@@ -248,17 +247,25 @@ def main_sample(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data = prepare_dataloader(
-        config, path=config.data_dir, csv_file=config.csv_file
-    )
+    sample_data = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file)
     inversion_tf = sample_data.dataset.inversion_transforms
     data = sample_data if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
+
     for i in range(config.n_ensemble):
         if is_main_gpu():
             logger.info(f"Sampling {i+1} of {config.n_ensemble} : file_format = fake_sample_{i}_" + str(i) + ".npy")
-        file_format = "fake_sample_{i}_" + str(i) + ".npy"
+        if config.sampling_mode == "conditioned":
+            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
+        else:
+            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
         sampler.sample(filename_format=file_format)
+    
+        samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+        if config.sampling_mode == "conditioned":
+            batch_output_sample_files(samples_dir, conditioned=True, csv_file=config.csv_file, ensemble_index=i, config=config)
+        if config.sampling_mode == "simple":
+            batch_output_sample_files(samples_dir, conditioned=False, csv_file=config.csv_file, ensemble_index=i, config=config)
 
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):

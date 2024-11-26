@@ -123,6 +123,21 @@
       ],
       "description": "Crop parameters for input images [left, right, top, bottom]"
     },
+    "date_start":{
+      "type": "string",
+      "default": "",
+      "description": "We start sampling from this date"
+    },
+    "date_stop":{
+      "type": "string",
+      "default": "",
+      "description": "We stop the sampling at this date"
+    },
+    "leadtimes": {
+      "type": "array",
+      "default": [],
+      "description": "Leadtimes to sample"
+      },
     "auto_normalize": {
       "type": "boolean",
       "default": false,

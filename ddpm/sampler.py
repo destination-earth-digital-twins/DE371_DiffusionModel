@@ -67,7 +67,7 @@ class Sampler(Ddpm_base):
         return sampled_images_unnorm
 
     @torch.no_grad()
-    def sample(self, filename_format="_sample_{i}.npy"):
+    def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
         """
         Generate and save sample images during training.
         Args:
@@ -91,7 +91,11 @@ class Sampler(Ddpm_base):
                     batch_size = min(self.config.n_sample - b, self.config.batch_size)
                     samples = super()._sample_batch(nb_img=batch_size)
                     for s in samples:
-                        filename = filename_format.format(i=str(i))
+                        # Append the empty rr channel if only u v t2m
+                        if len(s) == 3:
+                            s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
+
+                        filename = filename_format.format(sample_dataset_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
                         np.save(save_path, s)
                         i += max(torch.cuda.device_count(), 1)
@@ -109,8 +113,13 @@ class Sampler(Ddpm_base):
                 #     samples = self._sample_batch(nb_img=len(cond), condition=cond)
                 # elif self.config.sampling_mode == "guided":
                 #     samples = self._guided_sample_batch(cond, random_noise=self.config.random_noise)
+
                 for s, img_id in zip(samples, ids):
-                    filename = filename_format.format(i=img_id)
+                    # Append the empty rr channel if only u v t2m
+                    if len(s) == 3:
+                        s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
+
+                    filename = filename_format.format(sample_dataset_index=img_id)
                     save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                     np.save(save_path, s)
 

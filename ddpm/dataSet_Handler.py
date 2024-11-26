@@ -25,6 +25,7 @@ from torch import from_numpy
 from torch.utils.data import Dataset
 
 from utils.config import DataSetConfig
+from utils.utils import filter_dates, filter_lead_times
 
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
@@ -54,9 +55,11 @@ class ISDataset(Dataset):
         """
         self.data_dir = path
         self.labels = pd.read_csv( csv_file, index_col=False)
+        self.config = config
+        self.labels = filter_dates(self.labels, self.config.date_start, self.config.date_stop)
+        self.labels = filter_lead_times(self.labels, self.config.leadtimes)
         if "Unnamed: 0" in self.labels:
             self.labels = self.labels.drop("Unnamed: 0", axis=1)
-        self.config = config
         self.dataset_config = (
             DataSetConfig(config.dataset_config_file)
             if config.dataset_config_file is not None

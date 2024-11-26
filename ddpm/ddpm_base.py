@@ -146,7 +146,7 @@ class Ddpm_base:
             #sampled_images = self.model.sample_using_dpmpp(batch_size=nb_img)
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
-            sampled_images = self.model.sample(batch_size=nb_img, condition=condition) # ICI APPEL MODEL.SAMPLE OK
+            sampled_images = self.model.sample(batch_size=nb_img, condition=condition)
         sampled_images = self.transforms_func(sampled_images)
         return sampled_images.cpu().numpy()
 
