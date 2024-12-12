@@ -130,7 +130,7 @@ def load_train_objs(config):
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
-            channels = 3,
+            channels = len(config.var_indexes),
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
             sigma_min = config.sigma_min,      # min noise level
             sigma_max = config.sigma_max,       # max noise level
@@ -256,9 +256,9 @@ def main_sample(config):
         if is_main_gpu():
             logger.info(f"Sampling {i+1} of {config.n_ensemble} : file_format = fake_sample_{i}_" + str(i) + ".npy")
         if config.sampling_mode == "conditioned":
-            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
+            file_format = "fake_sample_{row_id_in_dataset}_{sample_index}_" + str(i) + ".npy" 
         else:
-            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
+            file_format = "fake_sample_{sample_index}_" + str(i) + ".npy" 
         sampler.sample(filename_format=file_format)
     
         samples_dir = os.path.join(config.output_dir, config.run_name,'samples')

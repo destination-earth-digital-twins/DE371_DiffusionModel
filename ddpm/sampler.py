@@ -95,7 +95,7 @@ class Sampler(Ddpm_base):
                         if len(s) == 3:
                             s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
 
-                        filename = filename_format.format(sample_dataset_index=str(i))
+                        filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
                         np.save(save_path, s)
                         i += max(torch.cuda.device_count(), 1)
@@ -108,18 +108,19 @@ class Sampler(Ddpm_base):
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
                 cond = batch['img'].to(self.gpu_id)
                 ids = batch['img_id']
+                row_ids_in_csv = batch['id_in_csv']
                 samples = self._sample_batch(nb_img=len(cond), condition=cond)
                 # if self.config.sampling_mode == "conditioned":
                 #     samples = self._sample_batch(nb_img=len(cond), condition=cond)
                 # elif self.config.sampling_mode == "guided":
                 #     samples = self._guided_sample_batch(cond, random_noise=self.config.random_noise)
 
-                for s, img_id in zip(samples, ids):
+                for s, img_id, row_id in zip(samples, ids, row_ids_in_csv):
                     # Append the empty rr channel if only u v t2m
                     if len(s) == 3:
                         s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
 
-                    filename = filename_format.format(sample_dataset_index=img_id)
+                    filename = filename_format.format(row_id_in_dataset = row_id, sample_index = img_id)
                     save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                     np.save(save_path, s)
 

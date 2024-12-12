@@ -163,7 +163,7 @@ class ISDataset(Dataset):
             condition = torch.empty(0)
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"img": sample, "img_id": sample_id, "condition": condition}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition}
 
     def file_to_torch(self, file_name):
         """
@@ -193,9 +193,7 @@ class MultiOptionNormalize(object):
         self.gaussian_std = self.dataset_config.rr_transform["gaussian_std"]
         ### setting gaussian noise conditions
         if self.gaussian_std:
-            for _ in range(
-                self.dataset_config.rr_transform["log_transform_iteration"]
-            ):
+            for _ in range( self.dataset_config.rr_transform["log_transform_iteration"]):
                 self.gaussian_std = np.log(1 + self.gaussian_std)
 
         if np.ndim(self.value_sup) > 1:
@@ -243,15 +241,10 @@ class MultiOptionNormalize(object):
                 f"Expected sample to be a tensor image of size (..., C, H, W). Got tensor.size() = {sample.size()}."
             )
         ### transforming rain rates to logits (iterative transforms)
-        for _ in range(
-            self.dataset_config.rr_transform["log_transform_iteration"]
-        ):
+        for _ in range(self.dataset_config.rr_transform["log_transform_iteration"]):
             sample[var_dict["rr"]] = torch.log(1 + sample[var_dict["rr"]])
         ### randomly symmetrizing rain rates around 0 (50% of rain rates are negative)
-        if (
-            self.dataset_config.rr_transform["symetrization"]
-            and np.random.random() <= 0.5
-        ):
+        if (self.dataset_config.rr_transform["symetrization"] and np.random.random() <= 0.5):
             sample[var_dict["rr"]] = -sample[var_dict["rr"]]
         ### adding random noise (AT RUNTIME) to rain rates below a certain threshold
         if self.gaussian_std != 0:
@@ -278,9 +271,7 @@ class MultiOptionNormalize(object):
         if self.dataset_config.normalization["func"] == "mean":
             sample = (sample - self.value_inf) / self.value_sup
         elif self.dataset_config.normalization["func"] in ["minmax", "quant"]:
-            sample = -1 + 2 * (
-                (sample - self.value_inf) / (self.value_sup - self.value_inf)
-            )
+            sample = -1 + 2 * ((sample - self.value_inf) / (self.value_sup - self.value_inf))
         return sample
 
     def denorm(self, sample):
@@ -367,7 +358,7 @@ class rrISDataset(ISDataset):
         super().__init__(config, path, csv_file, add_coords=False)
 
     def prepare_tranformations(self):
-        transformations = []
+        # transformations = []
         normalization = self.dataset_config.normalization["func"]
         if normalization != "None":
             if self.dataset_config.rr_transform["symetrization"]:
@@ -381,14 +372,17 @@ class rrISDataset(ISDataset):
                     self.value_inf[var_dict["rr"]] = -self.value_sup[
                         var_dict["rr"]
                     ]
-        transformations.append(transforms.ToTensor())
-        transformations.append(
-            MultiOptionNormalize(
-                self.value_sup,
-                self.value_inf,
-                self.dataset_config,
-                self.config,
-            )
+                    
+        transformations = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    MultiOptionNormalize(
+                        self.value_sup,
+                        self.value_inf,
+                        self.dataset_config,
+                        self.config,
+                    ),
+                ]
         )
         return transformations
 
