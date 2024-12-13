@@ -11,7 +11,7 @@ from multiprocessing import cpu_count
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from torch import distributed as dist
-from torch.distributed import init_process_group, destroy_process_group
+from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
@@ -262,6 +262,7 @@ def main_sample(config):
         sampler.sample(filename_format=file_format)
     
         samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+        barrier() # Wait for every GPU to finish their sampling before batching the samples
         if config.sampling_mode == "conditioned":
             batch_output_sample_files(samples_dir, conditioned=True, csv_file=config.csv_file, ensemble_index=i, config=config)
         if config.sampling_mode == "simple":
