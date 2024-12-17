@@ -11,7 +11,7 @@ from multiprocessing import cpu_count
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from torch import distributed as dist
-from torch.distributed import init_process_group, destroy_process_group
+from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
@@ -130,7 +130,7 @@ def load_train_objs(config):
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
-            channels = 3,
+            channels = len(config.var_indexes),
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
             sigma_min = config.sigma_min,      # min noise level
             sigma_max = config.sigma_max,       # max noise level
@@ -256,12 +256,13 @@ def main_sample(config):
         if is_main_gpu():
             logger.info(f"Sampling {i+1} of {config.n_ensemble} : file_format = fake_sample_{i}_" + str(i) + ".npy")
         if config.sampling_mode == "conditioned":
-            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
+            file_format = "fake_sample_{row_id_in_dataset}_{sample_index}_" + str(i) + ".npy" 
         else:
-            file_format = "fake_sample_{sample_dataset_index}_" + str(i) + ".npy" 
+            file_format = "fake_sample_{sample_index}_" + str(i) + ".npy" 
         sampler.sample(filename_format=file_format)
     
         samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+        barrier() # Wait for every GPU to finish their sampling before batching the samples
         if config.sampling_mode == "conditioned":
             batch_output_sample_files(samples_dir, conditioned=True, csv_file=config.csv_file, ensemble_index=i, config=config)
         if config.sampling_mode == "simple":

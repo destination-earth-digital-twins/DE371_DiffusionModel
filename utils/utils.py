@@ -9,7 +9,7 @@ def filter_dates(csvfile, datestart, datestop):
     if datestart and datestop :
         csvfile['Date'] = pd.to_datetime(csvfile['Date'])
         csvfile = csvfile.loc[(csvfile['Date'] >= datestart)
-                    & (csvfile['Date'] < datestop)]
+                    & (csvfile['Date'] <= datestop)]
     return csvfile
 
 def filter_lead_times(csvfile, leadtimes):
@@ -30,7 +30,7 @@ def batch_output_sample_files(data_dir, Shape=(4, 256, 256), conditioned=False, 
             print(f"Directory already exists: {save_directory}")
 
         # List all .npy files in the directory
-        npy_files = [f for f in sorted(os.listdir(data_dir)) if f.endswith('.npy')]
+        npy_files = [f for f in sorted(os.listdir(data_dir), key=lambda x: int(x.split('_')[2])) if f.endswith('.npy')]
         batch_file_size = 128
         # Initialize a list to hold the batched images
         batch = []

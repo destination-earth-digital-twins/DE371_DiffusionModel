@@ -31,8 +31,8 @@ set -x
 #   mkdir "$LOG_DIR"
 # fi
 
-apptainer run --nv /project/scratch/p200177/DE_371/resources/apptainer_container/container_diffusion.sif \
+apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/container_diffusion.sif \
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/config_train_conditioned_reprise.yml"
+    --yaml_path=""/path/to/my/training_config.yml""
