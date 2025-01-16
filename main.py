@@ -9,7 +9,6 @@ import warnings
 from multiprocessing import cpu_count
 
 import torch
-from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
@@ -18,6 +17,7 @@ from torch.utils.data.distributed import DistributedSampler
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
+from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
@@ -112,6 +112,7 @@ def load_train_objs(config):
         dim_mults=(1, 2, 4, 8),
         channels=len(config.var_indexes),
         self_condition=use_cond,
+        n_conditions=config.n_conditions,
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:

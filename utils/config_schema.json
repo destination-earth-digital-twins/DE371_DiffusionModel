@@ -60,6 +60,11 @@
       "default": false,
       "description": "Enable/disable the elucidated diffusion sampler"
     },
+    "n_conditions": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of ensemble members used for the conditioned diffusion"
+    },
     "guiding_col": {
       "type": [
         "string",

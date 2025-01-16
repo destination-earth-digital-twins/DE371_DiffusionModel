@@ -11,6 +11,7 @@ DataSet:DataLoader classes for test samples
 
 """
 import os
+import sys
 import random
 import re
 from pathlib import Path
@@ -145,25 +146,59 @@ class ISDataset(Dataset):
         Args:
             idx (int): Index of the sample.
         Returns:
-            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional sample).
+            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0]
         sample = self.file_to_torch(file_name)
+        n_conditions = self.config.n_conditions
+        n_var = self.config.v_i
 
         # Get conditional sample if ensembles are specified
         if self.ensembles is not None:
+            self.labels = self.labels.reset_index(drop=True)
+            # self.labels = self.labels.reset_index()
             ensemble_id = self.labels.loc[idx, self.config.guiding_col]
             #TODO : a opti
+            # Get the ensemble
             group = self.labels[self.labels['ensemble_id'] == ensemble_id]
+            # Remove the targeted member and only keep the possible conditions (the rest of the ensemble)
             group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
-            row = group_ensemble.sample(n=1)
-            ens = row['Name'].values[0]
-            condition = self.file_to_torch(ens)
+            # Batch the conditions used for the training : 
+            # Randomly get the condition(s)
+            rows = group_ensemble.sample(n=n_conditions)
+            rows = rows.reset_index()
+            for index, row in rows.iterrows():
+                if index == 0:
+                    ens = row['Name']
+                    condition = self.file_to_torch(ens)
+                elif index == 1:
+                    ens = row['Name']
+                    condition = torch.stack((condition, self.file_to_torch(ens)), dim=0)
+                else:
+                    ens = row['Name']
+                    condition = torch.cat([condition, self.file_to_torch(ens).unsqueeze(0)], dim=0)
+            condition = condition.reshape(n_conditions*n_var, 256, 256)
+            # Batch the conditions used for the sampling :
+            condition_sample = self.file_to_torch(file_name)
+            if n_conditions > 1:
+                rows_sampling = group_ensemble.sample(n=n_conditions-1)
+                rows_sampling =  rows_sampling.reset_index()
+                for index, row in rows_sampling.iterrows():
+                    if index == 0:
+                        ens = row['Name']
+                        condition_sample = torch.stack((condition_sample, self.file_to_torch(ens)), dim=0)
+                    else:
+                        ens = row['Name']
+                        condition_sample = torch.cat([condition_sample, self.file_to_torch(ens).unsqueeze(0)], dim=0)
+                condition_sample = condition_sample.reshape(n_conditions*n_var, 256, 256)
+
         else:
             condition = torch.empty(0)
+            condition_sample = torch.empty(0)
+
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample}
 
     def file_to_torch(self, file_name):
         """

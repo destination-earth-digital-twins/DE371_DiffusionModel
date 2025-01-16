@@ -106,7 +106,7 @@ class Sampler(Ddpm_base):
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                cond = batch['img'].to(self.gpu_id)
+                cond = batch['condition_sample'].to(self.gpu_id)
                 ids = batch['img_id']
                 row_ids_in_csv = batch['id_in_csv']
                 samples = self._sample_batch(nb_img=len(cond), condition=cond)
