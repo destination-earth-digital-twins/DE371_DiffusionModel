@@ -27,3 +27,5 @@ utils/reshape_sample_conditioned.py
 utils/plot_diff_img.py
 slurm/apptainer_stuff/sample_meluxina.sh
 slurm/apptainer_stuff/train_meluxina.sh
+slurm/apptainer_stuff/train_meluxina.sh
+utils/add_ensemble_id_col.py
