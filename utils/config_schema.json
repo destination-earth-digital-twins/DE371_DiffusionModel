@@ -150,7 +150,7 @@
     },
     "invert_norm": {
       "type": "boolean",
-      "default": false,
+      "default": true,
       "description": "Invert normalization of input image samples"
     },
     "mean_file": {
