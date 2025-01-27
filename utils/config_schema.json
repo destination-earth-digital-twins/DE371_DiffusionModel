@@ -94,6 +94,14 @@
       "default": null,
       "description": "Path to the CSV file containing label data (required for guided sampling)"
     },
+    "csv_val_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Path to the CSV file containing validation label data (required for guided sampling)"
+    },
     "v_i": {
       "type": "integer",
       "default": 3,
@@ -260,6 +268,11 @@
       "type": "integer",
       "default": 1,
       "description": "Number of ensemble members"
+    },
+    "validation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use a validation dataset"
     },
     "log_by_iteration": {
       "type": "boolean",

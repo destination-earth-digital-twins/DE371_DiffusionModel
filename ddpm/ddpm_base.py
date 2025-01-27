@@ -16,6 +16,7 @@ class Ddpm_base:
         model: torch.nn.Module,
         config,
         dataloader=None,
+        val_dataloader=False,
         inversion_transforms=None,
     ) -> None:
         """
@@ -31,6 +32,10 @@ class Ddpm_base:
         self.gpu_id = get_rank()
         self.timesteps = model.num_timesteps
         self.dataloader = dataloader
+        self.validation = config.validation
+        self.val_dataloader = val_dataloader
+        if self.validation and val_dataloader is None:
+            raise ValueError("You set validation=True, but no val_dataloader found in Ddpm_base input.")
         self.snapshot_path = self.config.model_path
         self.model = model
         self.logger = logging.getLogger(f"logddp_{get_rank_num()}")
