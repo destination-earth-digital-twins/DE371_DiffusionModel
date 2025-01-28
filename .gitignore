@@ -29,3 +29,7 @@ slurm/apptainer_stuff/sample_meluxina.sh
 slurm/apptainer_stuff/train_meluxina.sh
 slurm/apptainer_stuff/train_meluxina.sh
 utils/add_ensemble_id_col.py
+utils/plot_member.py
+utils/plot_ensemble_grid.py
+slurm/apptainer_stuff/train_meluxina.sh
+slurm/apptainer_stuff/sample_meluxina.sh

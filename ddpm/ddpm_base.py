@@ -152,8 +152,11 @@ class Ddpm_base:
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition)
-        detransform_func = self.transforms_func()
-        denorm_images = torch.stack([detransform_func(image) for image in sampled_images])
+        if self.config.invert_norm == True:
+            detransform_func = self.transforms_func()
+            denorm_images = torch.stack([detransform_func(image) for image in sampled_images])
+        else:
+            denorm_images = self.transforms_func(sampled_images)
         return denorm_images.cpu().numpy()
 
     def plot_grid(self, file_name, np_img):
