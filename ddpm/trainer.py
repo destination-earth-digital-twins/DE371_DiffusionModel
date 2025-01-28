@@ -22,6 +22,7 @@ class Trainer(Ddpm_base):
         model,
         config,
         dataloader=None,
+        val_dataloader=None,
         optimizer=None,
         inversion_transforms=None
     ):
@@ -33,7 +34,10 @@ class Trainer(Ddpm_base):
             dataloader: The data loader for training data.
             optimizer: The optimizer for model parameter updates.
         """
-        super().__init__(model, config, dataloader, inversion_transforms)
+        super().__init__(model, config,
+                         dataloader=dataloader,
+                         inversion_transforms=inversion_transforms,
+                         val_dataloader=val_dataloader)
         self.optimizer = optimizer
         self.best_loss = float("inf")
         self.guided_diffusion = self.config.guiding_col is not None
@@ -77,7 +81,7 @@ class Trainer(Ddpm_base):
                 batch[key] = batch[key].to(self.gpu_id)
         return batch
 
-    def _run_batch(self, batch):
+    def _run_batch(self, batch, validation=False):
         """
         Run a single training batch.
         Args:
@@ -85,11 +89,18 @@ class Trainer(Ddpm_base):
         Returns:
             float: Loss value for the batch.
         """
-        self.optimizer.zero_grad()
-        loss = self.model(**batch)
-        loss.backward()
-        self.optimizer.step()
+        
+        if validation:
+            with torch.no_grad():
+                loss = self.model(**batch)
+        else:
+            self.optimizer.zero_grad()
+            loss = self.model(**batch)
+            loss.backward()
+            self.optimizer.step()
+        
         loss = loss.detach().cpu()
+        
         return loss
 
     def _run_epoch(self, epoch):
@@ -161,12 +172,48 @@ class Trainer(Ddpm_base):
                 condition = condition["condition"][: self.config.n_sample]
             self.sample_train(str(epoch), self.config.n_sample, condition)
 
+        # validation loss computation (optional, default :  yes)
+        total_val_loss = 0
+        
+        if epoch % self.config.any_time == 0.0 and self.config.validation:
+            
+            iters = len(self.val_dataloader)
+            if dist.is_initialized():
+                self.val_dataloader.sampler.set_epoch(epoch)
+            
+            val_loop = tqdm(
+            enumerate(self.val_dataloader),
+            total=iters,
+            desc=f"Epoch {epoch}/{self.config.epochs + self.epochs_run}",
+            unit="batch",
+            leave=False,
+            postfix="",
+            disable=not is_main_gpu(),
+            )
+            
+            self.model.eval()
+            for i, batch in val_loop:
+                
+                needs_keys = ["img"] + (
+                    ["condition"] if self.guided_diffusion else []
+                )
+                batch_prep = self._prepare_batch(batch, needs_keys)
+                loss = self._run_batch(batch_prep, validation=True)
+                total_val_loss += loss
+
+                if is_main_gpu():
+                    val_loop.set_postfix_str(f"Loss : {total_val_loss / (i + 1):.6f}")
+
+            total_val_loss = total_val_loss / len(self.val_dataloader)
+
+            self.model.train()
+
         if epoch % self.config.any_time == 0.0:
             synchronize()
 
-        return total_loss / len(self.dataloader)
+        return total_loss / len(self.dataloader), total_val_loss 
 
-    def _save_snapshot(self, epoch, path, loss):
+    def _save_snapshot(self, epoch, path, train_loss, val_loss):
         """
         Save a snapshot of the training progress.
         Args:
@@ -180,7 +227,8 @@ class Trainer(Ddpm_base):
             "MODEL_STATE": self.model.state_dict(),
             "EPOCHS_RUN": epoch,
             "OPTIMIZER_STATE": self.optimizer.state_dict(),
-            "BEST_LOSS": loss,
+            "BEST_TRAIN_LOSS": train_loss,
+            "BEST_VAl_LOSS": val_loss,
             "TIMESTAMP": self.timesteps,
             "GUIDED_DIFFUSION": self.guided_diffusion,
             "DATA": {
@@ -194,7 +242,7 @@ class Trainer(Ddpm_base):
             snapshot["SCHEDULER_STATE"] = self.scheduler.state_dict()
         torch.save(snapshot, path)
         self.logger.info(
-            f"Epoch {epoch} | Training snapshot saved at {path} | Loss: {loss}"
+            f"Epoch {epoch} | Training snapshot saved at {path} | Train Loss: {train_loss} | Val loss : {val_loss}"
         )
 
     def _init_wandb(self):
@@ -262,13 +310,13 @@ class Trainer(Ddpm_base):
             loop = range(self.epochs_run, self.config.epochs)
 
         for epoch in loop:
-            avg_loss = self._run_epoch(epoch)
+            avg_train_loss, avg_val_loss = self._run_epoch(epoch)
             if is_main_gpu():
                 loop.set_postfix_str(
-                    f"Epoch loss : {avg_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
+                    f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
                 )
-                if avg_loss < self.best_loss:
-                    self.best_loss = avg_loss
+                if avg_val_loss < self.best_loss:
+                    self.best_loss = avg_val_loss
                     self._save_snapshot(
                         epoch,
                         os.path.join(
@@ -276,7 +324,8 @@ class Trainer(Ddpm_base):
                             f"{self.config.run_name}",
                             "best.pt",
                         ),
-                        avg_loss,
+                        avg_train_loss,
+                        avg_val_loss,
                     )
                 if epoch % self.config.any_time == 0.0:
                     self._save_snapshot(
@@ -286,10 +335,12 @@ class Trainer(Ddpm_base):
                             f"{self.config.run_name}",
                             f"save_{epoch}.pt",
                         ),
-                        avg_loss,
+                        avg_train_loss,
+                        avg_val_loss,
                     )
                 log = {
-                    "avg_loss": avg_loss.item(),
+                    "avg_train_loss": avg_train_loss.item(),
+                    "avg_val_loss": avg_val_loss.item(),
                     "lr": (
                         self.optimizer.param_groups[0]["lr"]
                         if self._using_scheduler
@@ -305,7 +356,8 @@ class Trainer(Ddpm_base):
                         f"{self.config.run_name}",
                         "last.pt",
                     ),
-                    avg_loss,
+                    avg_train_loss,
+                    avg_val_loss,
                 )
 
         if is_main_gpu():

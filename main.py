@@ -150,21 +150,27 @@ def load_train_objs(config):
     return model, optimizer
 
 
-def prepare_dataloader(config, path, csv_file, num_workers=None):
+def prepare_dataloader(config, path, csv_file, num_workers=None, validation=False, csv_val_file=None):
     """
-    Prepare the data loader.
+    Prepare the data loaders.
     Args:
         config (Namespace): Configuration parameters.
     Returns:
         DataLoader: Data loader.
+        Validation Dataloader (optional, default False)
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
     if ("rr" in config.var_indexes):  # TODO :  make the "var_indexes" be "variables"
         train_set = dataSet_Handler.rrISDataset(config, path, csv_file)
+        if validation:
+            val_set = dataSet_Handler.rrISDataset(config, path, csv_val_file)
     else:
         train_set = dataSet_Handler.ISDataset(config, path, csv_file)
-    return DataLoader(
+        if validation:
+            val_set = dataSet_Handler.ISDataset(config, path, csv_val_file)
+    
+    train_dataloader = DataLoader(
         train_set,
         batch_size=config.batch_size,
         pin_memory=True,
@@ -178,9 +184,30 @@ def prepare_dataloader(config, path, csv_file, num_workers=None):
             )
             if torch.cuda.device_count() >= 2
             else None
-        ),
-        # drop_last=True,
+        )
     )
+    
+    if validation:
+        val_dataloader = DataLoader(
+        val_set,
+        batch_size=config.batch_size,
+        pin_memory=True,
+        persistent_workers=True,
+        # non_blocking=True,
+        shuffle=not torch.cuda.device_count() >= 2,
+        num_workers=cpu_count() if num_workers is None else num_workers,
+        sampler=(
+            DistributedSampler(
+                train_set, rank=get_rank_num(), shuffle=False, drop_last=False
+            )
+            if torch.cuda.device_count() >= 2
+            else None
+        )
+        )
+    else:
+        val_dataloader = None
+    
+    return train_dataloader, val_dataloader
 
 
 def main_train(config):
@@ -191,13 +218,17 @@ def main_train(config):
     """
     # Load training objects and start the training process
     model, optimizer = load_train_objs(config)
-    train_data = prepare_dataloader(
+    csv_val_file = config.csv_val_file if config.validation else None
+    
+    train_data, val_data = prepare_dataloader(
         config,
         path=config.data_dir,
         csv_file=config.csv_file,
         num_workers=(
             config.num_workers if "num_workers" in config.to_dict() else None
         ),
+        validation=config.validation,
+        csv_val_file=csv_val_file
     )
     start = time.time()
     if config.invert_norm:
@@ -210,6 +241,7 @@ def main_train(config):
         dataloader=train_data,
         optimizer=optimizer,
         inversion_transforms=invert_tf,
+        val_dataloader=val_data
     )
     trainer.train()
 
