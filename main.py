@@ -9,18 +9,20 @@ import warnings
 from multiprocessing import cpu_count
 
 import torch
-from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from torch import distributed as dist
-from torch.distributed import init_process_group, destroy_process_group
+from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
+from ddpm.elucidated_diffusion import ElucidatedDiffusion
+from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+from utils.utils import batch_output_sample_files
 import numpy as np
 
 warnings.filterwarnings(
@@ -110,19 +112,38 @@ def load_train_objs(config):
         dim_mults=(1, 2, 4, 8),
         channels=len(config.var_indexes),
         self_condition=use_cond,
+        n_conditions=config.n_conditions,
     )
-    if use_cond:
-        cls = ConditionedGaussianDiffusion
+    if config.elucidated_diffusion_sampler == False:
+        if use_cond:
+            cls = ConditionedGaussianDiffusion
+        else:
+            cls = GaussianDiffusion
+        model = cls(
+            umodel,
+            image_size=config.image_size,
+            timesteps=1000,
+            beta_schedule=config.beta_schedule,
+            auto_normalize=config.auto_normalize,
+            sampling_timesteps=config.ddim_timesteps,
+        )
     else:
-        cls = GaussianDiffusion
-    model = cls(
-        umodel,
-        image_size=config.image_size,
-        timesteps=1000,
-        beta_schedule=config.beta_schedule,
-        auto_normalize=config.auto_normalize,
-        sampling_timesteps=config.ddim_timesteps,
-    )
+        model = ElucidatedDiffusion(
+            umodel,
+            image_size=config.image_size,
+            channels = len(config.var_indexes),
+            num_sample_steps = config.ddim_timesteps, # number of sampling steps
+            sigma_min = config.sigma_min,      # min noise level
+            sigma_max = config.sigma_max,       # max noise level
+            sigma_data = config.sigma_data,       # standard deviation of data distribution
+            rho = config.rho,                # controls the sampling schedule
+            P_mean = config.P_mean,          # mean of log-normal distribution from which noise is drawn for training
+            P_std = config.P_std,            # standard deviation of log-normal distribution from which noise is drawn for training
+            S_churn = config.S_churn,           # parameters for stochastic sampling - depends on dataset, Table 5 in apper
+            S_tmin = config.S_tmin,
+            S_tmax = config.S_tmax,
+            S_noise = config.S_noise,
+        )
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )
@@ -140,9 +161,7 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
-    if (
-        "rr" in config.var_indexes
-    ):  # TODO :  make the "var_indexes" be "variables"
+    if ("rr" in config.var_indexes):  # TODO :  make the "var_indexes" be "variables"
         train_set = dataSet_Handler.rrISDataset(config, path, csv_file)
         if validation:
             val_set = dataSet_Handler.rrISDataset(config, path, csv_val_file)
@@ -261,17 +280,26 @@ def main_sample(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data = prepare_dataloader(
-        config, path=config.data_dir, csv_file=config.csv_file
-    )
+    sample_data = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file)
     inversion_tf = sample_data.dataset.inversion_transforms
     data = sample_data if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
+
     for i in range(config.n_ensemble):
         if is_main_gpu():
             logger.info(f"Sampling {i+1} of {config.n_ensemble} : file_format = fake_sample_{i}_" + str(i) + ".npy")
-        file_format = "fake_sample_{i}_" + str(i) + ".npy"
+        if config.sampling_mode == "conditioned":
+            file_format = "fake_sample_{row_id_in_dataset}_{sample_index}_" + str(i) + ".npy" 
+        else:
+            file_format = "fake_sample_{sample_index}_" + str(i) + ".npy" 
         sampler.sample(filename_format=file_format)
+    
+        samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+        barrier() # Wait for every GPU to finish their sampling before batching the samples
+        if config.sampling_mode == "conditioned":
+            batch_output_sample_files(samples_dir, conditioned=True, csv_file=config.csv_file, ensemble_index=i, config=config)
+        if config.sampling_mode == "simple":
+            batch_output_sample_files(samples_dir, conditioned=False, csv_file=config.csv_file, ensemble_index=i, config=config)
 
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):

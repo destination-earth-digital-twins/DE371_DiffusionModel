@@ -28,9 +28,7 @@ class Sampler(Ddpm_base):
         self.loss_func = loss_dict["L1Loss"]
 
     @torch.no_grad()
-    def _guided_sample_batch(
-        self, truth_sample_batch, guidance_loss_scale=100, random_noise=False
-    ):
+    def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
         """
         Perform guided sampling of a batch of images.
         Args:
@@ -69,7 +67,7 @@ class Sampler(Ddpm_base):
         return sampled_images_unnorm
 
     @torch.no_grad()
-    def sample(self, filename_format="_sample_{i}.npy"):
+    def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
         """
         Generate and save sample images during training.
         Args:
@@ -84,7 +82,8 @@ class Sampler(Ddpm_base):
 
             if is_main_gpu():
                 self.logger.info(
-                    f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    #f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    f"Sampling {self.config.n_sample} images...")
             with tqdm(total=self.config.n_sample // self.config.batch_size, desc="Sampling ", unit="batch",
                       disable= not is_main_gpu()) as pbar:
                 b = 0
@@ -92,7 +91,11 @@ class Sampler(Ddpm_base):
                     batch_size = min(self.config.n_sample - b, self.config.batch_size)
                     samples = super()._sample_batch(nb_img=batch_size)
                     for s in samples:
-                        filename = filename_format.format(i=str(i))
+                        # Append the empty rr channel if only u v t2m
+                        if len(s) == 3:
+                            s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
+
+                        filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
                         np.save(save_path, s)
                         i += max(torch.cuda.device_count(), 1)
@@ -103,15 +106,21 @@ class Sampler(Ddpm_base):
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                cond = batch['img'].to(self.gpu_id)
+                cond = batch['condition_sample'].to(self.gpu_id)
                 ids = batch['img_id']
+                row_ids_in_csv = batch['id_in_csv']
                 samples = self._sample_batch(nb_img=len(cond), condition=cond)
                 # if self.config.sampling_mode == "conditioned":
                 #     samples = self._sample_batch(nb_img=len(cond), condition=cond)
                 # elif self.config.sampling_mode == "guided":
                 #     samples = self._guided_sample_batch(cond, random_noise=self.config.random_noise)
-                for s, img_id in zip(samples, ids):
-                    filename = filename_format.format(i=img_id)
+
+                for s, img_id, row_id in zip(samples, ids, row_ids_in_csv):
+                    # Append the empty rr channel if only u v t2m
+                    if len(s) == 3:
+                        s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
+
+                    filename = filename_format.format(row_id_in_dataset = row_id, sample_index = img_id)
                     save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                     np.save(save_path, s)
 
@@ -119,7 +128,7 @@ class Sampler(Ddpm_base):
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
 
         if self.config.plot and is_main_gpu():
-            self.plot_grid("last_samples.jpg", samples)
+            self.plot_grid("../last_samples.jpg", samples)
 
         self.logger.info(
             f"Sampling done. Images saved in {self.config.output_dir}/{self.config.run_name}/samples/")

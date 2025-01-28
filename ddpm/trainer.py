@@ -24,7 +24,7 @@ class Trainer(Ddpm_base):
         dataloader=None,
         val_dataloader=None,
         optimizer=None,
-        inversion_transforms=None,
+        inversion_transforms=None
     ):
         """
         Initialize the Trainer class.
@@ -39,7 +39,6 @@ class Trainer(Ddpm_base):
                          inversion_transforms=inversion_transforms,
                          val_dataloader=val_dataloader)
         self.optimizer = optimizer
-        self.epochs_run = 0
         self.best_loss = float("inf")
         self.guided_diffusion = self.config.guiding_col is not None
 
@@ -121,7 +120,7 @@ class Trainer(Ddpm_base):
         loop = tqdm(
             enumerate(self.dataloader),
             total=iters,
-            desc=f"Epoch {epoch}/{self.config.epochs + self.epochs_run}",
+            desc=f"Epoch {epoch}/{self.config.epochs }",
             unit="batch",
             leave=False,
             postfix="",
@@ -302,13 +301,13 @@ class Trainer(Ddpm_base):
                 self._init_mlflow()
 
             loop = tqdm(
-                range(self.epochs_run, self.config.epochs + self.epochs_run),
+                range(self.epochs_run, self.config.epochs),
                 desc=f"Training...",
                 unit="epoch",
                 postfix="",
             )
         else:
-            loop = range(self.epochs_run, self.config.epochs + self.epochs_run)
+            loop = range(self.epochs_run, self.config.epochs)
 
         for epoch in loop:
             avg_train_loss, avg_val_loss = self._run_epoch(epoch)

@@ -55,6 +55,16 @@
       "default": "simple",
       "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
     },
+    "elucidated_diffusion_sampler": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable the elucidated diffusion sampler"
+    },
+    "n_conditions": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of ensemble members used for the conditioned diffusion"
+    },
     "guiding_col": {
       "type": [
         "string",
@@ -126,6 +136,21 @@
       ],
       "description": "Crop parameters for input images [left, right, top, bottom]"
     },
+    "date_start":{
+      "type": "string",
+      "default": "",
+      "description": "We start sampling from this date"
+    },
+    "date_stop":{
+      "type": "string",
+      "default": "",
+      "description": "We stop the sampling at this date"
+    },
+    "leadtimes": {
+      "type": "array",
+      "default": [],
+      "description": "Leadtimes to sample"
+      },
     "auto_normalize": {
       "type": "boolean",
       "default": false,
@@ -133,7 +158,7 @@
     },
     "invert_norm": {
       "type": "boolean",
-      "default": false,
+      "default": true,
       "description": "Invert normalization of input image samples"
     },
     "mean_file": {
@@ -278,7 +303,53 @@
       "type": "boolean",
       "default": false,
       "description": "add metric logging every iteration"
+    },
+    "sigma_min": {
+      "type": "number",
+      "default": 0.002,
+      "description": "min noise level"
+    },
+    "sigma_max": {
+      "type": "number",
+      "default": 80,
+      "description": "max noise level"
+    },
+    "sigma_data": {
+      "type": "number",
+      "default": 0.5,
+      "description": "standard deviation of data distribution"
+    },
+    "rho": {
+      "type": "integer",
+      "default": 7,
+      "description": "controls the sampling schedule"
+    },
+    "P_mean": {
+      "type": "number",
+      "default": -1.2,
+      "description": "mean of log-normal distribution from which noise is drawn for training"
+    },
+    "S_churn": {
+      "type": "integer",
+      "default": 80,
+      "description": "parameters for stochastic sampling - depends on dataset, Table 5 in paper"
+    },
+    "S_tmin": {
+      "type": "number",
+      "default": 0.05,
+      "description": "parameters for stochastic sampling - depends on dataset, Table 5 in paper"
+    },
+    "S_tmax": {
+      "type": "number",
+      "default": 50,
+      "description": "parameters for stochastic sampling - depends on dataset, Table 5 in paper"
+    },
+    "S_noise": {
+      "type": "number",
+      "default": 0.0,
+      "description": "parameters for stochastic sampling - depends on dataset, Table 5 in paper"
     }
+
   },
   "required": [
     "mode",

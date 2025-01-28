@@ -11,6 +11,7 @@ DataSet:DataLoader classes for test samples
 
 """
 import os
+import sys
 import random
 import re
 from pathlib import Path
@@ -25,6 +26,7 @@ from torch import from_numpy
 from torch.utils.data import Dataset
 
 from utils.config import DataSetConfig
+from utils.utils import filter_dates, filter_lead_times
 
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
@@ -54,9 +56,11 @@ class ISDataset(Dataset):
         """
         self.data_dir = path
         self.labels = pd.read_csv( csv_file, index_col=False)
+        self.config = config
+        self.labels = filter_dates(self.labels, self.config.date_start, self.config.date_stop)
+        self.labels = filter_lead_times(self.labels, self.config.leadtimes)
         if "Unnamed: 0" in self.labels:
             self.labels = self.labels.drop("Unnamed: 0", axis=1)
-        self.config = config
         self.dataset_config = (
             DataSetConfig(config.dataset_config_file)
             if config.dataset_config_file is not None
@@ -142,25 +146,59 @@ class ISDataset(Dataset):
         Args:
             idx (int): Index of the sample.
         Returns:
-            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional sample).
+            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0]
         sample = self.file_to_torch(file_name)
+        n_conditions = self.config.n_conditions
+        n_var = self.config.v_i
 
         # Get conditional sample if ensembles are specified
         if self.ensembles is not None:
+            self.labels = self.labels.reset_index(drop=True)
+            # self.labels = self.labels.reset_index()
             ensemble_id = self.labels.loc[idx, self.config.guiding_col]
             #TODO : a opti
+            # Get the ensemble
             group = self.labels[self.labels['ensemble_id'] == ensemble_id]
+            # Remove the targeted member and only keep the possible conditions (the rest of the ensemble)
             group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
-            row = group_ensemble.sample(n=1)
-            ens = row['Name'].values[0]
-            condition = self.file_to_torch(ens)
+            # Batch the conditions used for the training : 
+            # Randomly get the condition(s)
+            rows = group_ensemble.sample(n=n_conditions)
+            rows = rows.reset_index()
+            for index, row in rows.iterrows():
+                if index == 0:
+                    ens = row['Name']
+                    condition = self.file_to_torch(ens)
+                elif index == 1:
+                    ens = row['Name']
+                    condition = torch.stack((condition, self.file_to_torch(ens)), dim=0)
+                else:
+                    ens = row['Name']
+                    condition = torch.cat([condition, self.file_to_torch(ens).unsqueeze(0)], dim=0)
+            condition = condition.reshape(n_conditions*n_var, 256, 256)
+            # Batch the conditions used for the sampling :
+            condition_sample = self.file_to_torch(file_name)
+            if n_conditions > 1:
+                rows_sampling = group_ensemble.sample(n=n_conditions-1)
+                rows_sampling =  rows_sampling.reset_index()
+                for index, row in rows_sampling.iterrows():
+                    if index == 0:
+                        ens = row['Name']
+                        condition_sample = torch.stack((condition_sample, self.file_to_torch(ens)), dim=0)
+                    else:
+                        ens = row['Name']
+                        condition_sample = torch.cat([condition_sample, self.file_to_torch(ens).unsqueeze(0)], dim=0)
+                condition_sample = condition_sample.reshape(n_conditions*n_var, 256, 256)
+
         else:
             condition = torch.empty(0)
+            condition_sample = torch.empty(0)
+
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"img": sample, "img_id": sample_id, "condition": condition}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample}
 
     def file_to_torch(self, file_name):
         """
@@ -190,9 +228,7 @@ class MultiOptionNormalize(object):
         self.gaussian_std = self.dataset_config.rr_transform["gaussian_std"]
         ### setting gaussian noise conditions
         if self.gaussian_std:
-            for _ in range(
-                self.dataset_config.rr_transform["log_transform_iteration"]
-            ):
+            for _ in range( self.dataset_config.rr_transform["log_transform_iteration"]):
                 self.gaussian_std = np.log(1 + self.gaussian_std)
 
         if np.ndim(self.value_sup) > 1:
@@ -240,15 +276,10 @@ class MultiOptionNormalize(object):
                 f"Expected sample to be a tensor image of size (..., C, H, W). Got tensor.size() = {sample.size()}."
             )
         ### transforming rain rates to logits (iterative transforms)
-        for _ in range(
-            self.dataset_config.rr_transform["log_transform_iteration"]
-        ):
+        for _ in range(self.dataset_config.rr_transform["log_transform_iteration"]):
             sample[var_dict["rr"]] = torch.log(1 + sample[var_dict["rr"]])
         ### randomly symmetrizing rain rates around 0 (50% of rain rates are negative)
-        if (
-            self.dataset_config.rr_transform["symetrization"]
-            and np.random.random() <= 0.5
-        ):
+        if (self.dataset_config.rr_transform["symetrization"] and np.random.random() <= 0.5):
             sample[var_dict["rr"]] = -sample[var_dict["rr"]]
         ### adding random noise (AT RUNTIME) to rain rates below a certain threshold
         if self.gaussian_std != 0:
@@ -275,9 +306,7 @@ class MultiOptionNormalize(object):
         if self.dataset_config.normalization["func"] == "mean":
             sample = (sample - self.value_inf) / self.value_sup
         elif self.dataset_config.normalization["func"] in ["minmax", "quant"]:
-            sample = -1 + 2 * (
-                (sample - self.value_inf) / (self.value_sup - self.value_inf)
-            )
+            sample = -1 + 2 * ((sample - self.value_inf) / (self.value_sup - self.value_inf))
         return sample
 
     def denorm(self, sample):
@@ -364,7 +393,7 @@ class rrISDataset(ISDataset):
         super().__init__(config, path, csv_file, add_coords=False)
 
     def prepare_tranformations(self):
-        transformations = []
+        # transformations = []
         normalization = self.dataset_config.normalization["func"]
         if normalization != "None":
             if self.dataset_config.rr_transform["symetrization"]:
@@ -378,14 +407,17 @@ class rrISDataset(ISDataset):
                     self.value_inf[var_dict["rr"]] = -self.value_sup[
                         var_dict["rr"]
                     ]
-        transformations.append(transforms.ToTensor())
-        transformations.append(
-            MultiOptionNormalize(
-                self.value_sup,
-                self.value_inf,
-                self.dataset_config,
-                self.config,
-            )
+                    
+        transformations = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    MultiOptionNormalize(
+                        self.value_sup,
+                        self.value_inf,
+                        self.dataset_config,
+                        self.config,
+                    ),
+                ]
         )
         return transformations
 
