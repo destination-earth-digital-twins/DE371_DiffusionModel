@@ -280,7 +280,7 @@ def main_sample(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file)
+    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file)
     inversion_tf = sample_data.dataset.inversion_transforms
     data = sample_data if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)

@@ -24,7 +24,7 @@ class Sampler(Ddpm_base):
             config: Configuration settings for sampling.
             dataloader: The data loader for input data (optional).
         """
-        super().__init__(model, config, dataloader, inversion_transforms)
+        super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
 
     @torch.no_grad()
