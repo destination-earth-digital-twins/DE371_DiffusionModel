@@ -108,7 +108,7 @@ class Ddpm_base:
         if self.optimizer is not None:
             self.optimizer.load_state_dict(snapshot["OPTIMIZER_STATE"])
 
-        self.best_loss = snapshot["BEST_LOSS"]
+        # self.best_loss = snapshot["BEST_LOSS"]
 
         try:
             # Check if snapshot data configuration matches the current config
