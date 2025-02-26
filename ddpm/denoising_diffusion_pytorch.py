@@ -283,6 +283,8 @@ class Unet(Module):
         channels = 3,
         self_condition = False,
         n_conditions = 1,
+        var_cond = False,
+        mean_cond = False,
         learned_variance = False,
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
@@ -300,7 +302,12 @@ class Unet(Module):
 
         self.channels = channels
         self.self_condition = self_condition
+
         input_channels = channels * ((n_conditions + 1) if self_condition else 1)
+        if var_cond:
+            input_channels += channels
+        if mean_cond:
+            input_channels += channels
 
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)

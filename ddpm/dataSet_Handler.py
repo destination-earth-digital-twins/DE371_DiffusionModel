@@ -157,14 +157,16 @@ class ISDataset(Dataset):
         n_conditions = self.config.n_conditions
         n_var = self.config.v_i
 
-        # Get conditional sample if ensembles are specified
-        if self.ensembles is not None:
+        if self.config.mean_conditionning == True or self.config.var_conditionning == True or self.ensembles is not None:
             self.labels = self.labels.reset_index(drop=True)
             # self.labels = self.labels.reset_index()
             ensemble_id = self.labels.loc[idx, self.config.guiding_col]
             #TODO : a opti
             # Get the ensemble
             group = self.labels[self.labels['ensemble_id'] == ensemble_id]
+
+        # Get conditional sample if ensembles are specified
+        if self.ensembles is not None and n_conditions > 0:
             # Remove the targeted member and only keep the possible conditions (the rest of the ensemble)
             group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
             # Batch the conditions used for the training : 
@@ -195,10 +197,37 @@ class ISDataset(Dataset):
                         ens = row['Name']
                         condition_sample = torch.cat([condition_sample, self.file_to_torch(ens).unsqueeze(0)], dim=0)
                 condition_sample = condition_sample.reshape(n_conditions*n_var, 256, 256)
+        
+        # Allow the sampling with 0 conditionning members when using the mean and/or the var of the ensemble as conditions
+        elif self.ensembles is not None and n_conditions == 0:
+            condition = torch.empty((0, 256, 256))
+            condition_sample = torch.empty((0, 256, 256))
 
         else:
             condition = torch.empty(0)
             condition_sample = torch.empty(0)
+
+        # Using the mean and/or the var of the ensemble as additionnal conditions
+        if self.config.mean_conditionning == True or self.config.var_conditionning == True:
+            group = group.reset_index()
+            for index, row in group.iterrows():
+                if index == 0:
+                    member = row['Name']
+                    ensemble = self.file_to_torch(member)
+                elif index == 1:
+                    member = row['Name']
+                    ensemble = torch.stack((ensemble, self.file_to_torch(member)), dim=0)
+                else:
+                    member = row['Name']
+                    ensemble = torch.cat([ensemble, self.file_to_torch(member).unsqueeze(0)], dim=0)
+            if self.config.mean_conditionning == True :
+                mean = ensemble.mean(dim=0)
+                condition = torch.cat([condition, mean], dim=0)
+            if self.config.var_conditionning == True :
+                var = ensemble.var(dim=0)
+                condition = torch.cat([condition, var], dim=0)
+            # raise ValueError('1 ensemble done')
+
         date = str(row["Date"])
         lt = row["LeadTime"]
         member = row["Member"]
