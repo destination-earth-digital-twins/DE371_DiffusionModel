@@ -73,6 +73,16 @@
       "default": null,
       "description": "Column to use for guided sampling. Required when using guided sampling mode."
     },
+    "mean_conditionning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the ensemble mean as a condition"
+    },
+    "var_conditionning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the ensemble variance as a condition"
+    },
     "n_sample": {
       "type": "integer",
       "default": 10,

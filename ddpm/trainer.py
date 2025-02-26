@@ -173,7 +173,7 @@ class Trainer(Ddpm_base):
             self.sample_train(str(epoch), self.config.n_sample, condition)
 
         # validation loss computation (optional, default :  yes)
-        total_val_loss = 0
+        total_val_loss = torch.tensor(0.0,dtype=torch.float32)
         
         if epoch % self.config.any_time == 0.0 and self.config.validation:
             

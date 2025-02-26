@@ -16,6 +16,8 @@ export NVHPC_CUDA_HOME=/usr/local/cuda-12.1
 export CXX=g++ #the compiler for cpp extensions
 export CC=gcc  #the compiler to access the good cpp standard
 export NCCL_ASYNC_ERROR_HANDLING=1
+module load env/release/2023.1
+module load env/staging/2023.1
 module load Apptainer/1.2.4-GCCcore-12.3.0
 module load NVHPC
 module load GCC
@@ -35,7 +37,7 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/co
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/config_train_conditioned_ED_4var_reprise.yml"
+    --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed/config_train_conditioned_ED.yml"
     # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed/config_train_conditioned_ED_reprise.yml"
-    # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed/config_train_conditioned_ED.yml"
+    # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/config_train_conditioned_ED_4var_reprise.yml"
     # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/config_train_conditioned_ED_4var.yml"

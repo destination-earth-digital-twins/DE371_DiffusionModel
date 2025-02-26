@@ -28,6 +28,10 @@ from torch.utils.data import Dataset
 from utils.config import DataSetConfig
 from utils.utils import filter_dates, filter_lead_times
 
+from torch.utils.data import Dataset, DataLoader, Sampler
+import torch.distributed as dist
+import math
+
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
 
@@ -153,14 +157,16 @@ class ISDataset(Dataset):
         n_conditions = self.config.n_conditions
         n_var = self.config.v_i
 
-        # Get conditional sample if ensembles are specified
-        if self.ensembles is not None:
+        if self.config.mean_conditionning == True or self.config.var_conditionning == True or self.ensembles is not None:
             self.labels = self.labels.reset_index(drop=True)
             # self.labels = self.labels.reset_index()
             ensemble_id = self.labels.loc[idx, self.config.guiding_col]
             #TODO : a opti
             # Get the ensemble
             group = self.labels[self.labels['ensemble_id'] == ensemble_id]
+
+        # Get conditional sample if ensembles are specified
+        if self.ensembles is not None and n_conditions > 0:
             # Remove the targeted member and only keep the possible conditions (the rest of the ensemble)
             group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
             # Batch the conditions used for the training : 
@@ -191,14 +197,43 @@ class ISDataset(Dataset):
                         ens = row['Name']
                         condition_sample = torch.cat([condition_sample, self.file_to_torch(ens).unsqueeze(0)], dim=0)
                 condition_sample = condition_sample.reshape(n_conditions*n_var, 256, 256)
+        
+        # Allow the sampling with 0 conditionning members when using the mean and/or the var of the ensemble as conditions
+        elif self.ensembles is not None and n_conditions == 0:
+            condition = torch.empty((0, 256, 256))
+            condition_sample = torch.empty((0, 256, 256))
 
         else:
             condition = torch.empty(0)
             condition_sample = torch.empty(0)
 
+        # Using the mean and/or the var of the ensemble as additionnal conditions
+        if self.config.mean_conditionning == True or self.config.var_conditionning == True:
+            group = group.reset_index()
+            for index, row in group.iterrows():
+                if index == 0:
+                    member = row['Name']
+                    ensemble = self.file_to_torch(member)
+                elif index == 1:
+                    member = row['Name']
+                    ensemble = torch.stack((ensemble, self.file_to_torch(member)), dim=0)
+                else:
+                    member = row['Name']
+                    ensemble = torch.cat([ensemble, self.file_to_torch(member).unsqueeze(0)], dim=0)
+            if self.config.mean_conditionning == True :
+                mean = ensemble.mean(dim=0)
+                condition = torch.cat([condition, mean], dim=0)
+            if self.config.var_conditionning == True :
+                var = ensemble.var(dim=0)
+                condition = torch.cat([condition, var], dim=0)
+            # raise ValueError('1 ensemble done')
+
+        date = str(row["Date"])
+        lt = row["LeadTime"]
+        member = row["Member"]
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample, "member_id": member, "date": date, "leadtime": lt}
 
     def file_to_torch(self, file_name):
         """
@@ -477,3 +512,30 @@ class rrISDataset(ISDataset):
                 )
             norm_vars.append(norm_var)
         return norm_vars
+
+class CustomDistributedSampler(Sampler):
+    def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
+        if num_replicas is None:
+            num_replicas = dist.get_world_size() if dist.is_initialized() else 1
+        if rank is None:
+            rank = dist.get_rank() if dist.is_initialized() else 0
+        
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.drop_last = drop_last
+
+        self.num_samples = len(self.dataset) // self.num_replicas
+        if not drop_last and len(self.dataset) % self.num_replicas != 0:
+            self.num_samples += 1
+
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        start = self.rank * self.num_samples
+        end = min(start + self.num_samples, len(self.dataset))
+        indices = list(range(start, end))
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
