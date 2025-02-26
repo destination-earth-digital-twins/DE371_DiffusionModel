@@ -179,12 +179,10 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
         shuffle=not torch.cuda.device_count() >= 2,
         num_workers=cpu_count() if num_workers is None else num_workers,
         sampler=(
-            DistributedSampler(
-                train_set, rank=get_rank_num(), shuffle=False, drop_last=False
+            dataSet_Handler.CustomDistributedSampler(train_set) if config.mode == "Sample"
+            else DistributedSampler(train_set, rank=get_rank_num(), shuffle=False, drop_last=False)
             )
-            if torch.cuda.device_count() >= 2
-            else None
-        )
+
     )
     
     if validation:
@@ -285,22 +283,19 @@ def main_sample(config):
     data = sample_data if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
-    for i in range(config.n_ensemble):
-        if is_main_gpu():
-            logger.info(f"Sampling {i+1} of {config.n_ensemble} : file_format = fake_sample_{i}_" + str(i) + ".npy")
-        if config.sampling_mode == "conditioned":
-            file_format = "fake_sample_{row_id_in_dataset}_{sample_index}_" + str(i) + ".npy" 
-        else:
-            file_format = "fake_sample_{sample_index}_" + str(i) + ".npy" 
-        sampler.sample(filename_format=file_format)
-    
-        samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
-        barrier() # Wait for every GPU to finish their sampling before batching the samples
-        if config.sampling_mode == "conditioned":
-            batch_output_sample_files(samples_dir, conditioned=True, csv_file=config.csv_file, ensemble_index=i, config=config)
-        if config.sampling_mode == "simple":
-            batch_output_sample_files(samples_dir, conditioned=False, csv_file=config.csv_file, ensemble_index=i, config=config)
+    if is_main_gpu():
+        logger.info(f"Sampling of {config.n_ensemble * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+    if config.sampling_mode == "conditioned":
+        file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
+    else:
+        file_format = "fake_sample_{sample_index}.npy" 
+    sampler.sample(filename_format=file_format)
 
+    samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+
+    barrier() # Wait for every GPU to finish their sampling
+    if is_main_gpu():
+        logger.info(f"Sampling done")
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):

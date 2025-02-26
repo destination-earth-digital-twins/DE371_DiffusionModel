@@ -28,6 +28,10 @@ from torch.utils.data import Dataset
 from utils.config import DataSetConfig
 from utils.utils import filter_dates, filter_lead_times
 
+from torch.utils.data import Dataset, DataLoader, Sampler
+import torch.distributed as dist
+import math
+
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
 
@@ -195,10 +199,12 @@ class ISDataset(Dataset):
         else:
             condition = torch.empty(0)
             condition_sample = torch.empty(0)
-
+        date = str(row["Date"])
+        lt = row["LeadTime"]
+        member = row["Member"]
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": condition_sample, "member_id": member, "date": date, "leadtime": lt}
 
     def file_to_torch(self, file_name):
         """
@@ -477,3 +483,30 @@ class rrISDataset(ISDataset):
                 )
             norm_vars.append(norm_var)
         return norm_vars
+
+class CustomDistributedSampler(Sampler):
+    def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
+        if num_replicas is None:
+            num_replicas = dist.get_world_size() if dist.is_initialized() else 1
+        if rank is None:
+            rank = dist.get_rank() if dist.is_initialized() else 0
+        
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.drop_last = drop_last
+
+        self.num_samples = len(self.dataset) // self.num_replicas
+        if not drop_last and len(self.dataset) % self.num_replicas != 0:
+            self.num_samples += 1
+
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        start = self.rank * self.num_samples
+        end = min(start + self.num_samples, len(self.dataset))
+        indices = list(range(start, end))
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
