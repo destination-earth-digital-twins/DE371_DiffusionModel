@@ -105,28 +105,81 @@ class Sampler(Ddpm_base):
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+            # for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
+            #     cond = batch['condition_sample'].to(self.gpu_id)
+            #     row_ids_in_csv = batch['id_in_csv']
+            #     csv_member_id = batch['member_id']
+            #     lt = batch['leadtime'][0]
+            #     d = batch['date'][0].split(" ")[0]
+            #     # sample n_ensemble time, w/ n_ensemble = the desired number of generated members.
+            #     batch_file_size = 16 * self.config.n_ensemble
+            #     desired_shape = (4, 256, 256)
+            #     gen=[]
+            #     for i in range(self.config.n_ensemble):
+            #         samples = self._sample_batch(nb_img=len(cond), condition=cond)
+            #         if len(samples[0] == 3):
+            #             samples = np.concatenate([np.zeros(shape=(16, 1, 256, 256)), samples], axis=1)
+            #         gen.append(samples)
+
+
+            #     batched_members = np.concatenate(gen, axis=0)
+
+            #     filename = filename_format.format(date = d, leadtime = lt + 1)
+            #     save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
+            #     np.save(save_path, batched_members)
+
+            # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                cond = batch['condition_sample'].to(self.gpu_id)
-                row_ids_in_csv = batch['id_in_csv']
-                csv_member_id = batch['member_id']
+                # Empty list that will contain the generated members of 1 ensemble
+                member_list = []
+                # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, 3, 256, 256]
+                conditioning_sets = batch['condition_sample'].to(self.gpu_id)
+                # print("######### size sets ", conditioning_sets.shape)
+                # Transpose the array-> array of shape [n_ensemble, 16, 3, 256, 256]
+                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                # Get the lt and the date for le labelling
                 lt = batch['leadtime'][0]
                 d = batch['date'][0].split(" ")[0]
-                # sample n_ensemble time, w/ n_ensemble = the desired number of generated members.
-                batch_file_size = 16 * self.config.n_ensemble
-                desired_shape = (4, 256, 256)
-                gen=[]
-                for i in range(self.config.n_ensemble):
-                    samples = self._sample_batch(nb_img=len(cond), condition=cond)
-                    if len(samples[0] == 3):
-                        samples = np.concatenate([np.zeros(shape=(16, 1, 256, 256)), samples], axis=1)
-                    gen.append(samples)
-
-
-                batched_members = np.concatenate(gen, axis=0)
-
+                for sampling_id in range(self.config.n_ensemble):
+                    set = conditioning_sets[sampling_id]
+                    # print("######### size cond ", set.shape)
+                    member = self._sample_batch(nb_img=len(set), condition=set)
+                    # print("######### size member ", set.shape)
+                    if len(member[0] == 3):
+                        member = np.concatenate([np.zeros(shape=(16, 1, 256, 256)), member], axis=1)
+                    member_list.append(member)
+                ensemble = np.concatenate(member_list, axis=0)
                 filename = filename_format.format(date = d, leadtime = lt + 1)
+                # raise ValueError('DEBUG : STOP.')
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
-                np.save(save_path, batched_members)
+                np.save(save_path, ensemble)
+                torch.cuda.empty_cache()
+
+
+            # # Proceed sampling n_ensemble times, -> the final ensemble contains 16*n_ensemble members
+            # for i in range(self.config.n_ensemble):
+            #     # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
+            #     for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
+            #         # Get the list containing the n_ensemble sets of conditionning members
+            #         cond = batch['condition_sample'].to(self.gpu_id)
+            #         # row_ids_in_csv = batch['id_in_csv']
+            #         # csv_member_id = batch['member_id']
+            #         lt = batch['leadtime'][0]
+            #         d = batch['date'][0].split(" ")[0]
+            #         # batch_file_size = 16 * self.config.n_ensemble
+            #         # desired_shape = (4, 256, 256)
+            #     gen=[]
+            #         samples = self._sample_batch(nb_img=len(cond), condition=cond)
+            #         if len(samples[0] == 3):
+            #             samples = np.concatenate([np.zeros(shape=(16, 1, 256, 256)), samples], axis=1)
+            #         gen.append(samples)
+
+
+            #     batched_members = np.concatenate(gen, axis=0)
+
+            #     filename = filename_format.format(date = d, leadtime = lt + 1)
+            #     save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
+            #     np.save(save_path, batched_members)
 
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
