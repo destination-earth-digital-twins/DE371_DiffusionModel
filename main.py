@@ -176,7 +176,7 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
         train_set,
         batch_size=config.batch_size,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=True if num_workers is None else False,
         # non_blocking=True,
         shuffle=not torch.cuda.device_count() >= 2,
         num_workers=cpu_count() if num_workers is None else num_workers,
@@ -280,7 +280,7 @@ def main_sample(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file)
+    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
     inversion_tf = sample_data.dataset.inversion_transforms
     data = sample_data if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
