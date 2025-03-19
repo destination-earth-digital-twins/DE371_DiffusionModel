@@ -1,5 +1,5 @@
 import os
-
+import gc
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -105,28 +105,41 @@ class Sampler(Ddpm_base):
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+
+            if self.config.v_i == 3:
+            # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
+                    zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                cond = batch['condition_sample'].to(self.gpu_id)
-                row_ids_in_csv = batch['id_in_csv']
-                csv_member_id = batch['member_id']
+                # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, 3, 256, 256]
+                conditioning_sets = batch['condition_sample']
+                # Transpose the array-> array of shape [n_ensemble, 16, 3, 256, 256]
+                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 lt = batch['leadtime'][0]
                 d = batch['date'][0].split(" ")[0]
-                # sample n_ensemble time, w/ n_ensemble = the desired number of generated members.
-                batch_file_size = 16 * self.config.n_ensemble
-                desired_shape = (4, 256, 256)
-                gen=[]
-                for i in range(self.config.n_ensemble):
-                    samples = self._sample_batch(nb_img=len(cond), condition=cond)
-                    if len(samples[0] == 3):
-                        samples = np.concatenate([np.zeros(shape=(16, 1, 256, 256)), samples], axis=1)
-                    gen.append(samples)
 
-
-                batched_members = np.concatenate(gen, axis=0)
-
+                if self.config.v_i == 3:
+                        ensemble = torch.cat([
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0)
+                            for set in conditioning_sets # Generates a member for all n_ensemble set from the conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+                else:
+                        ensemble = torch.cat([
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
+                            for set in conditioning_sets # Generates a member for all n_ensemble set from the conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+                    
                 filename = filename_format.format(date = d, leadtime = lt + 1)
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
-                np.save(save_path, batched_members)
+                np.save(save_path, ensemble.numpy())
+
+                # print(f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                # print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+                
+                del ensemble
+                gc.collect()
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+                torch.distributed.barrier()
 
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
