@@ -404,9 +404,9 @@ class Trainer(Ddpm_base):
                 "samples",
                 filename,
             )
-            np.save(save_path, img)
+            np.save(save_path, img.cpu())
         if self.config.plot:
-            self.plot_grid(f"samples_grid_{ep}.jpg", samples)
+            self.plot_grid(f"samples_grid_{ep}.jpg", samples.cpu())
         self.logger.info(
             f"Sampling done. Images saved in {os.path.join(self.config.output_dir, self.config.run_name, 'samples')}"
         )
