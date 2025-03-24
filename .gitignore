@@ -34,3 +34,7 @@ utils/plot_ensemble_grid.py
 slurm/apptainer_stuff/train_meluxina.sh
 slurm/apptainer_stuff/sample_meluxina.sh
 utils/TEMP_reshape.py
+slurm/apptainer_stuff/build_container_tutorial.txt
+slurm/apptainer_stuff/container_diffusion_2.def
+slurm/apptainer_stuff/requirements_diffusion_2.txt
+profile.svg

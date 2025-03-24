@@ -88,6 +88,8 @@ class ISDataset(Dataset):
 
         transformations = self.prepare_tranformations()
         self.transform = transformations
+        
+        self.labels = self.labels.reset_index(drop=True)
 
     def prepare_tranformations(self):
 
@@ -163,92 +165,65 @@ class ISDataset(Dataset):
         mean_cond = self.config.mean_conditionning
         var_cond = self.config.var_conditionning
 
-        if mean_cond or var_cond or self.ensembles is not None:
-            self.labels = self.labels.reset_index(drop=True)
-            # self.labels = self.labels.reset_index()
-            ensemble_id = self.labels.loc[idx, self.config.guiding_col]
-            #TODO : a opti
-            # Get the ensemble
-            group = self.labels[self.labels['ensemble_id'] == ensemble_id]
+        # Get the ensemble df
+        ensemble_id = self.labels.at[idx, self.config.guiding_col]
+        group = self.ensembles.get_group((ensemble_id,))
 
         # Prepare n_sampling sets of random conditionning members
         seeds_list = []
         for i in range(n_sampling):
             # Get conditional sample if ensembles are specified
             if self.ensembles is not None and n_conditions > 0:
-                # Remove the targeted member and only keep the possible conditions (the rest of the ensemble)
                 group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
-                # Batch the conditions used for the training : 
-                # Randomly get the condition(s)
-                rows = group_ensemble.sample(n=n_conditions)
-                rows = rows.reset_index()
-                for index, row in rows.iterrows():
-                    if index == 0:
-                        ens = row['Name']
-                        condition = self.file_to_torch(ens)
-                    elif index == 1:
-                        ens = row['Name']
-                        condition = torch.stack((condition, self.file_to_torch(ens)), dim=0)
-                    else:
-                        ens = row['Name']
-                        condition = torch.cat([condition, self.file_to_torch(ens).unsqueeze(0)], dim=0)
-                condition = condition.reshape(n_conditions*n_var, 256, 256)
-                # Batch the conditions used for the sampling :
-                condition_sample = self.file_to_torch(file_name)
-                if n_conditions > 1:
-                    rows_sampling = group_ensemble.sample(n=n_conditions-1)
-                    rows_sampling =  rows_sampling.reset_index()
-                    for index, row in rows_sampling.iterrows():
-                        if index == 0:
-                            ens = row['Name']
-                            condition_sample = torch.stack((condition_sample, self.file_to_torch(ens)), dim=0)
-                        else:
-                            ens = row['Name']
-                            condition_sample = torch.cat([condition_sample, self.file_to_torch(ens).unsqueeze(0)], dim=0)
-                    condition_sample = condition_sample.reshape(n_conditions*n_var, 256, 256)
-        
+
+                # Random conditionning members for the training
+                rows = group_ensemble.sample(n=n_conditions)['Name'].values
+                conditions = [self.file_to_torch(name) for name in rows]
+                condition_train = torch.stack(conditions, dim=0).reshape(n_conditions * n_var, 256, 256)
+
+                # Random conditionning members for the sampling
+                rows_sampling = group_ensemble.sample(n=n_conditions - 1)['Name'].values if n_conditions > 1 else []
+                conditions_sample = [self.file_to_torch(file_name)] + [self.file_to_torch(name) for name in rows_sampling]
+                condition_sample = torch.stack(conditions_sample, dim=0).reshape(n_conditions * n_var, 256, 256)
+            
             # Allow the sampling with 0 conditionning members when using the mean and/or the var of the ensemble as conditions
             elif self.ensembles is not None and n_conditions == 0:
-                condition = torch.empty((0, 256, 256))
+                condition_train = torch.empty((0, 256, 256))
                 condition_sample = torch.empty((0, 256, 256))
 
             else:
-                condition = torch.empty(0)
+                condition_train = torch.empty(0)
                 condition_sample = torch.empty(0)
 
-            # Using the mean and/or the var of the ensemble as additionnal conditions
-            if mean_cond or var_cond:
-                group = group.reset_index()
-                for index, row in group.iterrows():
-                    if index == 0:
-                        member = row['Name']
-                        ensemble = self.file_to_torch(member)
-                    elif index == 1:
-                        member = row['Name']
-                        ensemble = torch.stack((ensemble, self.file_to_torch(member)), dim=0)
-                    else:
-                        member = row['Name']
-                        ensemble = torch.cat([ensemble, self.file_to_torch(member).unsqueeze(0)], dim=0)
-                if mean_cond:
-                    mean = ensemble.mean(dim=0)
-                    condition = torch.cat([condition, mean], dim=0)
-                if var_cond:
-                    var = ensemble.var(dim=0)
-                    condition = torch.cat([condition, var], dim=0)
-
             seeds_list.append(condition_sample)
-            # print("######### size member ", condition_sample.shape)
-            # print("######### len ensemble ", len(seeds_list))
-        seeds_np = np.stack(seeds_list, axis=0)
-        # print("######### shape seeds_np ", seeds_np.shape)
+        seeds_tensor = torch.stack(seeds_list, dim=0)
 
-        
+        # Using the mean and/or the var of the ensemble as additionnal conditions
+        if mean_cond or var_cond:
+            ensemble = torch.stack([self.file_to_torch(name) for name in group['Name'].values], dim=0)
+            if mean_cond:
+                mean = ensemble.mean(dim=0)
+                condition_train = torch.cat([condition_train, mean], dim=0)
+                if n_conditions > 1:
+                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                else:
+                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0)], dim=1)
+            if var_cond:
+                var = ensemble.var(dim=0)
+                condition_train = torch.cat([condition_train, var], dim=0)
+                if n_conditions > 1:
+                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                else:
+                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0)], dim=1)
+
+
+        row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(row["Date"])
         lt = row["LeadTime"]
         member = row["Member"]
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition, "condition_sample": seeds_np, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition_train, "condition_sample": seeds_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def file_to_torch(self, file_name):
         """

@@ -8,6 +8,8 @@ from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 
+import time
+
 
 class Sampler(Ddpm_base):
     def __init__(
@@ -110,7 +112,7 @@ class Sampler(Ddpm_base):
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
                     zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, 3, 256, 256]
+                # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, n_condition*3, 256, 256]
                 conditioning_sets = batch['condition_sample']
                 # Transpose the array-> array of shape [n_ensemble, 16, 3, 256, 256]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
@@ -140,6 +142,10 @@ class Sampler(Ddpm_base):
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
                 torch.distributed.barrier()
+
+                # raise ValueError('STOP')
+
+
 
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
