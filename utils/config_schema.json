@@ -83,6 +83,14 @@
       "default": false,
       "description": "Use the ensemble variance as a condition"
     },
+    "mean_var_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Directory containing the mean and var values of each sample of the dataset"
+    },
     "n_sample": {
       "type": "integer",
       "default": 10,

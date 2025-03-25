@@ -38,3 +38,4 @@ slurm/apptainer_stuff/build_container_tutorial.txt
 slurm/apptainer_stuff/container_diffusion_2.def
 slurm/apptainer_stuff/requirements_diffusion_2.txt
 profile.svg
+utils/make_mean_var_files.py

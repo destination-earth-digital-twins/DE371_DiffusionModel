@@ -164,6 +164,7 @@ class ISDataset(Dataset):
         n_var = self.config.v_i
         mean_cond = self.config.mean_conditionning
         var_cond = self.config.var_conditionning
+        mean_var_dir = self.config.mean_var_dir
 
         # Get the ensemble df
         ensemble_id = self.labels.at[idx, self.config.guiding_col]
@@ -186,7 +187,7 @@ class ISDataset(Dataset):
                 conditions_sample = [self.file_to_torch(file_name)] + [self.file_to_torch(name) for name in rows_sampling]
                 condition_sample = torch.stack(conditions_sample, dim=0).reshape(n_conditions * n_var, 256, 256)
             
-            # Allow the sampling with 0 conditionning members when using the mean and/or the var of the ensemble as conditions
+            # Allow the sampling with 0 conditionning member when using the mean and/or the var of the ensemble as conditions
             elif self.ensembles is not None and n_conditions == 0:
                 condition_train = torch.empty((0, 256, 256))
                 condition_sample = torch.empty((0, 256, 256))
@@ -198,29 +199,30 @@ class ISDataset(Dataset):
             seeds_list.append(condition_sample)
         seeds_tensor = torch.stack(seeds_list, dim=0)
 
+        row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
+        lt = row["LeadTime"]
+        member = row["Member"]
+        
         # Using the mean and/or the var of the ensemble as additionnal conditions
         if mean_cond or var_cond:
-            ensemble = torch.stack([self.file_to_torch(name) for name in group['Name'].values], dim=0)
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+            if self.config.v_i == 3:
+                mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             if mean_cond:
-                mean = ensemble.mean(dim=0)
+                mean = mean_var_file[0]
                 condition_train = torch.cat([condition_train, mean], dim=0)
                 if n_conditions > 1:
                     seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
                 else:
                     seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0)], dim=1)
             if var_cond:
-                var = ensemble.var(dim=0)
+                var = mean_var_file[1]
                 condition_train = torch.cat([condition_train, var], dim=0)
                 if n_conditions > 1:
                     seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
                 else:
                     seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0)], dim=1)
-
-
-        row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
-        date = str(row["Date"])
-        lt = row["LeadTime"]
-        member = row["Member"]
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition_train, "condition_sample": seeds_tensor, "member_id": member, "date": date, "leadtime": lt}
