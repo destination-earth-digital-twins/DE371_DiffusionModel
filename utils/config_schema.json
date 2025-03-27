@@ -45,6 +45,14 @@
       "default": false,
       "description": "Enable/disable plotting during training"
     },
+    "reproductibility_seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null,
+      "description": "Optional seed for reproductibility"
+    },
     "sampling_mode": {
       "type": "string",
       "enum": [

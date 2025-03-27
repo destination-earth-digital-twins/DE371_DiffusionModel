@@ -165,6 +165,7 @@ class ISDataset(Dataset):
         mean_cond = self.config.mean_conditionning
         var_cond = self.config.var_conditionning
         mean_var_dir = self.config.mean_var_dir
+        reproductibility_seed = self.config.reproductibility_seed
 
         # Get the ensemble df
         ensemble_id = self.labels.at[idx, self.config.guiding_col]
@@ -183,7 +184,10 @@ class ISDataset(Dataset):
                 condition_train = torch.stack(conditions, dim=0).reshape(n_conditions * n_var, 256, 256)
 
                 # Random conditionning members for the sampling
-                rows_sampling = group_ensemble.sample(n=n_conditions - 1)['Name'].values if n_conditions > 1 else []
+                if self.config.reproductibility_seed is not None:
+                    rows_sampling = group_ensemble.sample(n=n_conditions - 1, random_state = reproductibility_seed + 100 * idx + i)['Name'].values if n_conditions > 1 else []
+                else:
+                    rows_sampling = group_ensemble.sample(n=n_conditions - 1)['Name'].values if n_conditions > 1 else []
                 conditions_sample = [self.file_to_torch(file_name)] + [self.file_to_torch(name) for name in rows_sampling]
                 condition_sample = torch.stack(conditions_sample, dim=0).reshape(n_conditions * n_var, 256, 256)
             
