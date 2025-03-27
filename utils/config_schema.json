@@ -91,6 +91,11 @@
       "default": null,
       "description": "Directory containing the mean and var values of each sample of the dataset"
     },
+    "stylegan_like_sampling": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the same sets of condtionning members to generate the n_ensemble samples"
+    },
     "n_sample": {
       "type": "integer",
       "default": 10,

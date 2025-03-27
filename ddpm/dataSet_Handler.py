@@ -199,6 +199,10 @@ class ISDataset(Dataset):
             seeds_list.append(condition_sample)
         seeds_tensor = torch.stack(seeds_list, dim=0)
 
+        # Enables the "StyleGAN-like sampling" : the same sets of condtionning members are used to generate the n_ensemble samples
+        if self.config.stylegan_like_sampling:
+            seeds_tensor = seeds_tensor[0].expand_as(seeds_tensor)
+
         row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
