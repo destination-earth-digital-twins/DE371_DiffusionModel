@@ -207,6 +207,8 @@ class ISDataset(Dataset):
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
         member = row["Member"]
+
+        # print("####### shape seeds before mean var ", seeds_tensor.shape)
         
         # Using the mean and/or the var of the ensemble as additionnal conditions
         if mean_cond or var_cond:
@@ -216,17 +218,11 @@ class ISDataset(Dataset):
             if mean_cond:
                 mean = mean_var_file[0]
                 condition_train = torch.cat([condition_train, mean], dim=0)
-                if n_conditions > 1:
-                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
-                else:
-                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0)], dim=1)
+                seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
             if var_cond:
                 var = mean_var_file[1]
                 condition_train = torch.cat([condition_train, var], dim=0)
-                if n_conditions > 1:
-                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
-                else:
-                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0)], dim=1)
+                seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition_train, "condition_sample": seeds_tensor, "member_id": member, "date": date, "leadtime": lt}
