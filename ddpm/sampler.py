@@ -1,5 +1,5 @@
 import os
-
+import gc
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -7,6 +7,8 @@ import logging
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
+
+import time
 
 
 class Sampler(Ddpm_base):
@@ -24,13 +26,11 @@ class Sampler(Ddpm_base):
             config: Configuration settings for sampling.
             dataloader: The data loader for input data (optional).
         """
-        super().__init__(model, config, dataloader, inversion_transforms)
+        super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
 
     @torch.no_grad()
-    def _guided_sample_batch(
-        self, truth_sample_batch, guidance_loss_scale=100, random_noise=False
-    ):
+    def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
         """
         Perform guided sampling of a batch of images.
         Args:
@@ -69,7 +69,7 @@ class Sampler(Ddpm_base):
         return sampled_images_unnorm
 
     @torch.no_grad()
-    def sample(self, filename_format="_sample_{i}.npy"):
+    def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
         """
         Generate and save sample images during training.
         Args:
@@ -84,7 +84,8 @@ class Sampler(Ddpm_base):
 
             if is_main_gpu():
                 self.logger.info(
-                    f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    #f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+                    f"Sampling {self.config.n_sample} images...")
             with tqdm(total=self.config.n_sample // self.config.batch_size, desc="Sampling ", unit="batch",
                       disable= not is_main_gpu()) as pbar:
                 b = 0
@@ -92,7 +93,11 @@ class Sampler(Ddpm_base):
                     batch_size = min(self.config.n_sample - b, self.config.batch_size)
                     samples = super()._sample_batch(nb_img=batch_size)
                     for s in samples:
-                        filename = filename_format.format(i=str(i))
+                        # Append the empty rr channel if only u v t2m
+                        if len(s) == 3:
+                            s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
+
+                        filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
                         np.save(save_path, s)
                         i += max(torch.cuda.device_count(), 1)
@@ -102,24 +107,48 @@ class Sampler(Ddpm_base):
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
+
+            if self.config.v_i == 3:
+            # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
+                    zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                cond = batch['img'].to(self.gpu_id)
-                ids = batch['img_id']
-                samples = self._sample_batch(nb_img=len(cond), condition=cond)
-                # if self.config.sampling_mode == "conditioned":
-                #     samples = self._sample_batch(nb_img=len(cond), condition=cond)
-                # elif self.config.sampling_mode == "guided":
-                #     samples = self._guided_sample_batch(cond, random_noise=self.config.random_noise)
-                for s, img_id in zip(samples, ids):
-                    filename = filename_format.format(i=img_id)
-                    save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
-                    np.save(save_path, s)
+                # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, n_condition*3, 256, 256]
+                conditioning_sets = batch['condition_sample']
+                # Transpose the array-> array of shape [n_ensemble, 16, 3, 256, 256]
+                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                lt = batch['leadtime'][0]
+                d = batch['date'][0].split(" ")[0]
+
+                if self.config.v_i == 3:
+                        ensemble = torch.cat([
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0)
+                            for set in conditioning_sets # Generates a member for all n_ensemble set from the conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+                else:
+                        ensemble = torch.cat([
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
+                            for set in conditioning_sets # Generates a member for all n_ensemble set from the conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+                    
+                filename = filename_format.format(date = d, leadtime = lt + 1)
+                save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
+                np.save(save_path, ensemble.numpy())
+
+                # print(f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                # print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+                
+                del ensemble
+                gc.collect()
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+                torch.distributed.barrier()
+
+                # raise ValueError('STOP')
+
+
 
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
-
-        if self.config.plot and is_main_gpu():
-            self.plot_grid("last_samples.jpg", samples)
 
         self.logger.info(
             f"Sampling done. Images saved in {self.config.output_dir}/{self.config.run_name}/samples/")

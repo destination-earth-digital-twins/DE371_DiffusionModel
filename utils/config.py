@@ -8,8 +8,9 @@ import yaml
 from utils.distributed import is_main_gpu, get_rank_num, synchronize
 import datetime
 
-CONFIG_SCHEMA_PATH = "utils/config_schema.json"
-DATASET_CONFIG_SCHEMA_PATH = "utils/dataset_config_schema.json"
+SOURCE_PATH = os.environ.get("SOURCE_DIR", "./")
+CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/config_schema.json"
+DATASET_CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/dataset_config_schema.json"
 
 
 def load_yaml(yaml_path):

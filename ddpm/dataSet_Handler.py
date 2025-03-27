@@ -11,6 +11,7 @@ DataSet:DataLoader classes for test samples
 
 """
 import os
+import sys
 import random
 import re
 from pathlib import Path
@@ -25,6 +26,11 @@ from torch import from_numpy
 from torch.utils.data import Dataset
 
 from utils.config import DataSetConfig
+from utils.utils import filter_dates, filter_lead_times
+
+from torch.utils.data import Dataset, DataLoader, Sampler
+import torch.distributed as dist
+import math
 
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
@@ -54,9 +60,11 @@ class ISDataset(Dataset):
         """
         self.data_dir = path
         self.labels = pd.read_csv( csv_file, index_col=False)
+        self.config = config
+        self.labels = filter_dates(self.labels, self.config.date_start, self.config.date_stop)
+        self.labels = filter_lead_times(self.labels, self.config.leadtimes)
         if "Unnamed: 0" in self.labels:
             self.labels = self.labels.drop("Unnamed: 0", axis=1)
-        self.config = config
         self.dataset_config = (
             DataSetConfig(config.dataset_config_file)
             if config.dataset_config_file is not None
@@ -80,6 +88,8 @@ class ISDataset(Dataset):
 
         transformations = self.prepare_tranformations()
         self.transform = transformations
+        
+        self.labels = self.labels.reset_index(drop=True)
 
     def prepare_tranformations(self):
 
@@ -142,25 +152,80 @@ class ISDataset(Dataset):
         Args:
             idx (int): Index of the sample.
         Returns:
-            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional sample).
+            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0]
         sample = self.file_to_torch(file_name)
+        # Proceed sampling n_ensemble times, -> the final ensemble contains 16*n_ensemble members
+        n_sampling = self.config.n_ensemble
+        # Number of conditionning members
+        n_conditions = self.config.n_conditions
+        # Number of channels. e.g. to sample u, v, t2m, n_var=3
+        n_var = self.config.v_i
+        mean_cond = self.config.mean_conditionning
+        var_cond = self.config.var_conditionning
+        mean_var_dir = self.config.mean_var_dir
 
-        # Get conditional sample if ensembles are specified
-        if self.ensembles is not None:
-            ensemble_id = self.labels.loc[idx, self.config.guiding_col]
-            #TODO : a opti
-            group = self.labels[self.labels['ensemble_id'] == ensemble_id]
-            group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
-            row = group_ensemble.sample(n=1)
-            ens = row['Name'].values[0]
-            condition = self.file_to_torch(ens)
-        else:
-            condition = torch.empty(0)
+        # Get the ensemble df
+        ensemble_id = self.labels.at[idx, self.config.guiding_col]
+        group = self.ensembles.get_group((ensemble_id,))
+
+        # Prepare n_sampling sets of random conditionning members
+        seeds_list = []
+        for i in range(n_sampling):
+            # Get conditional sample if ensembles are specified
+            if self.ensembles is not None and n_conditions > 0:
+                group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
+
+                # Random conditionning members for the training
+                rows = group_ensemble.sample(n=n_conditions)['Name'].values
+                conditions = [self.file_to_torch(name) for name in rows]
+                condition_train = torch.stack(conditions, dim=0).reshape(n_conditions * n_var, 256, 256)
+
+                # Random conditionning members for the sampling
+                rows_sampling = group_ensemble.sample(n=n_conditions - 1)['Name'].values if n_conditions > 1 else []
+                conditions_sample = [self.file_to_torch(file_name)] + [self.file_to_torch(name) for name in rows_sampling]
+                condition_sample = torch.stack(conditions_sample, dim=0).reshape(n_conditions * n_var, 256, 256)
+            
+            # Allow the sampling with 0 conditionning member when using the mean and/or the var of the ensemble as conditions
+            elif self.ensembles is not None and n_conditions == 0:
+                condition_train = torch.empty((0, 256, 256))
+                condition_sample = torch.empty((0, 256, 256))
+
+            else:
+                condition_train = torch.empty(0)
+                condition_sample = torch.empty(0)
+
+            seeds_list.append(condition_sample)
+        seeds_tensor = torch.stack(seeds_list, dim=0)
+
+        row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
+        lt = row["LeadTime"]
+        member = row["Member"]
+        
+        # Using the mean and/or the var of the ensemble as additionnal conditions
+        if mean_cond or var_cond:
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+            if self.config.v_i == 3:
+                mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
+            if mean_cond:
+                mean = mean_var_file[0]
+                condition_train = torch.cat([condition_train, mean], dim=0)
+                if n_conditions > 1:
+                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                else:
+                    seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0)], dim=1)
+            if var_cond:
+                var = mean_var_file[1]
+                condition_train = torch.cat([condition_train, var], dim=0)
+                if n_conditions > 1:
+                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                else:
+                    seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0)], dim=1)
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"img": sample, "img_id": sample_id, "condition": condition}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition_train, "condition_sample": seeds_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def file_to_torch(self, file_name):
         """
@@ -190,9 +255,7 @@ class MultiOptionNormalize(object):
         self.gaussian_std = self.dataset_config.rr_transform["gaussian_std"]
         ### setting gaussian noise conditions
         if self.gaussian_std:
-            for _ in range(
-                self.dataset_config.rr_transform["log_transform_iteration"]
-            ):
+            for _ in range( self.dataset_config.rr_transform["log_transform_iteration"]):
                 self.gaussian_std = np.log(1 + self.gaussian_std)
 
         if np.ndim(self.value_sup) > 1:
@@ -240,15 +303,10 @@ class MultiOptionNormalize(object):
                 f"Expected sample to be a tensor image of size (..., C, H, W). Got tensor.size() = {sample.size()}."
             )
         ### transforming rain rates to logits (iterative transforms)
-        for _ in range(
-            self.dataset_config.rr_transform["log_transform_iteration"]
-        ):
+        for _ in range(self.dataset_config.rr_transform["log_transform_iteration"]):
             sample[var_dict["rr"]] = torch.log(1 + sample[var_dict["rr"]])
         ### randomly symmetrizing rain rates around 0 (50% of rain rates are negative)
-        if (
-            self.dataset_config.rr_transform["symetrization"]
-            and np.random.random() <= 0.5
-        ):
+        if (self.dataset_config.rr_transform["symetrization"] and np.random.random() <= 0.5):
             sample[var_dict["rr"]] = -sample[var_dict["rr"]]
         ### adding random noise (AT RUNTIME) to rain rates below a certain threshold
         if self.gaussian_std != 0:
@@ -275,9 +333,7 @@ class MultiOptionNormalize(object):
         if self.dataset_config.normalization["func"] == "mean":
             sample = (sample - self.value_inf) / self.value_sup
         elif self.dataset_config.normalization["func"] in ["minmax", "quant"]:
-            sample = -1 + 2 * (
-                (sample - self.value_inf) / (self.value_sup - self.value_inf)
-            )
+            sample = -1 + 2 * ((sample - self.value_inf) / (self.value_sup - self.value_inf))
         return sample
 
     def denorm(self, sample):
@@ -364,7 +420,7 @@ class rrISDataset(ISDataset):
         super().__init__(config, path, csv_file, add_coords=False)
 
     def prepare_tranformations(self):
-        transformations = []
+        # transformations = []
         normalization = self.dataset_config.normalization["func"]
         if normalization != "None":
             if self.dataset_config.rr_transform["symetrization"]:
@@ -378,14 +434,17 @@ class rrISDataset(ISDataset):
                     self.value_inf[var_dict["rr"]] = -self.value_sup[
                         var_dict["rr"]
                     ]
-        transformations.append(transforms.ToTensor())
-        transformations.append(
-            MultiOptionNormalize(
-                self.value_sup,
-                self.value_inf,
-                self.dataset_config,
-                self.config,
-            )
+                    
+        transformations = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    MultiOptionNormalize(
+                        self.value_sup,
+                        self.value_inf,
+                        self.dataset_config,
+                        self.config,
+                    ),
+                ]
         )
         return transformations
 
@@ -445,3 +504,30 @@ class rrISDataset(ISDataset):
                 )
             norm_vars.append(norm_var)
         return norm_vars
+
+class CustomDistributedSampler(Sampler):
+    def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
+        if num_replicas is None:
+            num_replicas = dist.get_world_size() if dist.is_initialized() else 1
+        if rank is None:
+            rank = dist.get_rank() if dist.is_initialized() else 0
+        
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.drop_last = drop_last
+
+        self.num_samples = len(self.dataset) // self.num_replicas
+        if not drop_last and len(self.dataset) % self.num_replicas != 0:
+            self.num_samples += 1
+
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        start = self.rank * self.num_samples
+        end = min(start + self.num_samples, len(self.dataset))
+        indices = list(range(start, end))
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
