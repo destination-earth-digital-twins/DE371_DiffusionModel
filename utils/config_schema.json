@@ -45,16 +45,6 @@
       "default": false,
       "description": "Enable/disable plotting during training"
     },
-    "sampling_mode": {
-      "type": "string",
-      "enum": [
-        "simple",
-        "conditioned",
-        "guided"
-      ],
-      "default": "simple",
-      "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
-    },
     "elucidated_diffusion_sampler": {
       "type": "boolean",
       "default": false,
@@ -71,7 +61,7 @@
         "null"
       ],
       "default": null,
-      "description": "Column to use for guided sampling. Required when using guided sampling mode."
+      "description": "Column to use for conditioned sampling."
     },
     "mean_conditionning": {
       "type": "boolean",
@@ -104,7 +94,7 @@
     "random_noise": {
       "type": "boolean",
       "default": false,
-      "description": "Use random noise for x_start in guided sampling"
+      "description": "Use random noise for x_start in conditioned sampling"
     },
     "data_dir": {
       "type": [
@@ -125,7 +115,7 @@
         "null"
       ],
       "default": null,
-      "description": "Path to the CSV file containing label data (required for guided sampling)"
+      "description": "Path to the CSV file containing label data (required for conditioned sampling)"
     },
     "csv_val_file": {
       "type": [
@@ -133,7 +123,7 @@
         "null"
       ],
       "default": null,
-      "description": "Path to the CSV file containing validation label data (required for guided sampling)"
+      "description": "Path to the CSV file containing validation label data (required for conditioned sampling)"
     },
     "v_i": {
       "type": "integer",
@@ -265,7 +255,7 @@
     "guidance_loss_scale": {
       "type": "integer",
       "default": 0,
-      "description": "Scale factor for guidance loss in guided sampling"
+      "description": "Scale factor for guidance loss in conditioned sampling"
     },
     "beta_schedule": {
       "type": "string",

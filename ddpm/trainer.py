@@ -15,7 +15,7 @@ from utils.distributed import is_main_gpu, synchronize
 import mlflow
 
 
-class Trainer(Ddpm_base):
+class DDPM_Trainer(Ddpm_base):
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class Trainer(Ddpm_base):
         inversion_transforms=None
     ):
         """
-        Initialize the Trainer class.
+        Initialize the DDPM_Trainer class.
         Args:
             model: The neural network model for training.
             config: Configuration settings for training.

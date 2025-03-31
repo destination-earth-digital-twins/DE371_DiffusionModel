@@ -78,8 +78,9 @@ class Config:
         # Check specific conditions for certain configuration values
         self.output_dir = Path(self.output_dir)
         if (
-            self.sampling_mode == "guided"
-            or self.sampling_mode == "simple_guided"
+            self.n_conditions>0
+            or self.mean_conditionning
+            or self.var_conditionning
         ):
             assert (
                 self.guidance_loss_scale >= 0
@@ -91,11 +92,11 @@ class Config:
                 )
             if (
                 self.mode != "Sample"
-                and self.sampling_mode == "guided"
+                and (self.n_conditions>0 or self.mean_conditionning or self.var_conditionning)
                 and self.guiding_col is None
             ):
                 raise ValueError(
-                    "guiding_col must be specified when using guided sampling mode."
+                    "guiding_col must be specified when using conditioned sampling mode."
                 )
         if self.resume:
             if self.model_path is None or not os.path.isfile(self.model_path):

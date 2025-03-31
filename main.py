@@ -18,8 +18,8 @@ from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
-from ddpm.sampler import Sampler
-from ddpm.trainer import Trainer
+from ddpm.sampler import DDPM_Sampler
+from ddpm.trainer import DDPM_Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
@@ -102,9 +102,8 @@ def load_train_objs(config):
     """
     use_cond = (
         config.guiding_col is not None
-        and config.mode == "Train"
-        or config.mode == "Sample"
-        and "conditioned" in config.sampling_mode
+        and (config.mode == "Train" or config.mode == "Sample")
+        and (config.n_conditions>0 or config.mean_conditionning or config.var_conditionning)
     )
     # Create a U-Net model and a diffusion model based on configuration
     umodel = Unet(
@@ -235,7 +234,7 @@ def main_train(config):
         invert_tf = train_data.dataset.inversion_transforms
     else:
         invert_tf = None
-    trainer = Trainer(
+    trainer = DDPM_Trainer(
         model,
         config,
         dataloader=train_data,
@@ -255,7 +254,7 @@ def main_train(config):
 
     try:
         model, _ = load_train_objs(config)
-        sampler = Sampler(
+        sampler = DDPM_Sampler(
             model,
             config,
             dataloader=sample_data,
@@ -282,22 +281,24 @@ def main_sample(config):
     model, _ = load_train_objs(config)
     sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
     inversion_tf = sample_data.dataset.inversion_transforms
-    data = sample_data if config.sampling_mode!="simple" else None
-    sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
+    sampling_mode = "conditioned" if config.n_conditions>0 or config.mean_conditionning or config.var_conditionning else "unconditioned"
+    sampler = DDPM_Sampler(model, config, dataloader=sample_data, inversion_transforms=inversion_tf)
 
-    if is_main_gpu():
-        logger.info(f"Sampling of {config.n_ensemble * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
-    if config.sampling_mode == "conditioned":
+    if sampling_mode == "conditioned":
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
-        file_format = "fake_sample_{sample_index}.npy" 
+        file_format = "4var_fake_sample_{sample_index}.npy"
+    if is_main_gpu():
+        logger.info(f"Sampling of {config.n_ensemble * 16} members, file_format : {file_format}")
+        logger.info(f"Sampling mode : {sampling_mode}")
+
     sampler.sample(filename_format=file_format)
-
     samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
-
     barrier() # Wait for every GPU to finish their sampling
+
     if is_main_gpu():
         logger.info(f"Sampling done")
+
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):
