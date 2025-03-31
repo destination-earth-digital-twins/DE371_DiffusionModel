@@ -109,19 +109,6 @@ class Config:
                 self.logger.warning(
                     f"any_time={self.any_time} is greater than epochs={self.epochs}. "
                 )
-        if "rr" in self.var_indexes:
-            if self.dataset_config_file is None:
-                raise ValueError(
-                    "field dataset_config_file should not be None / should be spec'd if rr is among the "
-                    "variables"
-                )
-        if self.dataset_config_file is not None and (
-            self.mean_file is not None or self.max_file is not None
-        ):
-            raise ValueError(
-                "mean_file and max_file should not be specified if dataset_config_file is specified, "
-                "and vice versa"
-            )
         cond_n_sample = (
             self.batch_size
             if isinstance(self.batch_size, int)
@@ -269,14 +256,14 @@ class Config:
 class DataTransformConfig(Config):
     def __init__(self, yaml_path="default"):
         # Load YAML configuration file and initialize logger
-        if os.path.exists(yaml_path):
+        if yaml_path!="default":
             yaml_config = load_yaml(yaml_path)
             for prop, value in yaml_config.items():
                 setattr(self, prop, value)
         else:
             with open(DATA_TRANSFORM_CONFIG_SCHEMA_PATH, "r") as schema_file:
                 schema = json.load(schema_file)
-            for prop, value in schema.items():
+            for prop, value in schema["properties"].items():
                 setattr(self,prop,value["default"])
         self._validate_config()
 

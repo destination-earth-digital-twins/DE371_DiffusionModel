@@ -2,7 +2,7 @@
     "type": "object",
     "properties": {
         "special_transform": {
-            "type": "string",
+            "type": ["string", "null"],
             "default": null,
             "description": "Function to apply to selected variable before normalization."
         }

@@ -19,8 +19,7 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
-from normalize import var_dict, SpecialNormalize
-from utils.config import DataSetConfig
+from ddpm.normalize import var_dict, SpecialNormalize
 from utils.utils import filter_dates, filter_lead_times
 
 from torch.utils.data import Dataset, Sampler

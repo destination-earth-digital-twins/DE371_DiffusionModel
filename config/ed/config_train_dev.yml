@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
 "run_name": "run_train_1_TEST"
-"output_dir": "/project/home/p200177/DE_371/maxencelame/models"
+"output_dir": "/project/home/p200177/DE_371/clementbrochet/models"
 "batch_size": 16
 "any_time": 5
 
@@ -23,25 +23,26 @@
 # "validation": true
 # "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
-"v_i": 3
-"var_indexes": [ "u", "v", "t2m" ]
+"v_i": 4
+"var_indexes": ["rr","u", "v", "t2m" ]
+"rr": /home/users/u102414/DE371_DiffusionModel/config/ed_4var/rr_dataset_config.yml
 "crop": [ 0,256,0,256 ]
 "invert_norm": false
-"mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
-"max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
+"stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central" # is not compatible with dataset_config_file
+"offset_file": mean_rr_log.npy
+"scale_file": max_rr_log.npy
 "image_size": 256
 "guiding_col": "ensemble_id"
 "n_conditions": 1
 # "mean_conditionning": true
 # # "var_conditionning": true
-# "dataset_config_file": "/home/users/u102230/code/DDPM-weather/rr_dataset_config.yml"   # is not compatible with max_file and mean_file 
 
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 250
+"scheduler_epoch": 3
 "resume": false
-"epochs": 250
+"epochs": 3
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5
