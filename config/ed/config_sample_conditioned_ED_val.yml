@@ -10,7 +10,6 @@
 # "n_ensemble": 1
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": true
-"sampling_mode": "conditioned"
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05

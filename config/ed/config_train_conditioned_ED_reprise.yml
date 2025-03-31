@@ -5,11 +5,17 @@
 "batch_size": 16
 "any_time": 1
 
-# Sampling parameters
+# Sampling parameters 
+# Next 3 parameters = conditions used to train the model (Need to use the same parameters when sampling)
+"n_conditions": 5
+# "mean_conditionning": true
+"var_conditionning": true
+
+# The 9 following parameters only impact the sampling, yet a low ddim_timesteps (e.g. 10) allows a low sampling time
+# and so a lower training time, as n_sample are plotted at each epoch
 "ddim_timesteps": 10
-"plot": true
-"sampling_mode": "conditioned"
 "n_sample": 4
+"plot": true
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
@@ -31,10 +37,6 @@
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
 "image_size": 256
 "guiding_col": "ensemble_id"
-"sampling_mode": "conditioned"
-"n_conditions": 5 # ICI
-"mean_conditionning": true
-# "var_conditionning": true
 #"dataset_config_file": "/home/users/u102230/code/DDPM-weather/rr_dataset_config.yml"   # is not compatible with max_file and mean_file 
 
 # Model parameters
