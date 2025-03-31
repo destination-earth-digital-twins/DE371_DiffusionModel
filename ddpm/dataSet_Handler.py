@@ -154,62 +154,26 @@ class ISDataset(Dataset):
         Returns:
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
-        file_name = self.labels.iloc[idx, 0]
-        sample = self.file_to_torch(file_name)
-        # Proceed sampling n_ensemble times, -> the final ensemble contains 16*n_ensemble members
-        n_sampling = self.config.n_ensemble
-        # Number of conditionning members
-        n_conditions = self.config.n_conditions
-        # Number of channels. e.g. to sample u, v, t2m, n_var=3
-        n_var = self.config.v_i
-        mean_cond = self.config.mean_conditionning
-        var_cond = self.config.var_conditionning
-        mean_var_dir = self.config.mean_var_dir
+        file_name = self.labels.iloc[idx, 0] # Name of the actual sample in the dataset
+        sample = self.file_to_torch(file_name) # target
+        mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
+        var_cond = self.config.var_conditionning # Use the var as a condition ?
+        mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
+    
 
         # Get the ensemble df
-        ensemble_id = self.labels.at[idx, self.config.guiding_col]
-        group = self.ensembles.get_group((ensemble_id,))
+        ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the actual member
+        ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
 
-        # Prepare n_sampling sets of random conditionning members
-        seeds_list = []
-        for i in range(n_sampling):
-            # Get conditional sample if ensembles are specified
-            if self.ensembles is not None and n_conditions > 0:
-                group_ensemble = group[group['Name'] != self.labels.iloc[idx, 0]]
+        # Build the tensors for the sampling and the training
+        condition_train, condition_sample = self.get_conditioning_members(ensemble_df, idx)
 
-                # Random conditionning members for the training
-                rows = group_ensemble.sample(n=n_conditions)['Name'].values
-                conditions = [self.file_to_torch(name) for name in rows]
-                condition_train = torch.stack(conditions, dim=0).reshape(n_conditions * n_var, 256, 256)
-
-                # Random conditionning members for the sampling
-                rows_sampling = group_ensemble.sample(n=n_conditions - 1)['Name'].values if n_conditions > 1 else []
-                conditions_sample = [self.file_to_torch(file_name)] + [self.file_to_torch(name) for name in rows_sampling]
-                condition_sample = torch.stack(conditions_sample, dim=0).reshape(n_conditions * n_var, 256, 256)
-            
-            # Allow the sampling with 0 conditionning member when using the mean and/or the var of the ensemble as conditions
-            elif self.ensembles is not None and n_conditions == 0:
-                condition_train = torch.empty((0, 256, 256))
-                condition_sample = torch.empty((0, 256, 256))
-
-            else:
-                condition_train = torch.empty(0)
-                condition_sample = torch.empty(0)
-
-            seeds_list.append(condition_sample)
-        seeds_tensor = torch.stack(seeds_list, dim=0)
-
-        # Enables the "StyleGAN-like sampling" : the same sets of condtionning members are used to generate the n_ensemble samples
-        if self.config.stylegan_like_sampling:
-            seeds_tensor = seeds_tensor[0].expand_as(seeds_tensor)
-
-        row = group.iloc[0] if not group.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        # Get the date, lt, and member id of the actual member
+        row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
         member = row["Member"]
 
-        # print("####### shape seeds before mean var ", seeds_tensor.shape)
-        
         # Using the mean and/or the var of the ensemble as additionnal conditions
         if mean_cond or var_cond:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
@@ -218,15 +182,74 @@ class ISDataset(Dataset):
             if mean_cond:
                 mean = mean_var_file[0]
                 condition_train = torch.cat([condition_train, mean], dim=0)
-                seeds_tensor = torch.cat([seeds_tensor, mean.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                condition_sample = torch.cat([condition_sample, mean.unsqueeze(0).expand(condition_sample.shape[0], -1, -1, -1)], dim=1)
             if var_cond:
                 var = mean_var_file[1]
                 condition_train = torch.cat([condition_train, var], dim=0)
-                seeds_tensor = torch.cat([seeds_tensor, var.unsqueeze(0).expand(seeds_tensor.shape[0], -1, -1, -1)], dim=1)
+                condition_sample = torch.cat([condition_sample, var.unsqueeze(0).expand(condition_sample.shape[0], -1, -1, -1)], dim=1)
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition": condition_train, "condition_sample": seeds_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_train": condition_train, "condition_sample": condition_sample, "member_id": member, "date": date, "leadtime": lt}
 
+    def get_conditioning_members(self, ensemble_df, idx):
+        """
+            Loads the conditioning members for the training and the sampling, stacks them
+            and returns the result
+
+            Args:
+                ensemble_df (df): the sub df contatining the considered ensemble
+                idx (int): ID in the __getitem__.
+
+            Returns:
+                torch.Tensor: The resulting tensor 
+        """
+        # shape of the images 
+        x, y = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+        # Number of channels. e.g. to sample u, v, t2m, n_var=3
+        n_var = self.config.v_i
+        # Proceed sampling n_ensemble times, -> the final ensemble contains 16*n_ensemble members
+        n_sampling = self.config.n_ensemble
+        # Number of conditionning members
+        n_conditions = self.config.n_conditions
+
+        # Remove the target from the possible conditions used for training
+        ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
+        # Build the training conditions tensor
+        condition_train = self.df_to_torch(ensemble_df_without_target, n_conditions)
+
+        # Enables the "StyleGAN-like sampling" : the same sets of condtionning members are used to generate the n_ensemble samples
+        if self.config.stylegan_like_sampling:
+            condition_sample = self.df_to_torch(ensemble_df, n_conditions)
+            condition_sample = condition_sample[0].expand_as(torch.zeros(n_sampling, n_var*n_conditions, x, y))
+            return condition_train, condition_sample
+        
+        # Build the sampling conditions tensor (here the target is not removed)
+        condition_sample_list = [
+            self.df_to_torch(ensemble_df, n_conditions) for _ in range(n_sampling)
+        ]
+        condition_sample = torch.stack(condition_sample_list, dim=0)
+
+        return condition_train, condition_sample
+    
+    def df_to_torch(self, ens_df, n_cond):
+        """
+            sample members from the ensemble df.
+            loads the members
+            returns the concatenated members
+            Args:
+                ens_df (df): df containing an ensemble caracteristics.
+                n_cond (int): number of member to sample
+            Returns:
+                torch.Tensor: Torch tensor containing the concatenated members.
+        """
+        # shape of the images 
+        x, y = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+        selected_members = ens_df.sample(n=n_cond)['Name'].values
+        condition_tensor = torch.cat(
+            [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, x, y))], dim=0 # torch.empty in case of n_condition = 0
+        )
+        return condition_tensor
+        
     def file_to_torch(self, file_name):
         """
         Convert a file to a torch tensor.
