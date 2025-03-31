@@ -10,7 +10,7 @@ import datetime
 
 SOURCE_PATH = os.environ.get("SOURCE_DIR", "./")
 CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/config_schema.json"
-DATASET_CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/dataset_config_schema.json"
+DATA_TRANSFORM_CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/data_transform_config_schema.json"
 
 
 def load_yaml(yaml_path):
@@ -266,17 +266,22 @@ class Config:
                 logging.warning(f"Overloading {key} to {getattr(self, key)}")
 
 
-class DataSetConfig(Config):
-    def __init__(self, yaml_path):
+class DataTransformConfig(Config):
+    def __init__(self, yaml_path="default"):
         # Load YAML configuration file and initialize logger
-        yaml_config = load_yaml(yaml_path)
-        for prop, value in yaml_config.items():
-            setattr(self, prop, value)
-
+        if os.path.exists(yaml_path):
+            yaml_config = load_yaml(yaml_path)
+            for prop, value in yaml_config.items():
+                setattr(self, prop, value)
+        else:
+            with open(DATA_TRANSFORM_CONFIG_SCHEMA_PATH, "r") as schema_file:
+                schema = json.load(schema_file)
+            for prop, value in schema.items():
+                setattr(self,prop,value["default"])
         self._validate_config()
 
     def _validate_config(self):
         # Validate the configuration against a JSON schema
-        with open(DATASET_CONFIG_SCHEMA_PATH, "r") as schema_file:
+        with open(DATA_TRANSFORM_CONFIG_SCHEMA_PATH, "r") as schema_file:
             schema = json.load(schema_file)
         jsonschema.validate(self.__dict__, schema)

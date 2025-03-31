@@ -1,0 +1,13 @@
+{
+    "type": "object",
+    "properties": {
+        "special_transform": {
+            "type": "string",
+            "default": null,
+            "description": "Function to apply to selected variable before normalization."
+        }
+    },
+    "required": [
+        "special_transform"
+    ]
+}
