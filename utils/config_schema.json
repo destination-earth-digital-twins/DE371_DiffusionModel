@@ -65,6 +65,16 @@
       "default": 1,
       "description": "Number of ensemble members used for the conditioned diffusion"
     },
+    "n_conditioning_sets": {
+      "type": "integer",
+      "default": 1,
+      "description": "Proceed sampling n_conditioning_sets times, -> the final ensemble contains 16*n_conditioning_sets members"
+    },
+    "n_members_dataset": {
+      "type": "integer",
+      "default": 16,
+      "description": "Total number of ensemble members in the dataset"
+    },
     "guiding_col": {
       "type": [
         "string",
@@ -91,10 +101,10 @@
       "default": null,
       "description": "Directory containing the mean and var values of each sample of the dataset"
     },
-    "stylegan_like_sampling": {
+    "bootstrap_conditions": {
       "type": "boolean",
-      "default": false,
-      "description": "Use the same sets of condtionning members to generate the n_ensemble samples"
+      "default": true,
+      "description": "Use different sets of condtionning members to generate the n_conditioning_sets samples"
     },
     "n_sample": {
       "type": "integer",
@@ -135,10 +145,10 @@
       "default": null,
       "description": "Path to the CSV file containing validation label data (required for guided sampling)"
     },
-    "v_i": {
+    "n_var": {
       "type": "integer",
       "default": 3,
-      "description": "Number of variable indices"
+      "description": "Number of variables"
     },
     "var_indexes": {
       "type": "array",

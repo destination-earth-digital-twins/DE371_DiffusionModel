@@ -1,13 +1,13 @@
 # General parameters
 "mode": "Sample"
-"run_name": "val_5_cond_64_membres_REPRO"
+"run_name": "REFACTO_2"
 "output_dir": "/project/scratch/p200177/DE_371/maxencelame/results/samples_conditioned"
 "batch_size": 16
 "any_time": 1
 
 # Sampling parameters
-"n_ensemble": 4
-# "n_ensemble": 1
+"n_conditioning_sets": 4
+# "n_conditioning_sets": 1
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": true
 "sampling_mode": "conditioned"
@@ -27,7 +27,7 @@
 "csv_file": "/home/users/u102230/autres/exemples_labels/Large_lt_val_labels_ens.csv"
 # "csv_file": "/home/users/u102230/autres/exemples_labels/3hstep_test_labels_reduced_dev_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
-"v_i": 3
+"n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
 # date_start: '2021-06-16' # take dates >= date_start
 # date_stop: '2021-08-15' # take dates < date_start
