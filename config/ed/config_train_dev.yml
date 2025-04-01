@@ -23,7 +23,7 @@
 # "validation": true
 # "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
-"v_i": 4
+"v_i": 3
 "var_indexes": ["u", "v", "t2m" ]
 # specify f"{variable}_transform" to configure special preprocessing of the variable before normalisation
 "crop": [ 0,256,0,256 ]
