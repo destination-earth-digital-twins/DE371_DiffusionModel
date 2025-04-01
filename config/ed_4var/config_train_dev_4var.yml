@@ -26,7 +26,7 @@
 "v_i": 4
 "var_indexes": ["rr","u", "v", "t2m" ]
 # specifying a variable inside the configuration should be used to configure special preprocessing of the variable before normalisation
-"rr": /home/users/u102414/DE371_DiffusionModel/config/ed_4var/rr_dataset_config.yml
+"rr_transform": LogTransform
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
 "offset_file": mean_rr_log.npy
 "scale_file": max_rr_log.npy

@@ -74,11 +74,8 @@ class SpecialNormalize(object):
             )
 
         for var in self.data_transforms:
-            if self.data_transforms[var].special_transform is not None:
-                print("Special transform")
-                print("sample max before", sample[var_dict[var]].max())
-                sample[var_dict[var]] = self.data_transforms[var].special_transform.direct(sample[var_dict[var]])
-                print("sample max after", sample[var_dict[var]].max())
+            if self.data_transforms[var] is not None:
+                sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
 
         sample = (sample - self.offset) / self.scale
         
