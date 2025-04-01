@@ -10,8 +10,6 @@ import datetime
 
 SOURCE_PATH = os.environ.get("SOURCE_DIR", "./")
 CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/config_schema.json"
-DATA_TRANSFORM_CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/data_transform_config_schema.json"
-
 
 def load_yaml(yaml_path):
     with open(yaml_path, "r") as yaml_file:
@@ -251,24 +249,3 @@ class Config:
                 setattr(self, key, value)
             else:
                 logging.warning(f"Overloading {key} to {getattr(self, key)}")
-
-
-class DataTransformConfig(Config):
-    def __init__(self, yaml_path="default"):
-        # Load YAML configuration file and initialize logger
-        if yaml_path!="default":
-            yaml_config = load_yaml(yaml_path)
-            for prop, value in yaml_config.items():
-                setattr(self, prop, value)
-        else:
-            with open(DATA_TRANSFORM_CONFIG_SCHEMA_PATH, "r") as schema_file:
-                schema = json.load(schema_file)
-            for prop, value in schema["properties"].items():
-                setattr(self,prop,value["default"])
-        self._validate_config()
-
-    def _validate_config(self):
-        # Validate the configuration against a JSON schema
-        with open(DATA_TRANSFORM_CONFIG_SCHEMA_PATH, "r") as schema_file:
-            schema = json.load(schema_file)
-        jsonschema.validate(self.__dict__, schema)

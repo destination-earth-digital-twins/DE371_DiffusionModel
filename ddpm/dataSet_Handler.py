@@ -27,14 +27,13 @@ import torch.distributed as dist
 
 ################
 class ISDataset(Dataset):
-    def __init__(self, config, path, csv_file, add_coords=False):
+    def __init__(self, config, path, csv_file):
         """
         Initialize the ISDataset.
         Args:
             config: Configuration settings.
             path (str): Directory path containing data.
-            csv_file (str): CSV file containing labels and information.
-            add_coords (bool): Whether to add positional encoding.
+            csv_file (str): CSV file containing sample labels (file names, dates, lead times, members id) 
         """
         self.data_dir = path
         self.labels = pd.read_csv( csv_file, index_col=False)
@@ -62,6 +61,9 @@ class ISDataset(Dataset):
         self.labels = self.labels.reset_index(drop=True)
 
     def inversion_transforms(self):
+        """
+        Returns function to revert normalisation and special transforms for generated samples.
+        """
         return SpecialNormalize(self.config).denorm
 
     def __len__(self):

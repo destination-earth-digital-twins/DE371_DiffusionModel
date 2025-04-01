@@ -1,3 +1,0 @@
-# Special transform for rr is x : log(1+x)
-
-special_transform: LogTransform
