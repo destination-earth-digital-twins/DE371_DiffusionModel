@@ -265,7 +265,7 @@ class ElucidatedDiffusion(nn.Module):
         # Conditioned diffusion :
         if self.self_condition:
             with torch.no_grad():
-                self_cond = kwargs.get('condition_train')
+                self_cond = kwargs.get('condition_tensor')
                 self_cond.detach_()
                 
         # if self.self_condition and random() < 0.5:

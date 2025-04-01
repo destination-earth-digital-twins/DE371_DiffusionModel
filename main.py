@@ -286,7 +286,7 @@ def main_sample(config):
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
     if is_main_gpu():
-        logger.info(f"Sampling of {config.n_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
     if config.sampling_mode == "conditioned":
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:

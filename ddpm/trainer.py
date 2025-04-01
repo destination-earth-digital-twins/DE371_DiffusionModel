@@ -129,7 +129,7 @@ class Trainer(Ddpm_base):
         for i, batch in loop:
 
             needs_keys = ["img"] + (
-                ["condition_train"] if self.guided_diffusion else []
+                ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
             loss = self._run_batch(batch_prep)
@@ -167,9 +167,9 @@ class Trainer(Ddpm_base):
             condition = None
             if self.guided_diffusion:
                 condition = self._prepare_batch(
-                    next(iter(self.dataloader)), ["condition_train"]
+                    next(iter(self.dataloader)), ["condition_tensor"]
                 )
-                condition = condition["condition_train"][: self.config.n_sample]
+                condition = condition["condition_tensor"][: self.config.n_sample]
             self.sample_train(str(epoch), self.config.n_sample, condition)
 
         # validation loss computation (optional, default :  yes)
@@ -195,7 +195,7 @@ class Trainer(Ddpm_base):
             for i, batch in val_loop:
                 
                 needs_keys = ["img"] + (
-                    ["condition_train"] if self.guided_diffusion else []
+                    ["condition_tensor"] if self.guided_diffusion else []
                 )
                 batch_prep = self._prepare_batch(batch, needs_keys)
                 loss = self._run_batch(batch_prep, validation=True)

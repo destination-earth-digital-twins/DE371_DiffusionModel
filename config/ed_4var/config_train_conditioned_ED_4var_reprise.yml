@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_train_conditional_ED_4var_5_cond"
-"output_dir": "/project/scratch/p200177/DE_371/maxencelame/models/"
+"run_name": "model_name"
+"output_dir": "/path/to/the/models/dir"
 "batch_size": 16
 "any_time": 5
 

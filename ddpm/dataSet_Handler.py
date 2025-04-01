@@ -169,7 +169,7 @@ class ISDataset(Dataset):
         ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
 
         # Build the tensors for the sampling and the training
-        condition_train, condition_sample = self.get_conditioning_members(ensemble_df, idx)
+        condition_tensor = self.get_conditioning_members(ensemble_df, idx)
 
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
@@ -184,15 +184,13 @@ class ISDataset(Dataset):
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             if mean_cond:
                 mean = mean_var_file[0]
-                condition_train = torch.cat([condition_train, mean], dim=0)
-                condition_sample = torch.cat([condition_sample, mean.unsqueeze(0).expand(condition_sample.shape[0], -1, -1, -1)], dim=1)
+                condition_tensor = torch.cat([condition_tensor, mean], dim=0)
             if var_cond:
                 var = mean_var_file[1]
-                condition_train = torch.cat([condition_train, var], dim=0)
-                condition_sample = torch.cat([condition_sample, var.unsqueeze(0).expand(condition_sample.shape[0], -1, -1, -1)], dim=1)
+                condition_tensor = torch.cat([condition_tensor, var], dim=0)
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_train": condition_train, "condition_sample": condition_sample, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx):
         """
@@ -204,12 +202,13 @@ class ISDataset(Dataset):
                 idx (int): ID in the __getitem__.
 
             Returns:
-                torch.Tensor: The resulting tensor of shape [n_conditioning_sets, n_conditions*n_var, self.x, self.y] 
+                torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.x, self.y] 
         """
         # Number of channels. e.g. to sample u, v, t2m, n_var=3
         n_var = self.config.n_var
-        # Proceed sampling n_conditioning_sets times, -> the final ensemble contains 16*n_conditioning_sets members
-        n_conditioning_sets = self.config.n_conditioning_sets
+        # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
+        # if training : Prepare only 1 conditioning set
+        n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
         # Number of conditionning members
         n_conditions = self.config.n_conditions
         # Number of members in 1 ensemble in the dataset
@@ -221,22 +220,18 @@ class ISDataset(Dataset):
 
         # Remove the target from the possible conditions used for training
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
-        # Build the training conditions tensor
-        condition_train = self.df_to_torch(ensemble_df_without_target, n_conditions)
 
-        # Enables the "StyleGAN-like sampling" : the same sets of condtionning members are used to generate the n_conditioning_sets samples
+        # Disables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_conditioning_sets samples
         if not self.config.bootstrap_conditions:
-            condition_sample = self.df_to_torch(ensemble_df, n_conditions)
-            condition_sample = condition_sample[0].expand_as(torch.zeros(n_conditioning_sets, n_var*n_conditions, self.x, self.y))
-            return condition_train, condition_sample
-        
-        # Build the sampling conditions tensor (here the target is not removed)
-        condition_sample_list = [
-            self.df_to_torch(ensemble_df, n_conditions) for _ in range(n_conditioning_sets)
-        ]
-        condition_sample = torch.stack(condition_sample_list)
+            condition = self.df_to_torch(ensemble_df_without_target, n_conditions)
+            condition = condition[0].expand_as(torch.zeros(n_conditioning_sets, n_var*n_conditions, self.x, self.y))
+            return condition
 
-        return condition_train, condition_sample
+        condition = torch.cat([
+            self.df_to_torch(ensemble_df_without_target, n_conditions) for _ in range(n_conditioning_sets)
+        ])
+
+        return condition
     
     def df_to_torch(self, ens_df, n_cond):
         """

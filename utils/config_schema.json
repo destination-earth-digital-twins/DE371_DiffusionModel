@@ -65,10 +65,15 @@
       "default": 1,
       "description": "Number of ensemble members used for the conditioned diffusion"
     },
-    "n_conditioning_sets": {
+    "n_sampling_conditioning_sets": {
       "type": "integer",
       "default": 1,
-      "description": "Proceed sampling n_conditioning_sets times, -> the final ensemble contains 16*n_conditioning_sets members"
+      "description": "Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members"
+    },
+    "n_training_conditioning_sets": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of conditioning sets to train with"
     },
     "n_members_dataset": {
       "type": "integer",
@@ -104,7 +109,7 @@
     "bootstrap_conditions": {
       "type": "boolean",
       "default": true,
-      "description": "Use different sets of condtionning members to generate the n_conditioning_sets samples"
+      "description": "Use different sets of condtionning members to generate the n_sampling_conditioning_sets samples"
     },
     "n_sample": {
       "type": "integer",

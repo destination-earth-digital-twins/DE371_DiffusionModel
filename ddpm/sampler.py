@@ -104,38 +104,43 @@ class Sampler(Ddpm_base):
                     b += batch_size
                     pbar.update(1)
         elif "conditioned" in self.config.sampling_mode:
+            n_sampling_conditioning_sets = self.config.n_sampling_conditioning_sets
+            n_var = self.config.n_var
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
 
-            if self.config.n_var == 3:
+            if n_var == 3:
+                    zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id) # empty rr channel
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
-                    zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                # Get the list containing the n_conditioning_sets sets of conditionning members -> array of shape [16, n_conditioning_sets, n_condition*3, 256, 256]
-                conditioning_sets = batch['condition_sample']
-                # Transpose the array-> array of shape [n_conditioning_sets, 16, 3, 256, 256]
+                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets*n_condition*n_var, H, W])
+                conditioning_sets = batch['condition_tensor']
+                # -> array of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, H, W]
+                B, C, H, W = conditioning_sets.shape
+                n_conditions = C // n_sampling_conditioning_sets
+                conditioning_sets = conditioning_sets.view(B, n_sampling_conditioning_sets, n_conditions, H, W)
+                # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 lt = batch['leadtime'][0]
                 d = batch['date'][0].split(" ")[0]
 
-                if self.config.n_var == 3:
+                if n_var == 3:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0)
-                            for set in conditioning_sets # Generates a member for all n_conditioning_sets set from the conditioning_sets
-                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_conditioning_sets*16, 4, 256, 256]
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                            for set in conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
-                            for set in conditioning_sets # Generates a member for all n_conditioning_sets set from the conditioning_sets
-                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_conditioning_sets*16, 4, 256, 256]
+                            for set in conditioning_sets
+                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                     
                 filename = filename_format.format(date = d, leadtime = lt + 1)
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-
-                # print(f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                # print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
                 
                 del ensemble
                 gc.collect()
@@ -143,7 +148,6 @@ class Sampler(Ddpm_base):
                 torch.cuda.empty_cache()
                 torch.distributed.barrier()
 
-                # raise ValueError('STOP')
 
 
 
