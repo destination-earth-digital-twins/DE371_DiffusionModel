@@ -155,6 +155,11 @@
       "default": 3,
       "description": "Number of variables"
     },
+    "n_var_in_dataset": {
+      "type": "integer",
+      "default": 4,
+      "description": "Number of variables in the dataset"
+    },
     "var_indexes": {
       "type": "array",
       "default": [

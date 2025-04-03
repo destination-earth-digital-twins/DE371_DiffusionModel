@@ -188,10 +188,11 @@ class ISDataset(Dataset):
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             if mean_cond:
                 mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
             if var_cond:
                 var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
-                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
+
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
@@ -208,30 +209,24 @@ class ISDataset(Dataset):
             Returns:
                 torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.x, self.y] 
         """
-        # Number of channels. e.g. to sample u, v, t2m, n_var=3
-        n_var = self.config.n_var
-        # Number of conditionning members
-        n_conditions = self.config.n_conditions
-        # Number of members in 1 ensemble in the dataset
-        n_members_dataset = self.config.n_members_dataset
-        if n_conditions > n_members_dataset:
+        if self.config.n_conditions > self.config.n_members_dataset:
             raise TypeError(
-                f"The number of conditioning members must not exceed the number of members in the dataset. Got {n_conditions} conditioning members and {n_members_dataset} members in the dataset."
+                f"The number of conditioning members must not exceed the number of members in the dataset. Got {self.config.n_conditions} conditioning members and {self.config.n_members_dataset} members in the dataset."
             )
 
         # Remove the target from the possible conditions used for training
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
 
-        # Disables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_conditioning_sets samples
-        if not self.config.bootstrap_conditions:
-            condition = self.df_to_torch(ensemble_df_without_target, n_conditions)
-            condition = condition[0].expand_as(torch.zeros(self.n_conditioning_sets, n_var*n_conditions, self.x, self.y))
+
+        # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_conditioning_sets samples
+        if self.config.bootstrap_conditions:
+            condition = torch.stack([
+                self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
+            ])
             return condition
 
-        condition = torch.stack([
-            self.df_to_torch(ensemble_df_without_target, n_conditions) for _ in range(self.n_conditioning_sets)
-        ])
-
+        condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
+        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.x, self.y))
         return condition
     
     def df_to_torch(self, ens_df, n_cond):

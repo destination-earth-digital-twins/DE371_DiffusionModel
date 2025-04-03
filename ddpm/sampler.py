@@ -8,7 +8,7 @@ from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 
-import time
+from datetime import datetime
 
 
 class Sampler(Ddpm_base):
@@ -81,7 +81,11 @@ class Sampler(Ddpm_base):
 
         i = self.gpu_id if type(self.gpu_id) is int else 0
 
+        # shape of the images 
+        x, y  = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+
         if self.config.sampling_mode == "simple":
+            # To be removed
 
             if is_main_gpu():
                 self.logger.info(
@@ -105,38 +109,37 @@ class Sampler(Ddpm_base):
                     b += batch_size
                     pbar.update(1)
         elif "conditioned" in self.config.sampling_mode:
-            n_sampling_conditioning_sets = self.config.n_sampling_conditioning_sets
-            n_var = self.config.n_var
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
 
-            if n_var == 3:
-                    zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id) # empty rr channel
+            # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
+            if self.config.n_var != self.config.n_var_in_dataset:
+                    zero_pad = torch.zeros(16, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, H, W])
+                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
                 conditioning_sets = batch['condition_tensor']
-
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-                lt = batch['leadtime'][0]
-                d = batch['date'][0].split(" ")[0]
 
-                if n_var == 3:
+                if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
                             for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                     
-                filename = filename_format.format(date = d, leadtime = lt + 1)
+                lt = batch['leadtime'][0]
+                d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
+                filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
                 
