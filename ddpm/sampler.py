@@ -31,6 +31,7 @@ class Sampler(Ddpm_base):
 
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
+        # OUTDATED FOR NOW. USED WITH DDIM
         """
         Perform guided sampling of a batch of images.
         Args:
@@ -142,11 +143,6 @@ class Sampler(Ddpm_base):
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
                 
-                del ensemble
-                gc.collect()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-                torch.distributed.barrier()
 
 
 

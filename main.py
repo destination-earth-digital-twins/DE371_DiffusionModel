@@ -298,6 +298,7 @@ def main_sample(config):
     barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
         logger.info(f"Sampling done")
+        
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):

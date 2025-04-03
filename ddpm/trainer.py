@@ -246,6 +246,7 @@ class Trainer(Ddpm_base):
         )
 
     def _init_wandb(self):
+        # OUTDATED FOR NOW.
         """
         Initialize WandB for logging training progress.
         Returns:
@@ -276,7 +277,7 @@ class Trainer(Ddpm_base):
         )
 
     def _init_mlflow(self):
-
+        # OUTDATED FOR NOW.
         mlflow.set_tracking_uri(self.config.ml_tracking_uri)
         experiment_name = self.config.ml_experiment_name
         experiment = mlflow.get_experiment_by_name(experiment_name)
