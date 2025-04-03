@@ -71,6 +71,7 @@ class Trainer(Ddpm_base):
             dict: The prepared batch.
         """
         batch = {key: batch[key] for key in key_get}
+        batch["condition_tensor"] = batch["condition_tensor"].squeeze(1)
         for key in batch.keys():
             if key in convert_keys:
                 # Convert specific keys to tensors and move to GPU

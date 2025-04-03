@@ -115,12 +115,9 @@ class Sampler(Ddpm_base):
                     zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id) # empty rr channel
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
-                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets*n_condition*n_var, H, W])
+                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, H, W])
                 conditioning_sets = batch['condition_tensor']
-                # -> array of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, H, W]
-                B, C, H, W = conditioning_sets.shape
-                n_conditions = C // n_sampling_conditioning_sets
-                conditioning_sets = conditioning_sets.view(B, n_sampling_conditioning_sets, n_conditions, H, W)
+
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 lt = batch['leadtime'][0]

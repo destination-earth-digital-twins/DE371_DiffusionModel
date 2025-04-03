@@ -94,6 +94,11 @@ class ISDataset(Dataset):
         
         self.labels = self.labels.reset_index(drop=True)
 
+        # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
+        # if training : Prepare only 1 conditioning set
+        self.n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
+    
+
     def prepare_tranformations(self):
 
         transformations = transforms.Compose(
@@ -162,7 +167,6 @@ class ISDataset(Dataset):
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
-    
 
         # Get the ensemble df
         ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the current member
@@ -183,11 +187,11 @@ class ISDataset(Dataset):
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             if mean_cond:
-                mean = mean_var_file[0]
-                condition_tensor = torch.cat([condition_tensor, mean], dim=0)
+                mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
             if var_cond:
-                var = mean_var_file[1]
-                condition_tensor = torch.cat([condition_tensor, var], dim=0)
+                var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, var], dim=1)
+                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
@@ -206,9 +210,6 @@ class ISDataset(Dataset):
         """
         # Number of channels. e.g. to sample u, v, t2m, n_var=3
         n_var = self.config.n_var
-        # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
-        # if training : Prepare only 1 conditioning set
-        n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
         # Number of conditionning members
         n_conditions = self.config.n_conditions
         # Number of members in 1 ensemble in the dataset
@@ -224,11 +225,11 @@ class ISDataset(Dataset):
         # Disables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_conditioning_sets samples
         if not self.config.bootstrap_conditions:
             condition = self.df_to_torch(ensemble_df_without_target, n_conditions)
-            condition = condition[0].expand_as(torch.zeros(n_conditioning_sets, n_var*n_conditions, self.x, self.y))
+            condition = condition[0].expand_as(torch.zeros(self.n_conditioning_sets, n_var*n_conditions, self.x, self.y))
             return condition
 
-        condition = torch.cat([
-            self.df_to_torch(ensemble_df_without_target, n_conditions) for _ in range(n_conditioning_sets)
+        condition = torch.stack([
+            self.df_to_torch(ensemble_df_without_target, n_conditions) for _ in range(self.n_conditioning_sets)
         ])
 
         return condition
