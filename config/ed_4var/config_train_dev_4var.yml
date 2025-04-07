@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_train_conditional_ED_4var_5_cond"
-"output_dir": "/project/scratch/p200177/DE_371/maxencelame/models/"
+"run_name": "run_train_1_TEST"
+"output_dir": "/project/home/p200177/DE_371/clementbrochet/models"
 "batch_size": 16
 "any_time": 5
 
@@ -19,12 +19,13 @@
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
-# "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_rr_u_v_t2m/data/IS_rr_debug_1_1.0_0_0_0_0_0_256_large_lt"
-"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_train_labels_1_ens.csv"
-# "csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_rr_u_v_t2m/data/IS_rr_debug_1_1.0_0_0_0_0_0_256_large_lt/IS_boostrap_no_duplicate_rr_cumul_correct_train.csv"
+"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_train_labels_1_ens_dev.csv"
+# "validation": true
+# "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
+"mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "v_i": 4
-"var_indexes": [ "rr", "u", "v", "t2m" ]
-# specify f"{variable}_transform" to configure special preprocessing of the variable before normalisation
+"var_indexes": ["rr","u", "v", "t2m" ]
+# specifying a variable inside the configuration should be used to configure special preprocessing of the variable before normalisation
 "rr_transform": LogTransform
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
 "offset_file": mean_rr_log.npy
@@ -33,15 +34,16 @@
 "invert_norm": false
 "image_size": 256
 "guiding_col": "ensemble_id"
-"n_conditions": 5
+"n_conditions": 1
+# "mean_conditionning": true
+# # "var_conditionning": true
 
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 250
-"resume": true 
-"model_path": "/project/scratch/p200177/DE_371/maxencelame/models/run_train_conditional_ED_4var_5_cond/last.pt"
-"epochs": 250
+"scheduler_epoch": 3
+"resume": false
+"epochs": 3
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5
