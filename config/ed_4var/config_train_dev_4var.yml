@@ -1,14 +1,15 @@
 # General parameters
-"mode": "Sample"
-"run_name": "model_name"
-"output_dir": "/path/to/the/samples/dir"
+"mode": "Train"
+"run_name": "run_train_1_TEST"
+"output_dir": "/project/home/p200177/DE_371/clementbrochet/models"
 "batch_size": 16
-"any_time": 1
+"any_time": 5
 
-# Sampling parameters
+# Sampling parameters (not important while training)
 "ddim_timesteps": 10
 "plot": true
 "sampling_mode": "conditioned"
+"n_sample": 4
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
@@ -18,39 +19,38 @@
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
-# "csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_rr_u_v_t2m/data/IS_rr_debug_1_1.0_0_0_0_0_0_256_large_lt/IS_boostrap_no_duplicate_rr_cumul_correct_train.csv"
-"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/3hstep_test_labels_reduced_dev.csv"
-"n_var": 4
-"var_indexes": [ "rr", "u", "v", "t2m" ]
-# specify f"{variable}_transform" to configure special preprocessing of the variable before normalisation
+"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_train_labels_1_ens_dev.csv"
+# "validation": true
+# "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
+"mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
+"v_i": 4
+"var_indexes": ["rr","u", "v", "t2m" ]
+# specifying a variable inside the configuration should be used to configure special preprocessing of the variable before normalisation
 "rr_transform": LogTransform
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
 "offset_file": mean_rr_log.npy
 "scale_file": max_rr_log.npy
-# date_start: '2021-06-16' # take dates >= date_start
-# date_stop: '2021-08-15' # take dates < date_start
-# date_stop: '2021-07-02'
-# leadtimes: [ 2, 5]
-# leadtimes: [ 3,18,33,45 ]
 "crop": [ 0,256,0,256 ]
 "invert_norm": false
 "image_size": 256
-# "guiding_col": "ensemble_id"
-"sampling_mode": "conditioned"
+"guiding_col": "ensemble_id"
+"n_conditions": 1
+# "mean_conditionning": true
+# # "var_conditionning": true
 
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 250
+"scheduler_epoch": 3
 "resume": false
-"epochs": 250
+"epochs": 3
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5
 "P_mean" : -1.2
 "P_std": 1.2
 "beta_schedule": "linear"
-"model_path": "/path/to/model/snapshots/best.pt"
+"lr": 5.0e-05
 
 # Tracking parameters
 "use_mlflow": true # activation mlflow log

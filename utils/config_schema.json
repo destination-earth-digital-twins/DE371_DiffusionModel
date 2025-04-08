@@ -204,21 +204,29 @@
       "default": true,
       "description": "Invert normalization of input image samples"
     },
-    "mean_file": {
+    "stat_folder": {
       "type": [
         "string",
         "null"
       ],
       "default": null,
-      "description": "Constant mean file for normalisation (overriden by dataset_handler_config if latter is used)"
+      "description": "Folder where offset and scale will be found"
     },
-    "max_file": {
+    "offset_file": {
       "type": [
         "string",
         "null"
       ],
       "default": null,
-      "description": "Constant max file for normalisation (overriden by dataset_handler_config if latter is used)"
+      "description": "Constant file for normalisation, linear offset"
+    },
+    "scale_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Constant file for normalisation, linear scaling"
     },
     "image_size": {
       "type": "integer",
@@ -323,14 +331,6 @@
       "type": "string",
       "default": "your_entity",
       "description": "Wandb entity name for logging"
-    },
-    "dataset_config_file": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "default": null,
-      "description": "Path to the dataset configuration file"
     },
     "n_ensemble": {
       "type": "integer",
