@@ -134,7 +134,7 @@ class ISDataset(Dataset):
                 torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.height_dim, self.width_dim] 
         """
         if self.config.n_conditions > self.config.n_members_dataset:
-            raise TypeError(
+            raise ValueError(
                 f"The number of conditioning members must not exceed the number of members in the dataset. Got {self.config.n_conditions} conditioning members and {self.config.n_members_dataset} members in the dataset."
             )
 
