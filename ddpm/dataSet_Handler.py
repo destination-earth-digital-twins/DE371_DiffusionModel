@@ -76,7 +76,7 @@ class ISDataset(Dataset):
         self.ensembles = None
 
         # shape of the images 
-        self.x, self.y = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+        self.height_dim, self.width_dim = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
 
         # Group labels by guiding column if specified
         if self.config.guiding_col is not None:
@@ -207,7 +207,7 @@ class ISDataset(Dataset):
                 idx (int): ID in the __getitem__.
 
             Returns:
-                torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.x, self.y] 
+                torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.height_dim, self.width_dim] 
         """
         if self.config.n_conditions > self.config.n_members_dataset:
             raise TypeError(
@@ -226,7 +226,7 @@ class ISDataset(Dataset):
             return condition
 
         condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.x, self.y))
+        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         return condition
     
     def df_to_torch(self, ens_df, n_cond):
@@ -238,11 +238,11 @@ class ISDataset(Dataset):
                 ens_df (df): df containing an ensemble caracteristics.
                 n_cond (int): number of member to sample
             Returns:
-                torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.x, self.y] containing the concatenated members.
+                torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
         """
         selected_members = ens_df.sample(n=n_cond)['Name'].values
         condition_tensor = torch.cat(
-            [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.x, self.y))], dim=0 # torch.empty in case of n_condition = 0
+            [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
         
