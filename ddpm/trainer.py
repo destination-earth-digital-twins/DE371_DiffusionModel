@@ -71,6 +71,7 @@ class Trainer(Ddpm_base):
             dict: The prepared batch.
         """
         batch = {key: batch[key] for key in key_get}
+        batch["condition_tensor"] = batch["condition_tensor"].squeeze(1)
         for key in batch.keys():
             if key in convert_keys:
                 # Convert specific keys to tensors and move to GPU
@@ -129,7 +130,7 @@ class Trainer(Ddpm_base):
         for i, batch in loop:
 
             needs_keys = ["img"] + (
-                ["condition"] if self.guided_diffusion else []
+                ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
             loss = self._run_batch(batch_prep)
@@ -167,9 +168,9 @@ class Trainer(Ddpm_base):
             condition = None
             if self.guided_diffusion:
                 condition = self._prepare_batch(
-                    next(iter(self.dataloader)), ["condition"]
+                    next(iter(self.dataloader)), ["condition_tensor"]
                 )
-                condition = condition["condition"][: self.config.n_sample]
+                condition = condition["condition_tensor"][: self.config.n_sample]
             self.sample_train(str(epoch), self.config.n_sample, condition)
 
         # validation loss computation (optional, default :  yes)
@@ -195,7 +196,7 @@ class Trainer(Ddpm_base):
             for i, batch in val_loop:
                 
                 needs_keys = ["img"] + (
-                    ["condition"] if self.guided_diffusion else []
+                    ["condition_tensor"] if self.guided_diffusion else []
                 )
                 batch_prep = self._prepare_batch(batch, needs_keys)
                 loss = self._run_batch(batch_prep, validation=True)
@@ -246,6 +247,7 @@ class Trainer(Ddpm_base):
         )
 
     def _init_wandb(self):
+        # OUTDATED FOR NOW.
         """
         Initialize WandB for logging training progress.
         Returns:
@@ -276,7 +278,7 @@ class Trainer(Ddpm_base):
         )
 
     def _init_mlflow(self):
-
+        # OUTDATED FOR NOW.
         mlflow.set_tracking_uri(self.config.ml_tracking_uri)
         experiment_name = self.config.ml_experiment_name
         experiment = mlflow.get_experiment_by_name(experiment_name)

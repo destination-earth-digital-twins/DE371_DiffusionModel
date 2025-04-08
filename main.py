@@ -282,7 +282,7 @@ def main_sample(config):
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
     if is_main_gpu():
-        logger.info(f"Sampling of {config.n_ensemble * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
     if config.sampling_mode == "conditioned":
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
@@ -294,6 +294,7 @@ def main_sample(config):
     barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
         logger.info(f"Sampling done")
+        
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):

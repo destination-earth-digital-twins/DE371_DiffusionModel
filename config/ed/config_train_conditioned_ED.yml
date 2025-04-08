@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_train_1_cond_mean"
-"output_dir": "/project/home/p200177/DE_371/maxencelame/models"
+"run_name": "model_name"
+"output_dir": "/path/to/the/models/dir"
 "batch_size": 16
 "any_time": 5
 
@@ -24,7 +24,7 @@
 # "validation": true
 # "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
-"v_i": 3
+"n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
 "crop": [ 0,256,0,256 ]
 "invert_norm": false
