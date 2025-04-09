@@ -98,14 +98,14 @@ class SpecialNormalize(object):
         ### non-batched ops
         elif sample.ndim == 3:
             for var in self.data_transforms:
-                if self.data_transforms[var]["special_transform"] is not None:
-                    sample[var_dict[var]] = self.data_transforms[var]["special_transform"].direct(sample[var_dict[var]])
+                if self.data_transforms[var] is not None:
+                    sample[var_dict[var]] = self.data_transforms[var].reverse(sample[var_dict[var]])
             
         ### batched ops
         else:
             for var in self.data_transforms:
-                if self.data_transforms[var]["special_transform"] is not None:
-                    sample[:,var_dict[var]] = self.data_transforms[var]["special_transform"].reverse(sample[:,var_dict[var]])
+                if self.data_transforms[var] is not None:
+                    sample[:,var_dict[var]] = self.data_transforms[var].reverse(sample[:,var_dict[var]])
 
         ### reverting normalizations
         sample = sample * self.value_sup + self.value_inf
