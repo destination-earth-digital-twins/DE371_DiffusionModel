@@ -1,12 +1,13 @@
 # General parameters
 "mode": "Sample"
-"run_name": "run_name"
-"output_dir": "/path/to/the/samples/dir"
+"run_name": "val_5_cond_16_membres"
+"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/tests"
 "batch_size": 16
 "any_time": 1
 
 # Sampling parameters
-"n_sampling_conditioning_sets": 4
+# "n_sampling_conditioning_sets": 4
+"n_sampling_conditioning_sets": 1
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": true
 "sampling_mode": "conditioned"
@@ -20,10 +21,11 @@
 # "mean_conditionning": true
 # "var_conditionning": true
 "reproductibility_seed": 0
+# "bootstrap_conditions": false
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
-"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/Large_lt_val_labels_ens.csv"
+"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 # "csv_file": "/home/users/u102230/autres/exemples_labels/3hstep_test_labels_reduced_dev_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "n_var": 3
@@ -31,11 +33,15 @@
 # date_start: '2021-06-16' # take dates >= date_start
 # date_stop: '2021-08-15' # take dates < date_start
 # date_stop: '2021-07-02'
+# leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
 "invert_norm": true
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
+"stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
+"offset_file": mean_rr_log.npy
+"scale_file": max_rr_log.npy
 "image_size": 256
 "guiding_col": "ensemble_id"
 
@@ -51,7 +57,12 @@ leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "P_mean" : -1.2
 "P_std": 1.2
 "beta_schedule": "linear"
-"model_path": "/path/to/model/snapshots/best.pt"
+# "model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_conditional_1_conditions_lr_5e05/best.pt"
+# "model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_conditional_10_conditions_lr_5e05/best_2.pt"
+# "model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_5_cond_mean_var/best.pt"
+# "model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_5_cond_var/best.pt"
+"model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_conditional_5_conditions_lr_5e05/best.pt"
+# "model_path": "/project/home/p200177/DE_371/maxencelame/models/run_train_unconditional_ED_le_8e-5/best.pt"
 
 # Tracking parameters
 "wandbproject": "my_project"

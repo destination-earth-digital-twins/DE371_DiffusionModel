@@ -9,7 +9,7 @@ from utils.distributed import is_main_gpu, get_rank_num, synchronize
 import datetime
 
 SOURCE_PATH = os.environ.get("SOURCE_DIR", "./")
-CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/config_schema.json"
+CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}/utils/config_schema.json"
 
 def load_yaml(yaml_path):
     with open(yaml_path, "r") as yaml_file:
