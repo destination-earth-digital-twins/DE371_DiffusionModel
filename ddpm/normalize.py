@@ -4,7 +4,7 @@ import os
 from tabulate import tabulate
 
 import ddpm.special_transforms as special_transforms
-from utils.distributed import is_main_gpu
+from utils.distributed import is_main_gpu, get_rank
 
 ################ reference dictionary to know how to index variables in base numpy arrays
 ################ do not modify unless you know what you are doing
@@ -38,8 +38,8 @@ class SpecialNormalize(object):
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
         scale = np.load(os.path.join(self.config.stat_folder,self.config.scale_file))[self.config.VI].astype(np.float32)
         
-        self.offset = torch.from_numpy(offset).view(-1, 1, 1)
-        self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1)
+        self.offset = torch.from_numpy(offset).view(-1, 1, 1).to(get_rank())
+        self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1).to(get_rank())
         
         # logging used constants
         if is_main_gpu():
@@ -98,7 +98,7 @@ class SpecialNormalize(object):
         elif sample.ndim == 3:
             for var in self.data_transforms:
                 if self.data_transforms[var] is not None:
-                    sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
+                    sample[var_dict[var]] = self.data_transforms[var].reverse(sample[var_dict[var]])
             
         ### batched ops
         else:
