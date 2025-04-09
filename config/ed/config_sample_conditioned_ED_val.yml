@@ -30,9 +30,8 @@
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
-# date_start: '2021-06-16' # take dates >= date_start
-# date_stop: '2021-08-15' # take dates < date_start
-# date_stop: '2021-07-02'
+date_start: '2020-07-01' # take dates >= date_start
+date_stop: '2020-08-01' # take dates < date_start
 # leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
@@ -40,6 +39,7 @@ leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
+"rr_transform": LogTransform
 "offset_file": mean_rr_log.npy
 "scale_file": max_rr_log.npy
 "image_size": 256

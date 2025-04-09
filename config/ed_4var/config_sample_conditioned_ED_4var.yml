@@ -27,8 +27,8 @@
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
 "offset_file": mean_rr_log.npy
 "scale_file": max_rr_log.npy
-# date_start: '2021-06-16' # take dates >= date_start
-# date_stop: '2021-08-15' # take dates < date_start
+date_start: '2021-07-01' # take dates >= date_start
+date_stop: '2021-07-02' # take dates < date_start
 # date_stop: '2021-07-02'
 # leadtimes: [ 2, 5]
 # leadtimes: [ 3,18,33,45 ]

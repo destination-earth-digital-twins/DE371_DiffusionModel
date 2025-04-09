@@ -46,6 +46,9 @@ class ISDataset(Dataset):
         self.CI = config.crop
         self.config.VI = [var_dict[var] for var in config.var_indexes]
         self.ensembles = None
+        # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
+        # if training : Prepare only 1 conditioning set
+        self.n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
 
         # shape of the images 
         self.height_dim, self.width_dim = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
@@ -142,7 +145,7 @@ class ISDataset(Dataset):
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
 
 
-        # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_conditioning_sets samples
+        # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
         if self.config.bootstrap_conditions:
             condition = torch.stack([
                 self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
