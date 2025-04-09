@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Sample"
 "run_name": "val_5_cond_16_membres"
-"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/tests"
+"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/test_sampling"
 "batch_size": 16
 "any_time": 1
 
