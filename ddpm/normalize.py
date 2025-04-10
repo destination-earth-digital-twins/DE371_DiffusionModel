@@ -38,8 +38,8 @@ class SpecialNormalize(object):
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
         scale = np.load(os.path.join(self.config.stat_folder,self.config.scale_file))[self.config.VI].astype(np.float32)
         
-        self.offset = torch.from_numpy(offset).view(-1, 1, 1).to(get_rank())
-        self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1).to(get_rank())
+        self.offset = torch.from_numpy(offset).view(-1, 1, 1)
+        self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1)
         
         # logging used constants
         if is_main_gpu():

@@ -66,7 +66,7 @@ class Sampler(Ddpm_base):
             # Compute the gradient of the loss and update the sample
             cond_grad = -torch.autograd.grad(loss, sample)[0]
             sample = sample.detach() + cond_grad
-        sampled_images_unnorm = self.transforms_func(sample).cpu().numpy()
+        sampled_images_unnorm = self.transforms_func(sample.cpu()).numpy()
         return sampled_images_unnorm
 
     @torch.no_grad()
