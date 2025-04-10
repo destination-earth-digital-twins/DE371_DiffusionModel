@@ -6,7 +6,8 @@
 "any_time": 1
 
 # Sampling parameters
-"n_sampling_conditioning_sets": 4
+# "n_sampling_conditioning_sets": 4
+"n_sampling_conditioning_sets": 1
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": true
 "sampling_mode": "conditioned"
@@ -20,22 +21,27 @@
 # "mean_conditionning": true
 # "var_conditionning": true
 "reproductibility_seed": 0
+# "bootstrap_conditions": false
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
-"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/Large_lt_val_labels_ens.csv"
+"csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 # "csv_file": "/home/users/u102230/autres/exemples_labels/3hstep_test_labels_reduced_dev_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
-# date_start: '2021-06-16' # take dates >= date_start
-# date_stop: '2021-08-15' # take dates < date_start
-# date_stop: '2021-07-02'
+# date_start: '2020-07-01' # take dates >= date_start
+# date_stop: '2020-08-01' # take dates < date_start
+# leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
 "invert_norm": true
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
+"stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
+"rr_transform": LogTransform
+"offset_file": mean_rr_log.npy
+"scale_file": max_rr_log.npy
 "image_size": 256
 "guiding_col": "ensemble_id"
 
