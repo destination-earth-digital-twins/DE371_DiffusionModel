@@ -171,7 +171,7 @@ class Trainer(Ddpm_base):
                     next(iter(self.dataloader)), ["condition_tensor"]
                 )
                 condition = condition["condition_tensor"][: self.config.n_sample]
-            self.sample_train(str(epoch), self.config.n_sample, condition)
+            self.sample_train(str(epoch), self.config.n_sample, condition, torch.zeros(self.config.n_sample, self.config.n_var, self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]).to(self.gpu_id))
 
         # validation loss computation (optional, default :  yes)
         total_val_loss = torch.tensor(0.0,dtype=torch.float32)
@@ -374,7 +374,7 @@ class Trainer(Ddpm_base):
                 f"saved at {os.path.join(self.config.output_dir,f'{self.config.run_name}', 'best.pt')}"
             )
 
-    def sample_train(self, ep=None, nb_img=4, condition=None):
+    def sample_train(self, ep=None, nb_img=4, condition=None, ensemble_mean=None):
         """
         Generate and save sample images during training.
         Args:
@@ -393,7 +393,9 @@ class Trainer(Ddpm_base):
             )
 
         self.logger.info(f"Sampling {nb_img} images...")
-        samples = super()._sample_batch(nb_img=nb_img, condition=condition)
+        print("############ shape cond", condition.shape)
+        print("############ shape ensemble_mean", ensemble_mean[:, :, 100, 100])
+        samples = super()._sample_batch(nb_img=nb_img, condition=condition, ensemble_mean=ensemble_mean)
         for i, img in enumerate(samples):
             filename = (
                 f"_sample_{ep}_{i}.npy"
