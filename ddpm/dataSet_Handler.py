@@ -109,7 +109,7 @@ class ISDataset(Dataset):
         member = row["Member"]
 
         # Optional configs based on the ensemble mean and variance
-        ensemble_mean_tensor = torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
+        ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
         if mean_cond or var_cond or self.config.predict_residue:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
@@ -130,7 +130,7 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": mean_var_file[0], "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx):
         """
