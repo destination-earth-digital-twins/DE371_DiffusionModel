@@ -117,8 +117,9 @@ class ISDataset(Dataset):
 
             # Predict the residue of the members (members - ensemble mean) instead of the members
             if self.config.predict_residue:
-                ensemble_mean_tensor = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1).repeat(1, self.config.n_conditions, 1, 1)
-                condition_tensor = torch.sub(condition_tensor, ensemble_mean_tensor)
+                ensemble_mean_tensor = mean_var_file[0]
+                batched_ensemble_mean_tensor = ensemble_mean_tensor.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1).repeat(1, self.config.n_conditions, 1, 1)
+                condition_tensor = torch.sub(condition_tensor, batched_ensemble_mean_tensor)
 
             # Using the mean and/or the var of the ensemble as additionnal conditions
             if mean_cond:
@@ -130,7 +131,7 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": mean_var_file[0], "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx):
         """
