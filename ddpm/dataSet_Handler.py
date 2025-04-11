@@ -139,6 +139,7 @@ class ISDataset(Dataset):
         sample_id = re.search(r"\d+", file_name).group()
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 =======
 =======
@@ -155,6 +156,9 @@ class ISDataset(Dataset):
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 >>>>>>> e7ab104 (bug fix on the way to retrieve and broadcast the)
 >>>>>>> c34caea (bug fix on the way to retrieve and broadcast the)
+=======
+        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+>>>>>>> 56219a6 (Enables sampling with the "predict_residue" option)
 
     def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """
