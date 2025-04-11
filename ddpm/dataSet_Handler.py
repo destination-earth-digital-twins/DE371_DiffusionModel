@@ -144,6 +144,7 @@ class ISDataset(Dataset):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 =======
 =======
@@ -163,6 +164,12 @@ class ISDataset(Dataset):
 =======
         return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 >>>>>>> 56219a6 (Enables sampling with the "predict_residue" option)
+=======
+        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+=======
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+>>>>>>> e97a0b2 (small bug fix when the residue prediction is)
+>>>>>>> 57bb288 (small bug fix when the residue prediction is)
 
     def get_conditioning_members(self, ensemble_df, idx):
         """
