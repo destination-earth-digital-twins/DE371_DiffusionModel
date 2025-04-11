@@ -117,7 +117,7 @@ class ISDataset(Dataset):
             member = row["Member"]
 
         # Optional configs based on the ensemble mean and variance
-        ensemble_mean_tensor = torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
+        ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
         if mean_cond or var_cond or self.config.predict_residue:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
@@ -138,15 +138,7 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-<<<<<<< HEAD
-<<<<<<< HEAD
-        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "condition_tensor_denorm" : condition_tensor_denorm,"member_id": member, "date": date, "leadtime": lt}
-=======
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": normalized_ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> c9f46e6 (Enables training wit the "predict_residue" option)
-=======
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> e7ab104 (bug fix on the way to retrieve and broadcast the)
+        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """
