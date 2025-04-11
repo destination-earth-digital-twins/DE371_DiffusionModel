@@ -17,6 +17,11 @@
 "S_noise": 1.003
 "rho": 7
 
+# Optional functions
+# "mean_conditionning": true
+# "var_conditionning": true
+# "predict_residue": true
+
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
 "csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_train_labels_1_ens_dev.csv"
@@ -33,8 +38,6 @@
 "image_size": 256
 "guiding_col": "ensemble_id"
 "n_conditions": 1
-# "mean_conditionning": true
-# # "var_conditionning": true
 
 # Model parameters
 "elucidated_diffusion_sampler": true

@@ -98,6 +98,11 @@
       "default": false,
       "description": "Use the ensemble variance as a condition"
     },
+    "predict_residue": {
+      "type": "boolean",
+      "default": false,
+      "description": "Predict the residue of the members (members - ensemble mean) instead of the members"
+    },
     "mean_var_dir": {
       "type": [
         "string",
