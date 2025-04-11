@@ -393,8 +393,6 @@ class Trainer(Ddpm_base):
             )
 
         self.logger.info(f"Sampling {nb_img} images...")
-        print("############ shape cond", condition.shape)
-        print("############ shape ensemble_mean", ensemble_mean[:, :, 100, 100])
         samples = super()._sample_batch(nb_img=nb_img, condition=condition, ensemble_mean=ensemble_mean)
         for i, img in enumerate(samples):
             filename = (
