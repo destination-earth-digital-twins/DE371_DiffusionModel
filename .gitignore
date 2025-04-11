@@ -41,4 +41,5 @@ slurm/appartainer_stuff/*
 !slurm/appartainer_stuff/.env
 !slurm/appartainer_stuff/sample_meluxina.sh
 !slurm/appartainer_stuff/train_meluxina.sh
-
+unbias.py
+unbias*.sh
