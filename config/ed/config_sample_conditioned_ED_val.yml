@@ -20,6 +20,7 @@
 "n_conditions": 5
 # "mean_conditionning": true
 # "var_conditionning": true
+# "predict_residue": true
 "reproductibility_seed": 0
 # "bootstrap_conditions": false
 
