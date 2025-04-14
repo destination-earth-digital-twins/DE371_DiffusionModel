@@ -310,11 +310,6 @@ class Unet(Module):
         if mean_cond:
             input_channels += channels
 
-        ################## Embedded condition
-        self.cond_emb = None
-        if embedding_cond_dims is not None:
-            self.cond_emb = nn.Embedding(embedding_cond_dims, dim) # Additionnal condition passed as an embedding. same size as time embedding
-        
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
@@ -322,9 +317,13 @@ class Unet(Module):
         in_out = list(zip(dims[:-1], dims[1:]))
 
         # time embeddings
-
         time_dim = dim * 4
 
+        ################## Embedded condition
+        self.cond_emb = None
+        if embedding_cond_dims is not None:
+            self.cond_emb = nn.Embedding(embedding_cond_dims, time_dim) # Additionnal condition passed as an embedding. same size as time embedding
+        
         self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
 
         if self.random_or_learned_sinusoidal_cond:
