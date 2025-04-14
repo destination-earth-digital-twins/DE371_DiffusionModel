@@ -285,6 +285,7 @@ class Unet(Module):
         n_conditions = 1,
         var_cond = False,
         mean_cond = False,
+        embedding_cond_dims = None,
         learned_variance = False,
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
@@ -309,6 +310,11 @@ class Unet(Module):
         if mean_cond:
             input_channels += channels
 
+        ################## Embedded condition
+        self.cond_emb = None
+        if embedding_cond_dims is not None:
+            self.cond_emb = nn.Embedding(embedding_cond_dims, dim) # Additionnal condition passed as an embedding. same size as time embedding
+        
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
@@ -397,7 +403,7 @@ class Unet(Module):
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None):
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
 
         if self.self_condition:
@@ -408,6 +414,11 @@ class Unet(Module):
         r = x.clone()
 
         t = self.time_mlp(time)
+
+        ################## Embedded condition
+        if self.cond_emb is not None and embedded_cond is not None:
+            cond_embedding = self.cond_emb(embedded_cond)
+            t = t + cond_embedding
 
         h = []
 

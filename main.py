@@ -130,6 +130,7 @@ def load_train_objs(config):
             sampling_timesteps=config.ddim_timesteps,
         )
     else:
+        n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
@@ -145,6 +146,7 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
+            n_leadtimes = n_lt
         )
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas

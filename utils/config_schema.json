@@ -88,6 +88,11 @@
       "default": null,
       "description": "Column to use for guided sampling. Required when using guided sampling mode."
     },
+    "n_leadtimes": {
+      "type": "integer",
+      "default": 45,
+      "description": "Total number of leadtimes per ensemble in the dataset"
+    },
     "leatimes_conditioning": {
       "type": "boolean",
       "default": false,
