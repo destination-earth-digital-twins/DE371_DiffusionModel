@@ -182,7 +182,6 @@ class ElucidatedDiffusion(nn.Module):
 
             self_cond = condition if self.self_condition else None
             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
-
             model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, cond_emb, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat
 
@@ -247,7 +246,7 @@ class ElucidatedDiffusion(nn.Module):
         #     with torch.no_grad():
         #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
         #         self_cond.detach_()
-
+        print("#################### cond_emb ", cond_emb)
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond, cond_emb)
 
         losses = F.mse_loss(denoised, img, reduction = 'none')

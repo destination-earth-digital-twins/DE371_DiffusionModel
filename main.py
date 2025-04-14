@@ -115,6 +115,7 @@ def load_train_objs(config):
         n_conditions=config.n_conditions,
         var_cond=config.var_conditioning,
         mean_cond=config.mean_conditioning,
+        embedding_cond_dims = config.n_leadtimes,
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
