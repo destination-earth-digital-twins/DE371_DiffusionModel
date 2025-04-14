@@ -113,8 +113,8 @@ def load_train_objs(config):
         channels=len(config.var_indexes),
         self_condition=use_cond,
         n_conditions=config.n_conditions,
-        var_cond=config.var_conditionning,
-        mean_cond=config.mean_conditionning,
+        var_cond=config.var_conditioning,
+        mean_cond=config.mean_conditioning,
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:

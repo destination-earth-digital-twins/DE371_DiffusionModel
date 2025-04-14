@@ -35,8 +35,8 @@
 "image_size": 256
 "guiding_col": "ensemble_id"
 "n_conditions": 1
-# "mean_conditionning": true
-# # "var_conditionning": true
+# "mean_conditioning": true
+# # "var_conditioning": true
 
 # Model parameters
 "elucidated_diffusion_sampler": true

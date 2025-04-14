@@ -88,12 +88,17 @@
       "default": null,
       "description": "Column to use for guided sampling. Required when using guided sampling mode."
     },
-    "mean_conditionning": {
+    "leatimes_conditioning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the ensemble leadtime as a condition"
+    },
+    "mean_conditioning": {
       "type": "boolean",
       "default": false,
       "description": "Use the ensemble mean as a condition"
     },
-    "var_conditionning": {
+    "var_conditioning": {
       "type": "boolean",
       "default": false,
       "description": "Use the ensemble variance as a condition"
