@@ -41,6 +41,7 @@ class Trainer(Ddpm_base):
         self.optimizer = optimizer
         self.best_loss = float("inf")
         self.guided_diffusion = self.config.guiding_col is not None
+        self.leatimes_conditioning = self.config.leatimes_conditioning
 
         if self.config.scheduler == "ReduceLROnPlateau":
             self.scheduler = ReduceLROnPlateau(
@@ -131,6 +132,8 @@ class Trainer(Ddpm_base):
 
             needs_keys = ["img"] + (
                 ["condition_tensor"] if self.guided_diffusion else []
+            ) + (
+                ["leadtime"] if self.leatimes_conditioning else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
             loss = self._run_batch(batch_prep)
