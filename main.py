@@ -107,6 +107,7 @@ def load_train_objs(config):
         and "conditioned" in config.sampling_mode
     )
     # Create a U-Net model and a diffusion model based on configuration
+    n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
     umodel = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
@@ -115,7 +116,7 @@ def load_train_objs(config):
         n_conditions=config.n_conditions,
         var_cond=config.var_conditioning,
         mean_cond=config.mean_conditioning,
-        embedding_cond_dims = config.n_leadtimes,
+        embedding_cond_dims = n_lt,
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
@@ -131,7 +132,6 @@ def load_train_objs(config):
             sampling_timesteps=config.ddim_timesteps,
         )
     else:
-        n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
