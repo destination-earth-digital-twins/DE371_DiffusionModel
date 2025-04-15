@@ -136,7 +136,7 @@ class Ddpm_base:
 
         self.epochs_run += 1
 
-    def _sample_batch(self, nb_img=4, condition=None, ensemble_mean=None):
+    def _sample_batch(self, nb_img=4, condition=None,  lt_cond=None, ensemble_mean=None):
         """
         Sample a batch of images.
         Args:
@@ -148,9 +148,10 @@ class Ddpm_base:
         if nb_img <= 0:
             return []  # No images to sample, return an empty list
         if condition is None:
+            # statement to be removed
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
-            sampled_images = self.model.sample(batch_size=nb_img, condition=condition)
+            sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond)
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
         sampled_images = torch.add(sampled_images, ensemble_mean)
         if self.config.invert_norm == True:
