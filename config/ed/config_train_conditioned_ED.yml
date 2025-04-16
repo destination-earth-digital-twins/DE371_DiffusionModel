@@ -21,6 +21,7 @@
 # Optional functions
 # "mean_conditioning": true
 # "var_conditioning": true
+# "learn_residue": true
 # "predict_residue": true
 # "leatimes_conditioning": true
 
