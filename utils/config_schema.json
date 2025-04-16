@@ -99,6 +99,11 @@
       "default": false,
       "description": "Use the ensemble variance as a condition"
     },
+    "learn_residue": {
+      "type": "boolean",
+      "default": false,
+      "description": "learn the residue of the conditioning members (members - ensemble mean) instead of the members"
+    },
     "predict_residue": {
       "type": "boolean",
       "default": false,

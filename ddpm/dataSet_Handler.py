@@ -117,17 +117,23 @@ class ISDataset(Dataset):
             member = row["Member"]
 
         # Optional configs based on the ensemble mean and variance
+        if self.config.predict_residue and not self.config.learn_residue:
+            raise Exception(
+                f"The model must learn from the residue of the conditioning members to predict the residue"
+            )
         ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
-        if mean_cond or var_cond or self.config.predict_residue:
+        if mean_cond or var_cond or self.config.learn_residue:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
-
-            # Predict the residue of the members (members - ensemble mean) instead of the members
-            if self.config.predict_residue:
+            # Learn and predict the residue of the members (members - ensemble mean) instead of the members
+            if self.config.learn_residue:
                 ensemble_mean_tensor = mean_var_file[0]
                 batched_ensemble_mean_tensor = ensemble_mean_tensor.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1).repeat(1, self.config.n_conditions, 1, 1)
                 condition_tensor = torch.sub(condition_tensor, batched_ensemble_mean_tensor)
+                if self.config.predict_residue:
+                    sample = torch.sub(sample, ensemble_mean_tensor)
+                
 
             # Using the mean and/or the var of the ensemble as additionnal conditions
             if mean_cond:

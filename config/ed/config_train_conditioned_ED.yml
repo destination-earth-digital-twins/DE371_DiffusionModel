@@ -19,8 +19,9 @@
 "rho": 7
 
 # Optional functions
-# "mean_conditionning": true
-# "var_conditionning": true
+# "mean_conditioning": true
+# "var_conditioning": true
+# "learn_residue": true
 # "predict_residue": true
 
 # Data parameters
