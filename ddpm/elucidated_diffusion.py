@@ -246,19 +246,19 @@ class ElucidatedDiffusion(nn.Module):
 
     def forward(self, img, *args, **kwargs):
         #TODO change terminology from self_cond to cond
-        batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+        batch_size, c, h, w, device, image_size, channels = *img.tensor.shape, img.tensor.device, img.dim_size('lat'), img.dim_size('features')
 
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
 
-        img = normalize_to_neg_one_to_one(img)
+        img.tensor = normalize_to_neg_one_to_one(img.tensor)
 
         sigmas = self.noise_distribution(batch_size)
         padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        noise = torch.randn_like(img)
+        noise = torch.randn_like(img.tensor)
 
-        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+        noised_images = img.tensor + padded_sigmas * noise  # alphas are 1. in the paper
 
         self_cond = None
 
@@ -266,7 +266,7 @@ class ElucidatedDiffusion(nn.Module):
         if self.self_condition:
             with torch.no_grad():
                 self_cond = kwargs.get('condition')
-                self_cond.detach_()
+                self_cond.tensor.detach_()
                 
         # if self.self_condition and random() < 0.5:
         #     # from hinton's group's bit diffusion paper
@@ -276,7 +276,7 @@ class ElucidatedDiffusion(nn.Module):
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
 
-        losses = F.mse_loss(denoised, img, reduction = 'none')
+        losses = F.mse_loss(denoised, img.tensor, reduction = 'none')
         losses = reduce(losses, 'b ... -> b', 'mean')
 
         losses = losses * self.loss_weight(sigmas)

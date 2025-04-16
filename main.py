@@ -25,6 +25,8 @@ from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
 import numpy as np
 
+from mfai.torch.namedtensor import NamedTensor
+
 warnings.filterwarnings(
     "ignore",
     message="This DataLoader will create .* worker processes in total.*",
@@ -186,6 +188,7 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
             )
 
     )
+    train_dataloader_named = dataSet_Handler.NamedTensorDataLoader(config,train_dataloader)
     
     if validation:
         val_dataloader = DataLoader(
@@ -207,7 +210,9 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     else:
         val_dataloader = None
     
-    return train_dataloader, val_dataloader
+    val_dataloader_named = dataSet_Handler.NamedTensorDataLoader(config,val_dataloader)
+
+    return train_dataloader, val_dataloader,train_dataloader_named, val_dataloader_named
 
 
 def main_train(config):
@@ -220,7 +225,7 @@ def main_train(config):
     model, optimizer = load_train_objs(config)
     csv_val_file = config.csv_val_file if config.validation else None
     
-    train_data, val_data = prepare_dataloader(
+    train_data, val_data, train_data_named, val_data_named = prepare_dataloader(
         config,
         path=config.data_dir,
         csv_file=config.csv_file,
@@ -232,16 +237,16 @@ def main_train(config):
     )
     start = time.time()
     if config.invert_norm:
-        invert_tf = train_data.dataset.inversion_transforms
+        invert_tf = train_data_named.dataset.inversion_transforms
     else:
         invert_tf = None
     trainer = Trainer(
         model,
         config,
-        dataloader=train_data,
+        dataloader=train_data_named,
         optimizer=optimizer,
         inversion_transforms=invert_tf,
-        val_dataloader=val_data
+        val_dataloader=val_data_named
     )
     trainer.train()
 
@@ -250,7 +255,7 @@ def main_train(config):
     logging.debug(f"Training execution time: {total_time} seconds")
     synchronize()
     # Sample the best model
-    sample_data = None if config.guiding_col is None else train_data
+    sample_data_named = None if config.guiding_col is None else train_data_named
     config.model_path = os.path.join(config.run_name, "best.pt")
 
     try:
@@ -258,8 +263,8 @@ def main_train(config):
         sampler = Sampler(
             model,
             config,
-            dataloader=sample_data,
-            inversion_transforms=train_data.dataset.inversion_transforms,
+            dataloader=sample_data_named,
+            inversion_transforms=train_data_named.dataset.inversion_transforms,
         )
         sampler.sample(filename_format="sample_best_{i}.npy")
         logging.info(
@@ -280,9 +285,10 @@ def main_sample(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
-    inversion_tf = sample_data.dataset.inversion_transforms
-    data = sample_data if config.sampling_mode!="simple" else None
+    sample_data,_,sample_data_named,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+    # inversion_tf = sample_data.dataset.inversion_transforms
+    inversion_tf = sample_data_named.dataset.inversion_transforms
+    data = sample_data_named if config.sampling_mode!="simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
     if is_main_gpu():

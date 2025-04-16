@@ -8,6 +8,10 @@
 # preproc.py
 # run*
 # preproc.py
+config/ed/config_sample_conditioned_ED_val.yml
+config/ed/config_train_conditioned_ED.yml
+config/ed/config_train_conditioned_ED_reprise.yml
+
 *.pyc
 .idea
 model

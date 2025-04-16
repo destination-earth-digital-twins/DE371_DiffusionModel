@@ -32,6 +32,7 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 import torch.distributed as dist
 import math
 
+from mfai.torch.namedtensor import NamedTensor
 ################ reference dictionary to know what variables to sample where
 ################ do not modify unless you know what you are doing
 
@@ -531,3 +532,43 @@ class CustomDistributedSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
+def convert_to_namedtensor(batch):
+    print('SHAPES OF TENSORS',batch['img'].shape,batch['condition_sample'].shape,batch['condition'].shape)
+    n_conditions = int(batch['condition'].shape[1]/batch['img'].shape[1])
+
+    batch['img'] = NamedTensor(
+                            batch['img'],
+                            names=["members","features", "lat", "lon"],
+                            feature_names=["u", "v", "t2m"]
+    )
+    print('TYPE CONDITIONS N ', n_conditions)
+    batch['condition'] = NamedTensor(
+                            batch['condition'],
+                            names=["members","features", "lat", "lon"],
+                            feature_names=n_conditions*["u", "v", "t2m"]
+    )
+    batch['condition_sample'] = NamedTensor(
+                            batch['condition_sample'],
+                            names=["members","time","features", "lat", "lon"],
+                            feature_names=n_conditions*["u", "v", "t2m"]
+    )
+    return batch
+
+class NamedTensorDataLoader:
+    def __init__(self,config, dataloader):
+        self.dataloader = dataloader
+        self.config = config
+
+    def __iter__(self):
+        for batch in self.dataloader:
+            yield convert_to_namedtensor(batch)  
+
+    def __len__(self):
+        return len(self.dataloader)
+    
+    def __getattr__(self,name):
+        return getattr(self.dataloader,name)    
+    # @property
+    # def dataset(self):
+    #     return self.dataloader.dataset
+    

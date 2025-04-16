@@ -74,11 +74,11 @@ class Trainer(Ddpm_base):
         for key in batch.keys():
             if key in convert_keys:
                 # Convert specific keys to tensors and move to GPU
-                batch[convert_keys[key]] = batch[key].to(self.gpu_id)
+                batch[convert_keys[key]].tensor = batch[key].tensor.to(self.gpu_id)
                 del batch[key]
             else:
                 # Move other keys to GPU
-                batch[key] = batch[key].to(self.gpu_id)
+                batch[key].tensor = batch[key].tensor.to(self.gpu_id)
         return batch
 
     def _run_batch(self, batch, validation=False):
