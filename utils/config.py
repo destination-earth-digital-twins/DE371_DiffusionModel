@@ -9,9 +9,7 @@ from utils.distributed import is_main_gpu, get_rank_num, synchronize
 import datetime
 
 SOURCE_PATH = os.environ.get("SOURCE_DIR", "./")
-CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/config_schema.json"
-DATASET_CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}utils/dataset_config_schema.json"
-
+CONFIG_SCHEMA_PATH = f"{SOURCE_PATH}/utils/config_schema.json"
 
 def load_yaml(yaml_path):
     with open(yaml_path, "r") as yaml_file:
@@ -109,19 +107,6 @@ class Config:
                 self.logger.warning(
                     f"any_time={self.any_time} is greater than epochs={self.epochs}. "
                 )
-        if "rr" in self.var_indexes:
-            if self.dataset_config_file is None:
-                raise ValueError(
-                    "field dataset_config_file should not be None / should be spec'd if rr is among the "
-                    "variables"
-                )
-        if self.dataset_config_file is not None and (
-            self.mean_file is not None or self.max_file is not None
-        ):
-            raise ValueError(
-                "mean_file and max_file should not be specified if dataset_config_file is specified, "
-                "and vice versa"
-            )
         cond_n_sample = (
             self.batch_size
             if isinstance(self.batch_size, int)
@@ -264,19 +249,3 @@ class Config:
                 setattr(self, key, value)
             else:
                 logging.warning(f"Overloading {key} to {getattr(self, key)}")
-
-
-class DataSetConfig(Config):
-    def __init__(self, yaml_path):
-        # Load YAML configuration file and initialize logger
-        yaml_config = load_yaml(yaml_path)
-        for prop, value in yaml_config.items():
-            setattr(self, prop, value)
-
-        self._validate_config()
-
-    def _validate_config(self):
-        # Validate the configuration against a JSON schema
-        with open(DATASET_CONFIG_SCHEMA_PATH, "r") as schema_file:
-            schema = json.load(schema_file)
-        jsonschema.validate(self.__dict__, schema)

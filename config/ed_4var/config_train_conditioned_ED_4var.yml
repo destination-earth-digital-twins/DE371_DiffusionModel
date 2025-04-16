@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_train_conditional_ED_4var_5_cond"
-"output_dir": "/project/scratch/p200177/DE_371/maxencelame/models/"
+"run_name": "model_name"
+"output_dir": "/path/to/the/models/dir"
 "batch_size": 16
 "any_time": 5
 
@@ -22,11 +22,16 @@
 # "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_rr_u_v_t2m/data/IS_rr_debug_1_1.0_0_0_0_0_0_256_large_lt"
 "csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_train_labels_1_ens.csv"
 # "csv_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_rr_u_v_t2m/data/IS_rr_debug_1_1.0_0_0_0_0_0_256_large_lt/IS_boostrap_no_duplicate_rr_cumul_correct_train.csv"
-"v_i": 4
+"n_var": 4
 "var_indexes": [ "rr", "u", "v", "t2m" ]
+# specify f"{variable}_transform" to configure special preprocessing of the variable before normalisation
+"rr_transform": LogTransform
+"stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
+"offset_file": mean_rr_log.npy
+"scale_file": max_rr_log.npy
 "crop": [ 0,256,0,256 ]
 "invert_norm": false
-"dataset_config_file": "/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/rr_dataset_config.yml"   # is not compatible with max_file and mean_file 
+
 "image_size": 256
 "guiding_col": "ensemble_id"
 "n_conditions": 5

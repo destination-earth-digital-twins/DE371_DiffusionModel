@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 
 class ConditionedGaussianDiffusion(GaussianDiffusion):
+    # OUTDATED FOR NOW. USED IN DDIM
     def __init__(self, *args, **kwargs):
         """
         Initialize the ConditionedGaussianDiffusion.

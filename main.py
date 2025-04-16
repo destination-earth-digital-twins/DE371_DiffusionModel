@@ -165,14 +165,10 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
-    if ("rr" in config.var_indexes):  # TODO :  make the "var_indexes" be "variables"
-        train_set = dataSet_Handler.rrISDataset(config, path, csv_file)
-        if validation:
-            val_set = dataSet_Handler.rrISDataset(config, path, csv_val_file)
-    else:
-        train_set = dataSet_Handler.ISDataset(config, path, csv_file)
-        if validation:
-            val_set = dataSet_Handler.ISDataset(config, path, csv_val_file)
+    
+    train_set = dataSet_Handler.ISDataset(config, path, csv_file)
+    if validation:
+        val_set = dataSet_Handler.ISDataset(config, path, csv_val_file)
     
     train_dataloader = DataLoader(
         train_set,
@@ -292,7 +288,7 @@ def main_sample(config):
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
     if is_main_gpu():
-        logger.info(f"Sampling of {config.n_ensemble * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
     if config.sampling_mode == "conditioned":
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
@@ -304,6 +300,7 @@ def main_sample(config):
     barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
         logger.info(f"Sampling done")
+        
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):

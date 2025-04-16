@@ -157,8 +157,7 @@ class Ddpm_base:
             denorm_images = torch.stack([detransform_func(image) for image in sampled_images])
         else:
             denorm_images = self.transforms_func(sampled_images)
-        # return denorm_images.cpu().numpy()
-        return denorm_images#.numpy()
+        return denorm_images
 
     def plot_grid(self, file_name, np_img):
         """

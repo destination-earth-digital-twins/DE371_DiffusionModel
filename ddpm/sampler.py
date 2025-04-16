@@ -8,7 +8,7 @@ from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 
-import time
+from datetime import datetime
 
 
 class Sampler(Ddpm_base):
@@ -31,6 +31,7 @@ class Sampler(Ddpm_base):
 
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
+        # OUTDATED FOR NOW. USED WITH DDIM
         """
         Perform guided sampling of a batch of images.
         Args:
@@ -65,7 +66,7 @@ class Sampler(Ddpm_base):
             # Compute the gradient of the loss and update the sample
             cond_grad = -torch.autograd.grad(loss, sample)[0]
             sample = sample.detach() + cond_grad
-        sampled_images_unnorm = self.transforms_func(sample).cpu().numpy()
+        sampled_images_unnorm = self.transforms_func(sample.cpu()).numpy()
         return sampled_images_unnorm
 
     @torch.no_grad()
@@ -80,7 +81,11 @@ class Sampler(Ddpm_base):
 
         i = self.gpu_id if type(self.gpu_id) is int else 0
 
+        # shape of the images 
+        x, y  = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+
         if self.config.sampling_mode == "simple":
+            # To be removed
 
             if is_main_gpu():
                 self.logger.info(
@@ -108,6 +113,7 @@ class Sampler(Ddpm_base):
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
 
+<<<<<<< HEAD
             if self.config.v_i == 3:
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
                     zero_pad = torch.zeros(16, 1, 256, 256).to(self.gpu_id)
@@ -120,32 +126,50 @@ class Sampler(Ddpm_base):
                 conditioning_sets.names[0],conditioning_sets.names[1] = conditioning_sets.names[1],conditioning_sets.names[0]
                 lt = batch['leadtime'][0]
                 d = batch['date'][0].split(" ")[0]
+=======
+            # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
+            if self.config.n_var != self.config.n_var_in_dataset:
+                    zero_pad = torch.zeros(16, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+>>>>>>> main
 
-                if self.config.v_i == 3:
+            # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
+            for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
+                # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
+                conditioning_sets = batch['condition_tensor']
+                # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
+                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+
+                if self.config.n_var != self.config.n_var_in_dataset:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
+<<<<<<< HEAD
                             torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0)
                             for set in conditioning_sets.tensor # Generates a member for all n_ensemble set from the conditioning_sets
                         ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+=======
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                            for set in conditioning_sets
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+>>>>>>> main
                 else:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
+<<<<<<< HEAD
                             for set in conditioning_sets.tensor # Generates a member for all n_ensemble set from the conditioning_sets
                         ], dim=0).cpu().reshape(-1, 4, 256, 256) # reshape -> [n_ensemble*16, 4, 256, 256]
+=======
+                            for set in conditioning_sets
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+>>>>>>> main
                     
-                filename = filename_format.format(date = d, leadtime = lt + 1)
+                lt = batch['leadtime'][0]
+                d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
+                filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-
-                # print(f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                # print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
                 
-                del ensemble
-                gc.collect()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-                torch.distributed.barrier()
 
-                # raise ValueError('STOP')
 
 
 
