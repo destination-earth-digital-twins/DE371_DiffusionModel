@@ -18,8 +18,9 @@
 "S_noise": 1.000
 "rho": 9
 "n_conditions": 5
-# "mean_conditionning": true
-# "var_conditionning": true
+# "mean_conditioning": true
+# "var_conditioning": true
+# "learn_residue": true
 # "predict_residue": true
 "reproductibility_seed": 0
 # "bootstrap_conditions": false
