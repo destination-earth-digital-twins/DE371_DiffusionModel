@@ -11,7 +11,7 @@
 config/ed/config_sample_conditioned_ED_val.yml
 config/ed/config_train_conditioned_ED.yml
 config/ed/config_train_conditioned_ED_reprise.yml
-
+slurm/apptainer_stuff/train_meluxina.sh
 *.pyc
 .idea
 model

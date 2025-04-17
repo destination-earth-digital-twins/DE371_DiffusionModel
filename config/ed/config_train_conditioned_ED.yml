@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
 "run_name": "model_name"
-"output_dir": "/path/to/the/models/dir"
+"output_dir": "/project/scratch/p200177/DE_371/angeliquebonamy/Diffusion/models"
 "batch_size": 16
 "any_time": 5
 
@@ -38,8 +38,8 @@
 "rr_transform": LogTransform
 "offset_file": mean_rr_log.npy
 "scale_file": max_rr_log.npy
-"n_conditions": 5
-"mean_conditionning": true
+"n_conditions": 1
+# "mean_conditionning": true
 # "var_conditionning": true
 #"dataset_config_file": "/home/users/u102230/code/DDPM-weather/rr_dataset_config.yml"   # is not compatible with max_file and mean_file 
 

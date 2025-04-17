@@ -266,7 +266,7 @@ class ElucidatedDiffusion(nn.Module):
         if self.self_condition:
             with torch.no_grad():
                 self_cond = kwargs.get('condition_tensor')
-                self_cond.detach_()
+                self_cond.tensor.detach_()
                 
         # if self.self_condition and random() < 0.5:
         #     # from hinton's group's bit diffusion paper
