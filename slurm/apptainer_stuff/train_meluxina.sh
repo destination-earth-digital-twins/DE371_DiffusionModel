@@ -37,7 +37,4 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/fi
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u101957/DE371_DiffusionModel/config/ed/config_train_conditioned_ED.yml"
-    # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed/config_train_conditioned_ED.yml"
-    # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/config_train_conditioned_ED_4var_reprise.yml"
-    # --yaml_path="/home/users/u102230/code/DE371_DiffusionModel/config/ed_4var/config_train_conditioned_ED_4var.yml"
+    --yaml_path="path/to/sample/config.yml"
