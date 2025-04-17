@@ -7,9 +7,7 @@ import logging
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
-
-import time
-
+from datetime import datetime
 
 class Sampler(Ddpm_base):
     def __init__(
@@ -120,10 +118,9 @@ class Sampler(Ddpm_base):
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
                 # Get the list containing the n_ensemble sets of conditionning members -> array of shape [16, n_ensemble, n_condition*3, 256, 256]
-                conditioning_sets = batch['condition_sample']
+                conditioning_sets = batch['condition_tensor']
                 # Transpose the array-> array of shape [n_ensemble, 16, 3, 256, 256]
                 conditioning_sets.tensor = conditioning_sets.tensor.permute(1, 0, 2, 3, 4)
-                # conditioning_sets.names[0],conditioning_sets.names[1] = conditioning_sets.names[1],conditioning_sets.names[0]
                 conditioning_sets.names[:2] = conditioning_sets.names[1],conditioning_sets.names[0]
 
                 lt = batch['leadtime'][0]
@@ -133,13 +130,14 @@ class Sampler(Ddpm_base):
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
-                            for set in conditioning_sets
+                            for set in conditioning_sets.tensor
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                         ensemble = torch.cat([
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
-                            for set in conditioning_sets
+                            for set in conditioning_sets.tensor
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                     
                 lt = batch['leadtime'][0]
