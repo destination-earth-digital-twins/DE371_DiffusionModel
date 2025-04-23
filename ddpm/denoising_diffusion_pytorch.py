@@ -323,6 +323,7 @@ class Unet(Module):
         self.cond_emb = None
         if embedding_cond_dims is not None:
             self.cond_emb = nn.Embedding(embedding_cond_dims, time_dim) # Additionnal condition passed as an embedding. same size as time embedding
+            self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
         
         self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
 
@@ -417,7 +418,7 @@ class Unet(Module):
         ################## Embedded condition
         if self.cond_emb is not None and embedded_cond is not None:
             cond_embedding = self.cond_emb(embedded_cond)
-            t = t + cond_embedding
+            t = self.time_and_cond_proj(torch.cat([t, cond_embedding], dim=-1))
 
         h = []
 
