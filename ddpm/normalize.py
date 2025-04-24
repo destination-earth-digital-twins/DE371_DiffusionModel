@@ -75,7 +75,8 @@ class SpecialNormalize(object):
         for var in self.data_transforms:
             if self.data_transforms[var] is not None:
                 sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
-
+        
+        sample = sample.permute(1,2,0)
         sample = (sample - self.offset) / self.scale
         
         return sample

@@ -3,7 +3,7 @@ from random import random
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
-
+import numpy as np
 from tqdm import tqdm
 from einops import rearrange, repeat, reduce
 
@@ -37,7 +37,7 @@ class ElucidatedDiffusion(nn.Module):
         self,
         model,
         *,
-        image_size,
+        image_size = (717,1121),
         channels = 3,
         num_sample_steps = 100, # number of sampling steps
         sigma_min = 0.002,      # min noise level
@@ -143,7 +143,7 @@ class ElucidatedDiffusion(nn.Module):
     def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = False):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
 
-        shape = (batch_size, self.channels, self.image_size, self.image_size)
+        shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
 
         # get the schedule, which is returned as (sigma, gamma) tuple, and pair up with the next sigma and gamma
 
@@ -160,7 +160,7 @@ class ElucidatedDiffusion(nn.Module):
         # images is noise at the beginning
 
         init_sigma = sigmas[0]
-
+        
         images = init_sigma * torch.randn(shape, device = self.device)
 
         # for self conditioning
@@ -210,7 +210,7 @@ class ElucidatedDiffusion(nn.Module):
 
         sigmas = self.sample_schedule(num_sample_steps)
 
-        shape = (batch_size, self.channels, self.image_size, self.image_size)
+        shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
         images  = sigmas[0] * torch.randn(shape, device = device)
 
         sigma_fn = lambda t: t.neg().exp()
@@ -247,8 +247,11 @@ class ElucidatedDiffusion(nn.Module):
     def forward(self, img, *args, **kwargs):
         #TODO change terminology from self_cond to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
-
-        assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
+        
+        mask = ~torch.isnan(img) #True where values are not nans
+        
+        
+        assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
 
         img = normalize_to_neg_one_to_one(img)
@@ -277,8 +280,10 @@ class ElucidatedDiffusion(nn.Module):
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
 
         losses = F.mse_loss(denoised, img, reduction = 'none')
+        print("loss après F.mse_loss",torch.isnan(losses[0,0,:,:]).sum())
         losses = reduce(losses, 'b ... -> b', 'mean')
+        print("loss après reduce", losses)
 
         losses = losses * self.loss_weight(sigmas)
-
+        print("loss après multiplication par self.loss_weight",losses)
         return losses.mean()

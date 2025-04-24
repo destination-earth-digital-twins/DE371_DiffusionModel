@@ -229,7 +229,7 @@
       "description": "Constant file for normalisation, linear scaling"
     },
     "image_size": {
-      "type": "integer",
+      "type": "array",
       "default": 128,
       "description": "Size of the input image"
     },

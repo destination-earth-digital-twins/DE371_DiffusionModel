@@ -81,6 +81,29 @@ class ISDataset(Dataset):
         """
         return len(self.labels)
 
+
+    def to_nvar_file(self,files : list,lead_time,member):
+        """
+        Big domain : file.shape = (717,1121,45,16) for one variable. Returns a npy file with shape (717,1121,len(files)).
+        Args :
+            files : a list of LOADED files (preferably different variables in each file, to reproduce small domain behavior)
+            lead_time : a leadtime to use in the returned file
+            member : a member id to use in the returned file
+        """
+        final_file = [] 
+        for i in len(files):
+            file = files[i][:,:,lead_time,member]
+            
+            final_file.append(file)
+        
+        nvar_file = np.stack(final_file, axis=-1) 
+        return nvar_file
+        
+
+    
+
+#modif de getitem : fichier  = tous les leadtimes et tous les membres, pas besoin de récup le leadtime et le membre là dedans ??
+
     def __getitem__(self, idx):
         """
         Get a sample from the dataset.
@@ -184,10 +207,10 @@ class ISDataset(Dataset):
         if type(file_name) == list:
             file_name = file_name[0]
         sample_path = os.path.join(self.data_dir, file_name)
-        sample = np.float32(np.load(sample_path + ".npy"))[
-            self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        sample = np.float32(np.load(sample_path))[
+            self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        sample = sample.transpose((1, 2, 0))
+        sample = sample.transpose((2, 0, 1))
         sample = self.transform(sample)
         return sample
 
