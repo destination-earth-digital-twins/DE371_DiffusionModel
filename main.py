@@ -16,6 +16,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
+from ddpm.SDEdit_gaussian_diffusion import SDEeditGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from ddpm.sampler import Sampler
@@ -106,6 +107,14 @@ def load_train_objs(config):
         or config.mode == "Sample"
         and "conditioned" in config.sampling_mode
     )
+
+    use_cond_sdedit = (
+        config.guiding_col is not None
+        and config.mode == "Train"
+        or config.mode == "Sample"
+        and "conditioned_sdedit" in config.sampling_mode
+    )
+
     # Create a U-Net model and a diffusion model based on configuration
     n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
     umodel = Unet(
@@ -120,17 +129,33 @@ def load_train_objs(config):
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
-            cls = ConditionedGaussianDiffusion
+            model = ConditionedGaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+            )
+        elif use_cond_sdedit:
+            model = SDEeditGaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                num_edition_timesteps=config.num_edition_timesteps,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+            )
         else:
-            cls = GaussianDiffusion
-        model = cls(
-            umodel,
-            image_size=config.image_size,
-            timesteps=1000,
-            beta_schedule=config.beta_schedule,
-            auto_normalize=config.auto_normalize,
-            sampling_timesteps=config.ddim_timesteps,
-        )
+            model = GaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+            )
     else:
         model = ElucidatedDiffusion(
             umodel,
