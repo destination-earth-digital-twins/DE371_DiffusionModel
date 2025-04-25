@@ -23,8 +23,6 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
-from utils.utils import batch_output_sample_files
-import numpy as np
 
 warnings.filterwarnings(
     "ignore",
@@ -105,7 +103,7 @@ def load_train_objs(config):
         config.guiding_col is not None
         and config.mode == "Train"
         or config.mode == "Sample"
-        and "conditioned" in config.sampling_mode
+        and "conditioned_input" in config.sampling_mode
     )
 
     use_cond_sdedit = (
@@ -114,7 +112,7 @@ def load_train_objs(config):
         or config.mode == "Sample"
         and "conditioned_sdedit" in config.sampling_mode
     )
-
+    
     # Create a U-Net model and a diffusion model based on configuration
     umodel = Unet(
         dim=64,
@@ -140,10 +138,10 @@ def load_train_objs(config):
                 umodel,
                 image_size=config.image_size,
                 timesteps=1000,
-                num_edition_timesteps=config.num_edition_timesteps,
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
+                # num_edition_timesteps=config.num_edition_timesteps,
             )
         else:
             model = GaussianDiffusion(
@@ -311,7 +309,7 @@ def main_sample(config):
 
     if is_main_gpu():
         logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
-    if config.sampling_mode == "conditioned":
+    if "conditioned" in config.sampling_mode:
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
         file_format = "fake_sample_{sample_index}.npy" 
