@@ -7,7 +7,7 @@ import logging
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
-
+from utils.plotter import online_plot
 from datetime import datetime
 
 
@@ -123,7 +123,6 @@ class Sampler(Ddpm_base):
                 conditioning_sets = batch['condition_tensor']
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-
                 if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                         ensemble = torch.cat([
@@ -143,11 +142,13 @@ class Sampler(Ddpm_base):
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-                
 
-
-
-
+                if self.config.plot :
+                     online_plot(
+                          conditioning_sets[0].numpy(),
+                          ensemble.numpy()[:,1:,:,:],
+                          figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png')
+                     )
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
 
