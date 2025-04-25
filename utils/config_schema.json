@@ -50,6 +50,7 @@
       "enum": [
         "simple",
         "conditioned",
+        "conditioned_sdedit",
         "guided"
       ],
       "default": "simple",
