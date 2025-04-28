@@ -18,7 +18,7 @@ def online_plot(
           ):
         print('packsample.shape', packsample.shape)
         print('pert_sample.shape', pert_sample.shape)
-        fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=2, ncols=len(var_names))
+        fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=3, ncols=len(var_names))
         for id, var in enumerate(var_names):
             var_id = dict_var[var]
             if not clim_global :
@@ -34,6 +34,11 @@ def online_plot(
             ax[1][id].set_title(f"{axis_title_global}{var} generated")
             im = ax[1][id].imshow(pert_sample[mem_pert_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]],  origin="lower", cmap=colormap_var[id])
             fig.colorbar(im, ax=ax[1][id], shrink=0.5)
+
+            diff = packsample[mem_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]] - pert_sample[mem_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]]
+            ax[2][id].set_title(f"{axis_title_global}{var} generated")
+            im = ax[2][id].imshow(diff, origin="lower", cmap="RdYlGn")
+            fig.colorbar(im, ax=ax[2][id], shrink=0.5)
 
         fig.suptitle(figtitle)
         fig.tight_layout()
