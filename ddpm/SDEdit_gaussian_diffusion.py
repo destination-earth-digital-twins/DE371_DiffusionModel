@@ -1,6 +1,5 @@
 import torch
 from denoising_diffusion_pytorch import GaussianDiffusion
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch import default
 import torch.nn.functional as F
 from random import random
 from einops import rearrange
@@ -19,7 +18,7 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         """
         super().__init__(*args, **kwargs)
         # Checking that num of timestep of denoising for SDEdit
-        self.num_edition_timesteps = 1
+        self.num_edition_timesteps = 50
 
     @torch.no_grad()
     def sample(self, batch_size, return_all_timesteps=False, condition=None):
@@ -60,12 +59,11 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         img = self.q_sample(x_start=condition, t=t)
 
         # Denoising image
-        # img = torch.randn(shape, device = device)
         imgs = [img]
 
         x_start = None
 
-        for t in tqdm(reversed(range(self.num_timesteps-self.num_edition_timesteps, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_edition_timesteps):
+        for t in tqdm(reversed(range(0, self.num_edition_timesteps)), desc = 'sampling loop time step', total = self.num_edition_timesteps):
             self_cond = x_start if self.self_condition else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)

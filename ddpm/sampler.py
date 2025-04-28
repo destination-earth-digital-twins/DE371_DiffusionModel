@@ -142,10 +142,10 @@ class Sampler(Ddpm_base):
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-
+                
                 if self.config.plot :
                      online_plot(
-                          conditioning_sets[0].numpy(),
+                          conditioning_sets[0].numpy(),#   self.transforms_func(conditioning_sets[0]).numpy(),
                           ensemble.numpy()[:,1:,:,:],
                           figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png')
                      )
