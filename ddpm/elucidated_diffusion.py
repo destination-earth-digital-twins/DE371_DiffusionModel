@@ -247,10 +247,7 @@ class ElucidatedDiffusion(nn.Module):
     def forward(self, img, *args, **kwargs):
         #TODO change terminology from self_cond to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
-        
-        mask = ~torch.isnan(img) #True where values are not nans
-        
-        
+           
         assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
 
@@ -277,13 +274,20 @@ class ElucidatedDiffusion(nn.Module):
         #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
         #         self_cond.detach_()
 
-        denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-
+        denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)     
+        
         losses = F.mse_loss(denoised, img, reduction = 'none')
-        print("loss après F.mse_loss",torch.isnan(losses[0,0,:,:]).sum())
-        losses = reduce(losses, 'b ... -> b', 'mean')
-        print("loss après reduce", losses)
+        
+        #create a mask for les bords pour ne pas prendre en compte la mse à ces endroits
+        
+        mask = (torch.abs(img) < 1000)
+        
+        losses = losses.masked_fill(~mask,float("nan"))
+        
+        per_sample = torch.nanmean(losses,dim=[1,2,3])
+        
+        loss = torch.mean(per_sample)
 
-        losses = losses * self.loss_weight(sigmas)
-        print("loss après multiplication par self.loss_weight",losses)
-        return losses.mean()
+        loss = loss * self.loss_weight(sigmas)
+
+        return torch.nanmean(loss)

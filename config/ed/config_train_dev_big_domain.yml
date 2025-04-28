@@ -18,8 +18,9 @@
 "rho": 7
 
 # Data parameters
-"data_dir": "/home/users/u102751/code/data_to_test/daaaa"
-"csv_file": "/home/users/u102751/code/data_to_test/data/csv_datas.csv"
+"data_dir": "/home/users/u102751/code/data_to_test/data_with_lead_time"
+"data_processed": True
+"csv_file": "/home/users/u102751/code/data_to_test/data_with_lead_time/fichier_index.csv"
 # "validation": true
 # "csv_val_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Large_lt_val_labels_ens.csv"
 "mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
@@ -39,9 +40,9 @@
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 3
+"scheduler_epoch": 2
 "resume": false
-"epochs": 3
+"epochs": 2
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5

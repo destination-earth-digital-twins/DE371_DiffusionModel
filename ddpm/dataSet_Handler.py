@@ -60,7 +60,7 @@ class ISDataset(Dataset):
         self.transform = transforms.Compose(
 
             [
-                transforms.ToTensor(),
+                ToTensor4D(),
                 SpecialNormalize(self.config),
             ]
         )
@@ -82,28 +82,6 @@ class ISDataset(Dataset):
         return len(self.labels)
 
 
-    def to_nvar_file(self,files : list,lead_time,member):
-        """
-        Big domain : file.shape = (717,1121,45,16) for one variable. Returns a npy file with shape (717,1121,len(files)).
-        Args :
-            files : a list of LOADED files (preferably different variables in each file, to reproduce small domain behavior)
-            lead_time : a leadtime to use in the returned file
-            member : a member id to use in the returned file
-        """
-        final_file = [] 
-        for i in len(files):
-            file = files[i][:,:,lead_time,member]
-            
-            final_file.append(file)
-        
-        nvar_file = np.stack(final_file, axis=-1) 
-        return nvar_file
-        
-
-    
-
-#modif de getitem : fichier  = tous les leadtimes et tous les membres, pas besoin de récup le leadtime et le membre là dedans ??
-
     def __getitem__(self, idx):
         """
         Get a sample from the dataset.
@@ -112,50 +90,58 @@ class ISDataset(Dataset):
         Returns:
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
-        file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
-        sample = self.file_to_torch(file_name) # target
+        file_name = self.labels.iloc[idx, 0]# Name of the current sample in the dataset
+        lead_time = file_name.split("_")[3]
+        sample = self.file_to_torch(file_name,lead_time) # target
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
 
-        # Get the ensemble df
-        ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the current member
-        ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
+        print("sample.shapeeeeeee",sample.shape)
 
+        
+        if len(sample.shape) == 3 :
         # Build the tensors for the sampling and the training
-        condition_tensor = self.get_conditioning_members(ensemble_df, idx)
+                # Get the ensemble df
+            ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the current member
+            ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
+            condition_tensor = self.get_conditioning_members_3D(ensemble_df, idx)
+            # Get the date, lt, and member id of the current member
+            row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": ""}
+            date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
+            lt = row["LeadTime"]
+            # Using the mean and/or the var of the ensemble as additionnal conditions
+            if mean_cond or var_cond:
+                mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+                if self.config.n_var == 3:
+                    mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
+                if mean_cond:
+                    mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                    condition_tensor = torch.cat([condition_tensor, mean], dim=1)
+                if var_cond:
+                    var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                    condition_tensor = torch.cat([condition_tensor, var], dim=1)
+        else: 
+            if len(sample.shape) != 4 :
+                raise ValueError(f"shape of sample must be 3 dims or 4 dims, and got here {len(sample.shape)} dims")
+            conditions_list = self.get_conditioning_members_4D(sample,idx)
+            
+        
 
-        # Get the date, lt, and member id of the current member
-        row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
-        date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
-        lt = row["LeadTime"]
-        member = row["Member"]
-
-        # Using the mean and/or the var of the ensemble as additionnal conditions
-        if mean_cond or var_cond:
-            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
-            if self.config.n_var == 3:
-                mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
-            if mean_cond:
-                mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
-            if var_cond:
-                var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-                condition_tensor = torch.cat([condition_tensor, var], dim=1)
+        
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "date": date, "leadtime": lt}
 
-    def get_conditioning_members(self, ensemble_df, idx):
+    def get_conditioning_members_3D(self, ensemble_df, idx):
         """
             Loads the conditioning members for the training and the sampling, stacks them
             and returns the result
 
             Args:
-                ensemble_df (df): the sub df contatining the considered ensemble
+                ensemble_df (df): the sub df containing the considered ensemble
                 idx (int): ID in the __getitem__.
-
             Returns:
                 torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.height_dim, self.width_dim] 
         """
@@ -166,7 +152,6 @@ class ISDataset(Dataset):
 
         # Remove the target from the possible conditions used for training
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
-
 
         # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
         if self.config.bootstrap_conditions:
@@ -179,6 +164,7 @@ class ISDataset(Dataset):
         condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         return condition
     
+    
     def df_to_torch(self, ens_df, n_cond):
         """
             sample members from the ensemble df.
@@ -190,13 +176,85 @@ class ISDataset(Dataset):
             Returns:
                 torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
         """
+        print(ens_df.head())
+        print("n cond", n_cond)
         selected_members = ens_df.sample(n=n_cond)['Name'].values
+        print("selected members",selected_members)
+
         condition_tensor = torch.cat(
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
+    
+    def subsample_concat(self, sample, n_cond):
+        """
+            sample members from the sample_without_target in get_conditioning_members_4D.
+            
+            returns the concatenated members
+            Args:
+                sample : sample of shape (var, h, w, members) a torch.tensor containing all the members except the target at a given lead time and date
+                n_cond (int): number of member to sample
+            Returns:
+                torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
+        """
+        nb_members = sample.shape[-1]
+        rand_members_int = torch.randperm(nb_members,device = sample.device)[:n_cond] #permutation then sample the first n_cond members to generate
+        #random subsampling of members
+        subsample = sample[:,:,:,rand_members_int]
+        return subsample
+    
+    
+    def get_conditioning_members_4D(self, sample, idx):
+        """
+            Loads the conditioning members for the training and the sampling, stacks them
+            and returns the result
+
+            Args:
+                ensemble_df (df): the sub df containing the considered ensemble
+                idx (int): ID in the __getitem__.
+                sample (torch.tensor): the torch tensor of shape (var, h, w, m) representing the img at a given date, lead time 
+            Returns:
+                list(torch.Tensor): The resulting list of tensors of shape [n_sampling_conditioning_sets*n_conditions*n_var, 
+                    self.height_dim, self.width_dim] 
+        """
+        if self.config.n_conditions > self.config.n_members_dataset:
+            raise ValueError(
+                f"The number of conditioning members must not exceed the number of members in the dataset. Got {self.config.n_conditions} conditioning members and {self.config.n_members_dataset} members in the dataset."
+            )
+        conditions = []
         
-    def file_to_torch(self, file_name):
+        # Remove the target from the possible conditions used for training
+        #je veux retourner une liste de tenseur associée a chacun eds membrs de l'ensemble, ie du même fichier
+        for member in range(sample.shape[-1]):#iterate on members
+            sample_without_target = torch.cat([sample[:,:,:,:member], sample[:,:,:,member + 1:]],dim = -1) # getting rid of the target member
+            condition = self.subsample_concat(sample_without_target,self.config.n_conditions)
+            conditions.append(condition)        
+        return conditions
+    
+    
+    
+    
+    def to_nvar_file(self,files : list,lead_time):
+        """
+        Big domain : file.shape = (717,1121,45,16) for one variable. 
+        Returns a npy file with shape (len(files,717,1121,16) = (variables, h, w, members)
+        Args :
+            files : a list of LOADED files at a SAME DATE and different variables
+            lead_time : a leadtime to use in the returned file
+            member : a member id to use in the returned file
+        """
+        final_file = [] 
+        for i in range(len(files)):
+            file = files[i][:,:,lead_time,:]
+            
+            final_file.append(file)
+            
+        nvar_file = np.stack(final_file, axis=0) 
+        print(nvar_file.shape)
+        return nvar_file
+              
+               
+    def file_to_torch(self, file_name,lead_time):
         """
         Convert a file to a torch tensor.
         Args:
@@ -207,12 +265,32 @@ class ISDataset(Dataset):
         if type(file_name) == list:
             file_name = file_name[0]
         sample_path = os.path.join(self.data_dir, file_name)
+
+        sample = np.float32(np.load(sample_path))
+        date = file_name.split('_')[0]
+        
+        
+        if self.config.data_processed:#datas have already been processed to have shape (nvar,h,w,m)
+            sample = sample[
+                :,
+                self.CI[0] : self.CI[1],
+                self.CI[2] : self.CI[3],
+                :]
+            sample = self.transform(sample)
+            
+            return sample
+        
+        else : #data weren't processed : shape (h,w,lt,m)
+            #output shape(variables, height,width, member) ------> every variables and members at a given lead time
+            date = file_name.split('_')[0]
+            print(date)
+            
+            
+             
         sample = np.float32(np.load(sample_path))[
             self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        sample = sample.transpose((2, 0, 1))
-        sample = self.transform(sample)
-        return sample
+        
 
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
@@ -240,3 +318,14 @@ class CustomDistributedSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
+
+class ToTensor4D:
+    def __call__(self,img):
+        """
+        Returns a tensor4D from a numpy image, as the function transforms.ToTensor in torch
+        Args : 
+            img : ndarray of shape (variables, height, width, members)"
+        """
+        tensor = torch.from_numpy(img)
+                
+        return tensor

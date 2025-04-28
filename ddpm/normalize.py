@@ -38,6 +38,7 @@ class SpecialNormalize(object):
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
         scale = np.load(os.path.join(self.config.stat_folder,self.config.scale_file))[self.config.VI].astype(np.float32)
         
+        
         self.offset = torch.from_numpy(offset).view(-1, 1, 1)
         self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1)
         
@@ -67,19 +68,45 @@ class SpecialNormalize(object):
             raise TypeError(
                 f"Input sample should be a torch tensor. Got {type(sample)}."
             )
-        if sample.ndim != 3:
+        if sample.ndim != 3 and sample.ndim != 4:
             raise ValueError(
-                f"Expected sample to be a tensor image of size (C, H, W). Got tensor.size() = {sample.size()}."
+                f"Expected sample to be a tensor image of size (C, H, W) or (C, H, W, M). Got tensor.size() = {sample.size()}."
             )
 
-        for var in self.data_transforms:
-            if self.data_transforms[var] is not None:
-                sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
-        
-        sample = sample.permute(1,2,0)
-        sample = (sample - self.offset) / self.scale
-        
-        return sample
+        if sample.ndim == 4:
+            samples = []
+            if sample.size()[-1] !=16:
+                raise ValueError(
+                    f"Expected last dim of sample.size() to be 16 but is {sample.size()[-1]}"
+                )
+            for var in self.data_transforms:
+                if self.data_transforms[var] is not None:
+                    sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
+                    
+            for member in range(sample.size()[-1]):
+                
+                sample_member = sample[:,:,:,member]
+                sample_member[sample_member==9999]=torch.nan 
+                
+                sample_member = (sample_member - self.offset) / self.scale
+                sample_member = torch.nan_to_num(sample_member,nan = 9999.)
+                samples.append(sample_member)
+            
+            sample = torch.stack(samples,axis=-1)
+            # print("sample final shape",sample.shape)
+            return sample
+                    
+        else :    
+            for var in self.data_transforms:
+                if self.data_transforms[var] is not None:
+                    sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
+            
+            sample[sample==9999]=torch.nan 
+
+            sample = (sample - self.offset) / self.scale
+            sample = torch.nan_to_num(sample,nan = 9999.)
+       
+            return sample
 
     def denorm(self, sample):
         """
