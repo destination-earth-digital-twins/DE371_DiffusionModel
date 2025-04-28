@@ -60,7 +60,8 @@ class ISDataset(Dataset):
         self.transform = transforms.Compose(
 
             [
-                ToTensor4D(),
+                #ToTensor4D(), #if working with 4D tensors
+                transforms.ToTensor(),
                 SpecialNormalize(self.config),
             ]
         )
@@ -91,13 +92,11 @@ class ISDataset(Dataset):
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0]# Name of the current sample in the dataset
-        lead_time = file_name.split("_")[3]
-        sample = self.file_to_torch(file_name,lead_time) # target
+        #lead_time = file_name.split("_")[3] # to use if using 4D tensors   
+        sample = self.file_to_torch(file_name) # target #add argument "lead time" if working with 4D tensors
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
-
-        print("sample.shapeeeeeee",sample.shape)
 
         
         if len(sample.shape) == 3 :
@@ -176,16 +175,13 @@ class ISDataset(Dataset):
             Returns:
                 torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
         """
-        print(ens_df.head())
-        print("n cond", n_cond)
         selected_members = ens_df.sample(n=n_cond)['Name'].values
-        print("selected members",selected_members)
-
         condition_tensor = torch.cat(
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
-    
+#####################NOT FINISHED#####################
+#To use to work with 4D tensors    
     def subsample_concat(self, sample, n_cond):
         """
             sample members from the sample_without_target in get_conditioning_members_4D.
@@ -224,13 +220,12 @@ class ISDataset(Dataset):
         conditions = []
         
         # Remove the target from the possible conditions used for training
-        #je veux retourner une liste de tenseur associée a chacun eds membrs de l'ensemble, ie du même fichier
         for member in range(sample.shape[-1]):#iterate on members
             sample_without_target = torch.cat([sample[:,:,:,:member], sample[:,:,:,member + 1:]],dim = -1) # getting rid of the target member
             condition = self.subsample_concat(sample_without_target,self.config.n_conditions)
             conditions.append(condition)        
         return conditions
-    
+#################################################################################################    
     
     
     
@@ -254,7 +249,7 @@ class ISDataset(Dataset):
         return nvar_file
               
                
-    def file_to_torch(self, file_name,lead_time):
+    def file_to_torch(self, file_name): #add argument lead_time if working with 4D tensors, shape(nvar,h,w,m) 
         """
         Convert a file to a torch tensor.
         Args:
@@ -269,28 +264,28 @@ class ISDataset(Dataset):
         sample = np.float32(np.load(sample_path))
         date = file_name.split('_')[0]
         
-        
-        if self.config.data_processed:#datas have already been processed to have shape (nvar,h,w,m)
-            sample = sample[
-                :,
-                self.CI[0] : self.CI[1],
-                self.CI[2] : self.CI[3],
-                :]
-            sample = self.transform(sample)
+        if self.config.data_processed:#datas have already been processed to have shape (nvar,h,w,m) 
             
+            sample = sample[
+                self.CI[0] : self.CI[1],
+                self.CI[2] : self.CI[3]
+                ]
+            sample = self.transform(sample)
+
             return sample
         
-        else : #data weren't processed : shape (h,w,lt,m)
-            #output shape(variables, height,width, member) ------> every variables and members at a given lead time
-            date = file_name.split('_')[0]
-            print(date)
+        ################""NOT FINISHED#################""
+        # else : #data weren't processed : shape (h,w,lt,m)
+        #     #output shape(variables, height,width, member) ------> every variables and members at a given lead time
+        #     date = file_name.split('_')[0]
+        #     print(date)
             
             
              
-        sample = np.float32(np.load(sample_path))[
-            self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        ]
-        
+        # sample = np.float32(np.load(sample_path))[
+        #     self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        # ]
+        ####################################################
 
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
