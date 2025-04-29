@@ -340,7 +340,13 @@ class Unet(Module):
             nn.GELU(),
             nn.Linear(time_dim, time_dim)
         )
-
+    
+        self.emb_mlp = nn.Sequential(
+            sinu_pos_emb,
+            nn.Linear(fourier_dim, time_dim),
+            nn.GELU(),
+            nn.Linear(time_dim, time_dim)
+        )
         # attention
 
         if not full_attn:
@@ -417,7 +423,7 @@ class Unet(Module):
 
         ################## Embedded condition
         if self.cond_emb is not None and embedded_cond is not None:
-            cond_embedding = self.cond_emb(embedded_cond)
+            cond_embedding = self.emb_mlp(embedded_cond)
             t = self.time_and_cond_proj(torch.cat([t, cond_embedding], dim=-1))
 
         h = []
