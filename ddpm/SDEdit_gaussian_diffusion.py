@@ -8,6 +8,7 @@ from tqdm import tqdm
 class SDEeditGaussianDiffusion(GaussianDiffusion):
     def __init__(self,
                  *args,
+                 num_edition_timesteps=50,
                  **kwargs
                  ):
         """
@@ -18,7 +19,7 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         """
         super().__init__(*args, **kwargs)
         # Checking that num of timestep of denoising for SDEdit
-        self.num_edition_timesteps = 50
+        self.num_edition_timesteps = num_edition_timesteps
 
     @torch.no_grad()
     def sample(self, batch_size, return_all_timesteps=False, condition=None):
@@ -52,10 +53,10 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         Returns:
             torch.Tensor: Generated samples.
         """
-        batch, device = shape[0], self.device
+        batch = shape[0]
 
         # Noising condition
-        t = torch.randint(0, self.num_edition_timesteps, (batch,), device=device).long()
+        t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
         img = self.q_sample(x_start=condition, t=t)
 
         # Denoising image
