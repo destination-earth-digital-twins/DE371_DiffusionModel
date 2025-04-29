@@ -1,12 +1,12 @@
 #!/bin/bash -l
-#SBATCH -J DE371_diffusion
+#SBATCH -J DE371_diffusion_sampling
 #SBATCH -A p200177
 #SBATCH -N 1
 #SBATCH -G 4
 #SBATCH -p gpu
 #SBATCH --ntasks-per-node=4
-#SBATCH --time=6:00:00
-#SBATCH --qos=short
+#SBATCH --time=48:00:00
+#SBATCH --qos=default
 
 export TORCH_DISTRIBUTED_DEBUG=INFO 
 export OMP_NUM_THREADS=4
@@ -36,4 +36,4 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/fi
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="path/to/sample/config.yml"
+    --yaml_path="/home/users/u101833/project/DE371_DiffusionModel/config/ed_sampling/config_sample_sdedit_ED_val_500.yml"

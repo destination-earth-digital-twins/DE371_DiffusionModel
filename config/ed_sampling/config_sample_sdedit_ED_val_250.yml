@@ -1,28 +1,25 @@
 # General parameters
 "mode": "Sample"
-"run_name": "run_name"
-"output_dir": "/path/to/the/samples/dir"
+"run_name": "sampling_250steps"
+"output_dir": "/project/scratch/p200177/DE_371/victorsanchez/results_diffusion/sampling_sdedit/"
 "batch_size": 16
 "any_time": 1
-"use_AMP": false
-"compile_model": false
+
 # Sampling parameters
-# "n_sampling_conditioning_sets": 4
 "n_sampling_conditioning_sets": 4
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
-"plot": true
-"sampling_mode": "conditioned_input"
+"plot": false
+"sampling_mode": "conditioned_sdedit"
+"num_edition_timesteps": 250
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
 "S_tmax": 50
 "S_noise": 1.000
 "rho": 9
-"n_conditions": 5
-# "mean_conditioning": true
-# "var_conditioning": true
-# "learn_residue": true
-# "predict_residue": true
+"n_conditions": 1
+# "mean_conditionning": true
+# "var_conditionning": true
 "reproductibility_seed": 0
 # "bootstrap_conditions": false
 
@@ -38,7 +35,7 @@
 # leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
-"invert_norm": true
+"invert_norm": false
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
@@ -49,7 +46,7 @@ leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "guiding_col": "ensemble_id"
 
 # Model parameters
-"elucidated_diffusion_sampler": true
+"elucidated_diffusion_sampler": false
 "scheduler": "OneCycleLR"
 "scheduler_epoch": 250
 "resume": false
@@ -60,7 +57,7 @@ leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "P_mean" : -1.2
 "P_std": 1.2
 "beta_schedule": "linear"
-"model_path": "/path/to/model/snapshots/best.pt"
+"model_path": "/project/home/p200177/DE_371/maxencelame/models/unconditioned/run_train_unconditional/best.pt"
 
 # Tracking parameters
 "wandbproject": "my_project"

@@ -1,16 +1,16 @@
 # General parameters
 "mode": "Sample"
-"run_name": "test_sampling_50steps"
-"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/test_sampling_sdedit/"
+"run_name": "sampling_10steps"
+"output_dir": "/project/scratch/p200177/DE_371/victorsanchez/results_diffusion/sampling_sdedit/"
 "batch_size": 16
 "any_time": 1
 
 # Sampling parameters
 "n_sampling_conditioning_sets": 4
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
-"plot": true
+"plot": false
 "sampling_mode": "conditioned_sdedit"
-"num_edition_timesteps": 50
+"num_edition_timesteps": 10
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
