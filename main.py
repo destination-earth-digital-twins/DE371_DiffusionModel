@@ -143,7 +143,7 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
-                # num_edition_timesteps=config.num_edition_timesteps,
+                num_edition_timesteps=config.num_edition_timesteps,
             )
         else:
             model = GaussianDiffusion(
