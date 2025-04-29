@@ -323,6 +323,12 @@ class Unet(Module):
         self.cond_emb = None
         if embedding_cond_dims is not None:
             self.cond_emb = nn.Embedding(embedding_cond_dims, time_dim) # Additionnal condition passed as an embedding. same size as time embedding
+            self.emb_mlp = nn.Sequential(
+                sinu_pos_emb,
+                nn.Linear(fourier_dim, time_dim),
+                nn.GELU(),
+                nn.Linear(time_dim, time_dim)
+            )
             self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
         
         self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
@@ -341,12 +347,6 @@ class Unet(Module):
             nn.Linear(time_dim, time_dim)
         )
     
-        self.emb_mlp = nn.Sequential(
-            sinu_pos_emb,
-            nn.Linear(fourier_dim, time_dim),
-            nn.GELU(),
-            nn.Linear(time_dim, time_dim)
-        )
         # attention
 
         if not full_attn:
