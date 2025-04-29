@@ -10,7 +10,7 @@
 "n_sampling_conditioning_sets": 1
 "ddim_timesteps": 15 
 "plot": true
-"sampling_mode": "conditioned"
+"sampling_mode": "conditioned_input"
 "n_sample": 4
 "random_noise": true
 "S_churn": 40

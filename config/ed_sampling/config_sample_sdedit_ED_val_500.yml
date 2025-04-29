@@ -1,6 +1,6 @@
 # General parameters
 "mode": "Sample"
-"run_name": "sampling_10steps"
+"run_name": "sampling_500steps"
 "output_dir": "/project/scratch/p200177/DE_371/victorsanchez/results_diffusion/sampling_sdedit/"
 "batch_size": 16
 "any_time": 1
@@ -10,7 +10,7 @@
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": false
 "sampling_mode": "conditioned_sdedit"
-"num_edition_timesteps": 10
+"num_edition_timesteps": 500
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05

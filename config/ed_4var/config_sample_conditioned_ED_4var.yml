@@ -8,7 +8,7 @@
 # Sampling parameters
 "ddim_timesteps": 10
 "plot": true
-"sampling_mode": "conditioned"
+"sampling_mode": "conditioned_input"
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
@@ -36,7 +36,7 @@ date_stop: '2021-07-02' # take dates < date_start
 "invert_norm": false
 "image_size": 256
 # "guiding_col": "ensemble_id"
-"sampling_mode": "conditioned"
+"sampling_mode": "conditioned_input"
 
 # Model parameters
 "elucidated_diffusion_sampler": true

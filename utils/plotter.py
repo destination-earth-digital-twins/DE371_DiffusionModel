@@ -16,8 +16,8 @@ def online_plot(
           clim_global=[],
           axis_title_global=''
           ):
-        print('packsample.shape', packsample.shape)
-        print('pert_sample.shape', pert_sample.shape)
+        # print('packsample.shape', packsample.shape)
+        # print('pert_sample.shape', pert_sample.shape)
         fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=3, ncols=len(var_names))
         for id, var in enumerate(var_names):
             var_id = dict_var[var]
