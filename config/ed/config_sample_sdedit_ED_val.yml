@@ -1,16 +1,16 @@
 # General parameters
 "mode": "Sample"
-"run_name": "sampling_10steps"
-"output_dir": "/project/scratch/p200177/DE_371/victorsanchez/results_diffusion/sampling_sdedit/"
+"run_name": "test_sampling_1steps"
+"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/test_sampling_sdedit/"
 "batch_size": 16
 "any_time": 1
 
 # Sampling parameters
 "n_sampling_conditioning_sets": 4
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
-"plot": false
+"plot": true
 "sampling_mode": "conditioned_sdedit"
-"num_edition_timesteps": 10
+"num_edition_timesteps": 1
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
@@ -35,7 +35,7 @@
 # leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
-"invert_norm": false
+"invert_norm": true
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file
 "stat_folder": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/stat_files_Massif_Central"
