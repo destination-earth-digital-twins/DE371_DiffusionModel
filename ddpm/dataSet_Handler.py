@@ -100,14 +100,18 @@ class ISDataset(Dataset):
         ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
 
         # Build the tensors for the sampling and the training
-        condition_tensor = self.get_conditioning_members(ensemble_df, idx)
+        condition_tensor, condition_tensor_denorm = self.get_conditioning_members(ensemble_df, idx, return_denorm=True)
 
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
-        member = row["Member"]
-
+        
+        if self.config.guiding_col is not None:
+            member = row[self.config.guiding_col]
+        else:
+            member = row["Member"]
+        
         # Using the mean and/or the var of the ensemble as additionnal conditions
         if mean_cond or var_cond:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
@@ -122,9 +126,9 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "condition_tensor_denorm" : condition_tensor_denorm,"member_id": member, "date": date, "leadtime": lt}
 
-    def get_conditioning_members(self, ensemble_df, idx):
+    def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """
             Loads the conditioning members for the training and the sampling, stacks them
             and returns the result
@@ -144,19 +148,34 @@ class ISDataset(Dataset):
         # Remove the target from the possible conditions used for training
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
 
+        if not return_denorm:
+            # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
+            if self.config.bootstrap_conditions:
+                condition = torch.stack([
+                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
+                ])
+                return condition
 
-        # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
-        if self.config.bootstrap_conditions:
-            condition = torch.stack([
-                self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
-            ])
+            condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
+            condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
             return condition
+        else :
+            # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
+            if self.config.bootstrap_conditions:
+                norm_condition = torch.stack([
+                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions,return_denorm=return_denorm)[0] for _ in range(self.n_conditioning_sets)
+                ])
+                condition = torch.stack([
+                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions,return_denorm=return_denorm)[1] for _ in range(self.n_conditioning_sets)
+                ])
+                return norm_condition, condition
 
-        condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-        return condition
+            norm_condition, condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions, return_denorm=return_denorm)
+            condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            norm_condition = norm_condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            return norm_condition, condition
     
-    def df_to_torch(self, ens_df, n_cond):
+    def df_to_torch(self, ens_df, n_cond, return_denorm=False):
         """
             sample members from the ensemble df.
             loads the members
@@ -168,12 +187,22 @@ class ISDataset(Dataset):
                 torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
         """
         selected_members = ens_df.sample(n=n_cond)['Name'].values
-        condition_tensor = torch.cat(
-            [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
-        )
-        return condition_tensor
+        if not return_denorm:
+            condition_tensor = torch.cat(
+                [self.file_to_torch(name, return_denorm=return_denorm) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
+            )
+            return condition_tensor
+        else :
+            norm_condition_tensor = torch.cat(
+                [self.file_to_torch(name, return_denorm=return_denorm)[0] for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
+            )
+            condition_tensor = torch.cat(
+                [self.file_to_torch(name, return_denorm=return_denorm)[1] for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
+            )
+                
+            return norm_condition_tensor, condition_tensor
         
-    def file_to_torch(self, file_name):
+    def file_to_torch(self, file_name, return_denorm=False):
         """
         Convert a file to a torch tensor.
         Args:
@@ -187,9 +216,12 @@ class ISDataset(Dataset):
         sample = np.float32(np.load(sample_path + ".npy"))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        sample = sample.transpose((1, 2, 0))
-        sample = self.transform(sample)
-        return sample
+        norm_sample = sample.transpose((1, 2, 0))
+        norm_sample = self.transform(norm_sample)
+        if return_denorm:
+            return norm_sample, torch.tensor(sample)
+        else :
+            return norm_sample
 
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):

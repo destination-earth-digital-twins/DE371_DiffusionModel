@@ -35,6 +35,8 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         image_size, channels = self.image_size, self.channels
         sample_fn = (
             self.p_sample_loop
+            # if not self.is_ddim_sampling
+            # else self.ddim_sample
         )
         return sample_fn(
             (batch_size, channels, *image_size),
@@ -57,7 +59,7 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
 
         # Noising condition
         t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
-        img = self.q_sample(x_start=condition, t=t)
+        img = self.q_sample(x_start=condition, t=t).to(self.device)
 
         # Denoising image
         imgs = [img]
@@ -78,9 +80,72 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
     def ddim_sample(
             self,
             shape,
-            return_all_timesteps = False
+            return_all_timesteps = False,
+            condition=None
     ):
-        raise NotImplementedError
+        """
+        Sample from conditioned diffusion using ddim sampling.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information.
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        batch, total_timesteps, sampling_timesteps, eta, objective = (
+            shape[0],
+            self.num_edition_timesteps,
+            self.sampling_timesteps,
+            self.ddim_sampling_eta,
+            self.objective,
+        )
+        # Check value for this variables
+        times = torch.linspace(
+            -1, total_timesteps - 1, steps=sampling_timesteps + 1
+        )
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:]))
+
+        # Noising condition
+        t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+        img = self.q_sample(x_start=condition, t=t).to(self.device)
+
+        imgs = [img]
+        for time, time_next in tqdm(
+            time_pairs,
+            desc="sampling loop time step",
+            leave=False,
+        ):
+            time_cond = torch.full(
+                (batch,), time, device=self.device, dtype=torch.long
+            )
+            pred_noise, x_start, *_ = self.model_predictions(
+                img,
+                time_cond,
+                condition,
+                clip_x_start=True,
+                rederive_pred_noise=True,
+            )
+            if time_next < 0:
+                img = x_start
+                imgs.append(img)
+                continue
+            alpha = self.alphas_cumprod[time]
+            alpha_next = self.alphas_cumprod[time_next]
+            sigma = (
+                eta
+                * (
+                    (1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)
+                ).sqrt()
+            )
+            c = (1 - alpha_next - sigma**2).sqrt()
+            noise = torch.randn_like(img)
+            img = x_start * alpha_next.sqrt() + c * pred_noise + sigma * noise
+            imgs.append(img)
+        ret = img if not return_all_timesteps else torch.stack(imgs, dim=1)
+        ret = self.unnormalize(ret)
+
+        return ret
     
     def p_losses(
         self,
