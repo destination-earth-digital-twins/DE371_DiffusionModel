@@ -7,7 +7,7 @@ import logging
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
-from utils.plotter import online_plot
+from utils.plotter import online_plot, online_plot_var, online_plot_mean
 from datetime import datetime
 
 
@@ -119,9 +119,11 @@ class Sampler(Ddpm_base):
 
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
+                
+                # print('date, lt, member_id', (batch["date"],batch["leadtime"],batch["member_id"]))
                 # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
                 conditioning_sets = batch['condition_tensor']
-                # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
+                # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
@@ -142,13 +144,33 @@ class Sampler(Ddpm_base):
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-                
-                if self.config.plot :
-                     online_plot(
-                          conditioning_sets[0].numpy(),#   self.transforms_func(conditioning_sets[0]).numpy(),
-                          ensemble.numpy()[:,1:,:,:],
-                          figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png')
-                     )
+                print(conditioning_sets.numpy().shape)
+                raise NotImplementedError
+                if self.config.plot:# and is_main_gpu():
+                    if not self.config.invert_norm:
+                        arome_ensemble = conditioning_sets[0].numpy()
+                    else:
+                        arome_ensemble = batch['condition_tensor_denorm'].permute(1, 0, 2, 3, 4)[0].numpy()
+                    online_plot(
+                        arome_ensemble,
+                        ensemble.numpy()[:,1:,:,:],
+                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
+                        figtitle=f'Sample comparison for members {batch["member_id"]}'
+                    )
+
+                    online_plot_mean(
+                        arome_ensemble,
+                        ensemble.numpy()[:,1:,:,:],
+                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_mean.png'),
+                        figtitle=f'Mean sample comparison for members {batch["member_id"]}'
+                    )
+
+                    online_plot_var(
+                        arome_ensemble,
+                        ensemble.numpy()[:,1:,:,:],
+                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_variance.png'),
+                        figtitle=f'Var sample comparison for members {batch["member_id"]}'
+                    )
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
 
