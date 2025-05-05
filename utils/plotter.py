@@ -121,7 +121,7 @@ def online_plot(
                 vmax = np.min([np.max(packsample[:,var_id,crop[0]:crop[1],crop[2]:crop[3]])])
                 clim = (vmin, vmax)
             else :
-                clim = clim_global
+                clim = clim_global[id]
             ax[0][id].set_title(f"{axis_title_global}{var} real")
             im = ax[0][id].imshow(packsample[mem_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]], origin="lower", cmap=colormap_var[id], clim=clim)
             fig.colorbar(im, ax=ax[0][id], shrink=0.5)

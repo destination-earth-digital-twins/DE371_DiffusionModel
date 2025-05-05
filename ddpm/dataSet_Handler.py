@@ -90,7 +90,12 @@ class ISDataset(Dataset):
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
-        sample = self.file_to_torch(file_name) # target
+        sample, sample_denorm = self.file_to_torch(file_name, return_denorm=True) # target
+        
+        if self.config.sampling_mode == 'conditioned_sdedit':
+            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            sample_denorm = sample_denorm.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+        
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
@@ -126,7 +131,7 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "condition_tensor_denorm" : condition_tensor_denorm,"member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "condition_tensor_denorm" : condition_tensor_denorm,"member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """

@@ -18,6 +18,7 @@ from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.SDEdit_gaussian_diffusion import SDEeditGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
+from ddpm.SDEdit_elucidated_diffusion import SDEditElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
@@ -153,22 +154,42 @@ def load_train_objs(config):
                 sampling_timesteps=config.ddim_timesteps,
             )
     else:
-        model = ElucidatedDiffusion(
-            umodel,
-            image_size=config.image_size,
-            channels = len(config.var_indexes),
-            num_sample_steps = config.ddim_timesteps, # number of sampling steps
-            sigma_min = config.sigma_min,      # min noise level
-            sigma_max = config.sigma_max,       # max noise level
-            sigma_data = config.sigma_data,       # standard deviation of data distribution
-            rho = config.rho,                # controls the sampling schedule
-            P_mean = config.P_mean,          # mean of log-normal distribution from which noise is drawn for training
-            P_std = config.P_std,            # standard deviation of log-normal distribution from which noise is drawn for training
-            S_churn = config.S_churn,           # parameters for stochastic sampling - depends on dataset, Table 5 in apper
-            S_tmin = config.S_tmin,
-            S_tmax = config.S_tmax,
-            S_noise = config.S_noise,
-        )
+        if not use_cond_sdedit :
+            model = ElucidatedDiffusion(
+                umodel,
+                image_size=config.image_size,
+                channels = len(config.var_indexes),
+                num_sample_steps = config.ddim_timesteps, # number of sampling steps
+                sigma_min = config.sigma_min,      # min noise level
+                sigma_max = config.sigma_max,       # max noise level
+                sigma_data = config.sigma_data,       # standard deviation of data distribution
+                rho = config.rho,                # controls the sampling schedule
+                P_mean = config.P_mean,          # mean of log-normal distribution from which noise is drawn for training
+                P_std = config.P_std,            # standard deviation of log-normal distribution from which noise is drawn for training
+                S_churn = config.S_churn,           # parameters for stochastic sampling - depends on dataset, Table 5 in apper
+                S_tmin = config.S_tmin,
+                S_tmax = config.S_tmax,
+                S_noise = config.S_noise,
+            )
+        else :
+            model = SDEditElucidatedDiffusion(
+                umodel,
+                image_size=config.image_size,
+                channels = len(config.var_indexes),
+                num_sample_steps = config.ddim_timesteps, # number of sampling steps
+                sigma_min = config.sigma_min,      # min noise level
+                sigma_max = config.sigma_max,       # max noise level
+                sigma_data = config.sigma_data,       # standard deviation of data distribution
+                rho = config.rho,                # controls the sampling schedule
+                P_mean = config.P_mean,          # mean of log-normal distribution from which noise is drawn for training
+                P_std = config.P_std,            # standard deviation of log-normal distribution from which noise is drawn for training
+                S_churn = config.S_churn,           # parameters for stochastic sampling - depends on dataset, Table 5 in apper
+                S_tmin = config.S_tmin,
+                S_tmax = config.S_tmax,
+                S_noise = config.S_noise,
+                num_edition_timesteps=config.num_edition_timesteps
+            )
+            
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )

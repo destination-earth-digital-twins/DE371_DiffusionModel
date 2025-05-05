@@ -35,8 +35,8 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         image_size, channels = self.image_size, self.channels
         sample_fn = (
             self.p_sample_loop
-            # if not self.is_ddim_sampling
-            # else self.ddim_sample
+            if not self.is_ddim_sampling
+            else self.ddim_sample
         )
         return sample_fn(
             (batch_size, channels, *image_size),
@@ -109,7 +109,8 @@ class SDEeditGaussianDiffusion(GaussianDiffusion):
         # Noising condition
         t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
         img = self.q_sample(x_start=condition, t=t).to(self.device)
-
+        
+        # Denoising image
         imgs = [img]
         for time, time_next in tqdm(
             time_pairs,
