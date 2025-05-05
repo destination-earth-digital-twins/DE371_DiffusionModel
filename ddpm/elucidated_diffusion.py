@@ -160,7 +160,6 @@ class ElucidatedDiffusion(nn.Module):
         # images is noise at the beginning
 
         init_sigma = sigmas[0]
-
         images = init_sigma * torch.randn(shape, device = self.device)
 
         # for self conditioning

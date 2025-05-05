@@ -36,4 +36,4 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/fi
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u101833/project/DE371_DiffusionModel/config/ed/config_sample_sdedit_ED_val.yml"
+    --yaml_path="/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sampling_sdedit_ddim/ed_sampling_config/config_sample_sdedit_ED_val_250.yml"
