@@ -285,7 +285,7 @@ class Unet(Module):
         n_conditions = 1,
         var_cond = False,
         mean_cond = False,
-        embedding_cond_dims = None,
+        n_labels_embeded_cond = None,
         learned_variance = False,
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
@@ -335,13 +335,14 @@ class Unet(Module):
         )
 
         ################## Embedded condition
-        if embedding_cond_dims is not None:
+        if n_labels_embeded_cond is not None:
             self.emb_mlp = nn.Sequential(
-                sinu_pos_emb,
+                SinusoidalPosEmb(dim, theta = n_labels_embeded_cond),
                 nn.Linear(fourier_dim, time_dim),
                 nn.GELU(),
                 nn.Linear(time_dim, time_dim)
             )
+            # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
     
         # attention
 
@@ -420,7 +421,10 @@ class Unet(Module):
         ################## Embedded condition
         if embedded_cond is not None:
             cond_embedding = self.emb_mlp(embedded_cond)
+            # print("cond max = ", torch.max(cond_embedding))
+            # print("t max = ", torch.max(t))
             t = t + cond_embedding
+            # t = self.time_and_cond_proj(torch.cat([t, cond_embedding], dim=-1))
 
         h = []
 
