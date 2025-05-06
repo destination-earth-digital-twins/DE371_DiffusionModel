@@ -60,7 +60,6 @@ class ISDataset(Dataset):
         self.transform = transforms.Compose(
 
             [
-                #ToTensor4D(), #if working with 4D tensors
                 transforms.ToTensor(),
                 SpecialNormalize(self.config),
             ]
@@ -91,49 +90,43 @@ class ISDataset(Dataset):
         Returns:
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
-        file_name = self.labels.iloc[idx, 0]# Name of the current sample in the dataset
-        #lead_time = file_name.split("_")[3] # to use if using 4D tensors   
-        sample = self.file_to_torch(file_name) # target #add argument "lead time" if working with 4D tensors
+        file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
+        sample = self.file_to_torch(file_name) # target
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
 
-        
-        if len(sample.shape) == 3 :
-        # Build the tensors for the sampling and the training
-                # Get the ensemble df
-            ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the current member
-            ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
-            condition_tensor = self.get_conditioning_members_3D(ensemble_df, idx)
-            # Get the date, lt, and member id of the current member
-            row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": ""}
-            date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
-            lt = row["LeadTime"]
-            # Using the mean and/or the var of the ensemble as additionnal conditions
-            if mean_cond or var_cond:
-                mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
-                if self.config.n_var == 3:
-                    mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
-                if mean_cond:
-                    mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-                    condition_tensor = torch.cat([condition_tensor, mean], dim=1)
-                if var_cond:
-                    var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-                    condition_tensor = torch.cat([condition_tensor, var], dim=1)
-        else: 
-            if len(sample.shape) != 4 :
-                raise ValueError(f"shape of sample must be 3 dims or 4 dims, and got here {len(sample.shape)} dims")
-            conditions_list = self.get_conditioning_members_4D(sample,idx)
-            
-        
+        # Get the ensemble df
+        ensemble_id = self.labels.at[idx, self.config.guiding_col] # Get the ensemble id of the current member
+        ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
 
-        
+        # Build the tensors for the sampling and the training
+        condition_tensor = self.get_conditioning_members(ensemble_df, idx)
+
+        # Get the date, lt, and member id of the current member
+        row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
+        lt = row["LeadTime"]
+        member = row["Member"]
+
+        # Using the mean and/or the var of the ensemble as additionnal conditions
+        if mean_cond or var_cond:
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+            if self.config.n_var == 3:
+                mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
+            if mean_cond:
+                mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
+            if var_cond:
+                var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
 
-    def get_conditioning_members_3D(self, ensemble_df, idx):
+
+    def get_conditioning_members(self, ensemble_df, idx):
         """
             Loads the conditioning members for the training and the sampling, stacks them
             and returns the result
@@ -180,6 +173,7 @@ class ISDataset(Dataset):
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
+        
 #####################NOT FINISHED#####################
 #To use to work with 4D tensors    
     def subsample_concat(self, sample, n_cond):

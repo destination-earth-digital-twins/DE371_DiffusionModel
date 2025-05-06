@@ -95,7 +95,7 @@ class Sampler(Ddpm_base):
                       disable= not is_main_gpu()) as pbar:
                 b = 0
                 while b < self.config.n_sample:
-                    batch_size = min(self.config.n_sample - b, self.config.batch_size)
+                    batch_size = min(self.config.n_sample - b, self.config.batch_size) ##mettre un chrono time.time 
                     samples = super()._sample_batch(nb_img=batch_size)
                     for s in samples:
                         # Append the empty rr channel if only u v t2m

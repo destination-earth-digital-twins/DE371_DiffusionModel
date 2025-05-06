@@ -105,7 +105,7 @@ class SpecialNormalize(object):
 
             sample = (sample - self.offset) / self.scale
             sample = torch.nan_to_num(sample,nan = 9999.)
-       
+
             return sample
 
     def denorm(self, sample):

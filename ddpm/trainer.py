@@ -9,7 +9,7 @@ import wandb
 from torch import distributed as dist
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+import matplotlib.pyplot as plt
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu, synchronize
 import mlflow
@@ -93,16 +93,17 @@ class Trainer(Ddpm_base):
         
         if validation:
             with torch.no_grad():
-                loss = self.model(**batch)
+                loss, denoised, masked_losses = self.model(**batch)
         else:
             self.optimizer.zero_grad()
-            loss = self.model(**batch)
+            loss, denoised, masked_losses = self.model(**batch)
+
             loss.backward()
             self.optimizer.step()
         
         loss = loss.detach().cpu()
         
-        return loss
+        return loss, denoised, masked_losses
 
     def _run_epoch(self, epoch):
         """
@@ -114,6 +115,7 @@ class Trainer(Ddpm_base):
         """
 
         iters = len(self.dataloader)
+        current_iter = 0
         if dist.is_initialized():
             self.dataloader.sampler.set_epoch(epoch)
         total_loss = 0
@@ -128,12 +130,12 @@ class Trainer(Ddpm_base):
             disable=not is_main_gpu(),
         )
         for i, batch in loop:
-
+            current_iter +=1
             needs_keys = ["img"] + (
                 ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            loss = self._run_batch(batch_prep)
+            loss, denoised, loss_map = self._run_batch(batch_prep)
             total_loss += loss
 
             if is_main_gpu():
@@ -152,7 +154,112 @@ class Trainer(Ddpm_base):
 
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
+######################################################################################################################################
+            #plot de la loss map
+            #plot la loss sur une ligne toutes les 100 epochs
+            #plot la sortie du modèle (denoised) toutes les 100 epochs
+            
+            if current_iter % 100 == 0: 
+                
+                den = denoised.squeeze(0)
+                ###########
+                ########### print de l'image en input en map
+                ###########
+                
+                fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+                axes = axes.flatten()
 
+                # Plot des deux premiers canaux en haut
+                for i in range(2):
+                    ax = axes[i]
+                    im = ax.imshow(den[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
+                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                    ax.set_title(f"Channel {i}", fontsize=12)
+                    ax.axis("off")
+
+                # Plot du 3ᵉ canal en bas à gauche
+                ax = axes[2]
+                im = ax.imshow(den[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title("t2m", fontsize=12)
+                ax.axis("off")
+
+                # Case vide en bas à droite
+                axes[3].axis("off")
+
+                plt.tight_layout()
+                plt.savefig("idenoised_image.png", dpi=300)
+                plt.close()
+        
+                
+                
+                
+                
+                
+                
+                
+                l = loss_map.squeeze(0)
+        
+                ##########
+                ########## print de la loss map
+                ##########
+            
+                fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+                axes = axes.flatten()
+
+                # Plot des deux premiers canaux en haut
+                for i in range(2):
+                    ax = axes[i]
+                    im = ax.imshow(l[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
+                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                    ax.set_title(f"Channel {i}", fontsize=12)
+                    ax.axis("off")
+
+                # Plot du 3ᵉ canal en bas à gauche
+                ax = axes[2]
+                im = ax.imshow(l[2].detach().cpu().numpy(), cmap='viridis', origin='lower')
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title("t2m", fontsize=12)
+                ax.axis("off")
+
+                # Case vide en bas à droite
+                axes[3].axis("off")
+
+                plt.tight_layout()
+                plt.savefig("lossmaps.png", dpi=300)
+                plt.close()
+
+                ##########
+                ########## 
+                ##########
+                
+                
+                #loss plot
+                x = np.arange(0, loss_map.shape[3])  # abscisses communes
+        
+                fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+                axes = axes.flatten()
+
+                for i in range(3):
+                    ax = axes[i]
+                    y = loss_map[0, i, 300, :].detach().cpu().numpy()
+                    ax.plot(x, y, lw=0.5)
+                    ax.set_title(f"Channel {i} @ ligne 300", fontsize=10)
+                    ax.set_xlabel("Colonne")
+                    ax.set_ylabel("Valeur")
+                    ax.grid(True)
+
+                # masquer la 4ᵉ sous-figure
+                axes[3].axis("off")
+
+                plt.tight_layout()
+                plt.savefig("loss_ligne.png", dpi=300)
+                plt.close()
+
+                
+                #ouput of the model
+                
+                
         self.logger.debug(
             f"Epoch {epoch} | Batchsize: {self.config.batch_size} | Steps: {len(self.dataloader) * epoch} | "
             f"Last loss: {total_loss / len(self.dataloader)} | "
@@ -408,7 +515,7 @@ class Trainer(Ddpm_base):
             )
             np.save(save_path, img.cpu())
         if self.config.plot:
-            self.plot_grid(f"samples_grid_{ep}.jpg", samples.cpu())
+            self.plot_grid(f"/home/users/u102751/code/perso/experiments/plots/samples_grid_{ep}.jpg", samples.cpu())
         self.logger.info(
             f"Sampling done. Images saved in {os.path.join(self.config.output_dir, self.config.run_name, 'samples')}"
         )
