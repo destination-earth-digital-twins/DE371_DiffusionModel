@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu, synchronize
 import mlflow
-
+from utils import plotter_inconditionnal
 
 class Trainer(Ddpm_base):
 
@@ -154,110 +154,11 @@ class Trainer(Ddpm_base):
 
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
-######################################################################################################################################
-            #plot de la loss map
-            #plot la loss sur une ligne toutes les 100 epochs
-            #plot la sortie du modèle (denoised) toutes les 100 epochs
-            
+
             if current_iter % 100 == 0: 
-                
-                den = denoised.squeeze(0)
-                ###########
-                ########### print de l'image en input en map
-                ###########
-                
-                fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-                axes = axes.flatten()
-
-                # Plot des deux premiers canaux en haut
-                for i in range(2):
-                    ax = axes[i]
-                    im = ax.imshow(den[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                    ax.set_title(f"Channel {i}", fontsize=12)
-                    ax.axis("off")
-
-                # Plot du 3ᵉ canal en bas à gauche
-                ax = axes[2]
-                im = ax.imshow(den[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                ax.set_title("t2m", fontsize=12)
-                ax.axis("off")
-
-                # Case vide en bas à droite
-                axes[3].axis("off")
-
-                plt.tight_layout()
-                plt.savefig("idenoised_image.png", dpi=300)
-                plt.close()
-        
-                
-                
-                
-                
-                
-                
-                
-                l = loss_map.squeeze(0)
-        
-                ##########
-                ########## print de la loss map
-                ##########
-            
-                fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-                axes = axes.flatten()
-
-                # Plot des deux premiers canaux en haut
-                for i in range(2):
-                    ax = axes[i]
-                    im = ax.imshow(l[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                    ax.set_title(f"Channel {i}", fontsize=12)
-                    ax.axis("off")
-
-                # Plot du 3ᵉ canal en bas à gauche
-                ax = axes[2]
-                im = ax.imshow(l[2].detach().cpu().numpy(), cmap='viridis', origin='lower')
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                ax.set_title("t2m", fontsize=12)
-                ax.axis("off")
-
-                # Case vide en bas à droite
-                axes[3].axis("off")
-
-                plt.tight_layout()
-                plt.savefig("lossmaps.png", dpi=300)
-                plt.close()
-
-                ##########
-                ########## 
-                ##########
-                
-                
-                #loss plot
-                x = np.arange(0, loss_map.shape[3])  # abscisses communes
-        
-                fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-                axes = axes.flatten()
-
-                for i in range(3):
-                    ax = axes[i]
-                    y = loss_map[0, i, 300, :].detach().cpu().numpy()
-                    ax.plot(x, y, lw=0.5)
-                    ax.set_title(f"Channel {i} @ ligne 300", fontsize=10)
-                    ax.set_xlabel("Colonne")
-                    ax.set_ylabel("Valeur")
-                    ax.grid(True)
-
-                # masquer la 4ᵉ sous-figure
-                axes[3].axis("off")
-
-                plt.tight_layout()
-                plt.savefig("loss_ligne.png", dpi=300)
-                plt.close()
-
-                
-                #ouput of the model
+                plotter_inconditionnal.plotter3D_3var(denoised,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/mode_output.png')
+                plotter_inconditionnal.plotter3D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/loss_maps.png')
+                plotter_inconditionnal.plotter2D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/loss_lat.png',300)
                 
                 
         self.logger.debug(
