@@ -155,10 +155,10 @@ class Trainer(Ddpm_base):
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
 
-            if current_iter % 100 == 0: 
-                plotter_inconditionnal.plotter3D_3var(denoised,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/mode_output.png')
-                plotter_inconditionnal.plotter3D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/loss_maps.png')
-                plotter_inconditionnal.plotter2D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/plots_with_mean_mask/loss_lat.png',300)
+            if current_iter % 500 == 0: 
+                plotter_inconditionnal.plotter3D_3var(denoised,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/mode_output.png')
+                plotter_inconditionnal.plotter3D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/loss_maps.png')
+                plotter_inconditionnal.plotter2D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/loss_lat.png',300)
                 
                 
         self.logger.debug(
@@ -207,7 +207,7 @@ class Trainer(Ddpm_base):
                     ["condition_tensor"] if self.guided_diffusion else []
                 )
                 batch_prep = self._prepare_batch(batch, needs_keys)
-                loss = self._run_batch(batch_prep, validation=True)
+                loss, _, _ = self._run_batch(batch_prep, validation=True)
                 total_val_loss += loss
 
                 if is_main_gpu():

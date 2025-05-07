@@ -8,6 +8,7 @@ from tqdm import tqdm
 from einops import rearrange, repeat, reduce
 from utils import plotter_inconditionnal
 import os
+from utils import mirror_fill, plotter_inconditionnal
 # helpers
 
 def exists(val):
@@ -261,65 +262,31 @@ class ElucidatedDiffusion(nn.Module):
         
         mask = (torch.abs(img) < 1000)
         
-        #mean computation 
-        means = []
-        img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
-        for i in range(3):
-            mean = torch.nanmean(img_masked[i,:,:])
-            means.append(mean)
+        img_filled  = mirror_fill.mirror_fill(img,mask)
+        
+        #plotter_inconditionnal.plotter3D_3var(img_filled,'/home/users/u102751/code/DE371_DiffusionModel/mirror.png')
+        
+        # #mean computation 
+        # means = []
+        # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
+        # for i in range(3):
+        #     mean = torch.nanmean(img_masked[i,:,:])
+        #     means.append(mean)
     
-        means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
+        # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
 
-        img = torch.where(mask == True,img,means_tensor)    
+        # img = torch.where(mask == True,img,means_tensor)    
         
-        img = normalize_to_neg_one_to_one(img)
+        # img = normalize_to_neg_one_to_one(img)
 
-        lili = img.squeeze(0)
-        ############
-        ############ print de l'image en input en map
-        ############
-        
-        # fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        # axes = axes.flatten()
+        # sigmas = self.noise_distribution(batch_size)
+        # padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        # # Plot des deux premiers canaux en haut
-        # for i in range(2):
-        #     ax = axes[i]
-        #     im = ax.imshow(lili[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        #     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        #     ax.set_title(f"Channel {i}", fontsize=12)
-        #     ax.axis("off")
+        # noise = torch.randn_like(img)
+        # noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
 
-        # # Plot du 3ᵉ canal en bas à gauche
-        # ax = axes[2]
-        # im = ax.imshow(lili[2].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        # plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        # ax.set_title("t2m", fontsize=12)
-        # ax.axis("off")
+        #plotter_inconditionnal.plotter3D_3var(img, "/home/users/u102751/code/img_mean.png")
 
-        # # Case vide en bas à droite
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("image_input_mean_mask.png", dpi=300)
-        # plt.close()
-
-        ############
-        ############ 
-        ############
-
-
-        
-        sigmas = self.noise_distribution(batch_size)
-        padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-
-        noise = torch.randn_like(img)
-        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-
-        # masked_noise = noise.masked_fill(~mask,float("nan"))
-
-        # masked_noised_images = masked_img + padded_sigmas * masked_noise  # alphas are 1. in the paper
-        # #on ajoute la masked img ou on a remplacé les 9999 par la moyenne, pour éviter d'avoir de trop graneds loss
         
 ####################################################################################
 ####################################################################################
@@ -333,179 +300,8 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond = kwargs.get('condition_tensor')
                 self_cond.detach_()
                 
-        # if self.self_condition and random() < 0.5:
-        #     # from hinton's group's bit diffusion paper
-        #     with torch.no_grad():
-        #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
-        #         self_cond.detach_()
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
         masked_denoised = denoised.masked_fill(~mask,float("nan"))
-        
-        # den = masked_denoised.squeeze(0)
-        # ###########
-        # ########### print de l'image en input en map
-        # ###########
-        
-        # fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        # axes = axes.flatten()
-
-        # # Plot des deux premiers canaux en haut
-        # for i in range(2):
-        #     ax = axes[i]
-        #     im = ax.imshow(den[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        #     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        #     ax.set_title(f"Channel {i}", fontsize=12)
-        #     ax.axis("off")
-
-        # # Plot du 3ᵉ canal en bas à gauche
-        # ax = axes[2]
-        # im = ax.imshow(den[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
-        # plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        # ax.set_title("t2m", fontsize=12)
-        # ax.axis("off")
-
-        # # Case vide en bas à droite
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("idenoised_image.png", dpi=300)
-        # plt.close()
-        
-        ###########
-        ########### print de l'image après la transfo sur une ligne pour vérifier
-        ###########
-        
-        # x = np.arange(0, img.shape[3])  # abscisses communes
-
-        # fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        # axes = axes.flatten()
-
-        # for i in range(3):
-        #     ax = axes[i]
-        #     y = img[0, i, 300, :].detach().cpu().numpy()
-        #     ax.plot(x, y, lw=0.5)
-        #     ax.set_title(f"Channel {i} @ ligne 300", fontsize=10)
-        #     ax.set_xlabel("Colonne")
-        #     ax.set_ylabel("Valeur")
-        #     ax.grid(True)
-
-        # masquer la 4ᵉ sous-figure
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("ligne_image_apres_transfo.png", dpi=300)
-        # plt.close()
-        
-        ###########
-        ###########
-        ###########
-        
-        
-        #l = losses.squeeze(0)
-        
-        ###########
-        ########### print de la loss map
-        ###########
-    
-        # fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        # axes = axes.flatten()
-
-        # # Plot des deux premiers canaux en haut
-        # for i in range(2):
-        #     ax = axes[i]
-        #     im = ax.imshow(l[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        #     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        #     ax.set_title(f"Channel {i}", fontsize=12)
-        #     ax.axis("off")
-
-        # # Plot du 3ᵉ canal en bas à gauche
-        # ax = axes[2]
-        # im = ax.imshow(l[2].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        # plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        # ax.set_title("t2m", fontsize=12)
-        # ax.axis("off")
-
-        # # Case vide en bas à droite
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("lossmaps.png", dpi=300)
-        # plt.close()
-
-        ###########
-        ########### 
-        ###########
-        
-        #losses = losses.masked_fill(~mask,float("nan"))
-                
-        ###########
-        ########### print de la loss sur une ligne
-        ###########
-
-        # x = np.arange(0, losses.shape[3])  # abscisses communes
-
-        
-        
-        # fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        # axes = axes.flatten()
-
-        # for i in range(3):
-        #     ax = axes[i]
-        #     y = losses[0, i, 300, :].detach().cpu().numpy()
-        #     ax.plot(x, y, lw=0.5)
-        #     ax.set_title(f"Channel {i} @ ligne 300", fontsize=10)
-        #     ax.set_xlabel("Colonne")
-        #     ax.set_ylabel("Valeur")
-        #     ax.grid(True)
-
-        # # masquer la 4ᵉ sous-figure
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("loss_ligne.png", dpi=300)
-        # plt.close()
-
-        ###########
-        ########### 
-        ###########
-        
-        
-      
-
-       
-        ###########
-        ########### print de la loss sur une ligne
-        ###########
-        
-        # fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        # axes = axes.flatten()
-        
-        # # Plot des deux premiers canaux en haut
-        # for i in range(2):
-        #     ax = axes[i]
-        #     im = ax.imshow(ps[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        #     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        #     ax.set_title(f"Channel {i}", fontsize=12)
-        #     ax.axis("off")
-
-        # # Plot du 3ᵉ canal en bas à gauche
-        # ax = axes[2]
-        # im = ax.imshow(ps[2].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        # plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        # ax.set_title("t2m", fontsize=12)
-        # ax.axis("off")
-
-        # # Case vide en bas à droite
-        # axes[3].axis("off")
-
-        # plt.tight_layout()
-        # plt.savefig("loss_per_sample.png", dpi=300)
-        # plt.close()
-        
-        ###########
-        ########### 
-        ########### 
-        
 
         losses = F.mse_loss(denoised, img, reduction = 'none')
 
