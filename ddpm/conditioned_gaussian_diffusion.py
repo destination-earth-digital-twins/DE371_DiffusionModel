@@ -136,7 +136,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         t,
         noise=None,
         offset_noise_strength=None,
-        condition=None,
+        condition_tensor=None
     ):
         """
         Calculate pixel-wise loss for conditioned diffusion.
@@ -162,7 +162,8 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
             )
 
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
-        x_self_cond = condition
+        x_self_cond = condition_tensor
+        # print("######### x_self_cond ",x_self_cond.shape)
 
         model_out = self.model(x, t, x_self_cond)
 
