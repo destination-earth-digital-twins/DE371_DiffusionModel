@@ -163,7 +163,6 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
 
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
         x_self_cond = condition_tensor
-        # print("######### x_self_cond ",x_self_cond.shape)
 
         model_out = self.model(x, t, x_self_cond)
 
