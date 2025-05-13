@@ -425,6 +425,10 @@ class Unet(Module):
             # print("t max = ", torch.max(t))
             t = t + cond_embedding
             # t = self.time_and_cond_proj(torch.cat([t, cond_embedding], dim=-1))
+            # t = t / 2
+
+        # print("################### ", torch.std(t))
+        # raise Exception("-------------EXIT-------------")    
 
         h = []
 
