@@ -9,6 +9,11 @@ from einops import rearrange, repeat, reduce
 from utils import plotter_inconditionnal
 import os
 from utils import mirror_fill, plotter_inconditionnal
+import time
+from torch.utils.checkpoint import checkpoint_sequential
+
+
+rank = int(os.environ.get("LOCAL_RANK",0))
 # helpers
 
 def exists(val):
@@ -262,30 +267,29 @@ class ElucidatedDiffusion(nn.Module):
         
         mask = (torch.abs(img) < 1000)
         
-        img_filled  = mirror_fill.mirror_fill(img,mask)
-        
-        #plotter_inconditionnal.plotter3D_3var(img_filled,'/home/users/u102751/code/DE371_DiffusionModel/mirror.png')
-        
-        # #mean computation 
-        # means = []
-        # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
-        # for i in range(3):
-        #     mean = torch.nanmean(img_masked[i,:,:])
-        #     means.append(mean)
+        # img_filled  = mirror_fill.mirror_fill(img,mask)
+        # img_filled = img.masked_fill(~mask,0.0)
+     
+        #mean computation 
+        means = []
+        img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
+        for i in range(3):
+            mean = torch.nanmean(img_masked[i,:,:])
+            means.append(mean)
     
-        # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
+        means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
 
-        # img = torch.where(mask == True,img,means_tensor)    
+        img_filled = torch.where(mask == True,img,means_tensor)    
+                        
+        img = normalize_to_neg_one_to_one(img_filled)
         
-        # img = normalize_to_neg_one_to_one(img)
+        # img = normalize_to_neg_one_to_one(img_filled)
+        sigmas = self.noise_distribution(batch_size)
+        padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        # sigmas = self.noise_distribution(batch_size)
-        # padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+        noise = torch.randn_like(img)
+        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
 
-        # noise = torch.randn_like(img)
-        # noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-
-        #plotter_inconditionnal.plotter3D_3var(img, "/home/users/u102751/code/img_mean.png")
 
         
 ####################################################################################
@@ -301,6 +305,7 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond.detach_()
                 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+
         masked_denoised = denoised.masked_fill(~mask,float("nan"))
 
         losses = F.mse_loss(denoised, img, reduction = 'none')
@@ -312,5 +317,5 @@ class ElucidatedDiffusion(nn.Module):
         loss = torch.mean(masked_per_sample)
 
         loss = loss * self.loss_weight(sigmas)
-    
+
         return torch.nanmean(loss), masked_denoised, masked_losses

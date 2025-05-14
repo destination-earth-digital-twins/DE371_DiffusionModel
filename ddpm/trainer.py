@@ -2,7 +2,7 @@ import csv
 import os
 import time
 from pathlib import Path
-
+import time
 import numpy as np
 import torch
 import wandb
@@ -14,6 +14,11 @@ from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu, synchronize
 import mlflow
 from utils import plotter_inconditionnal
+from torch.profiler import profile, record_function, ProfilerActivity
+import torch.amp
+
+
+
 
 class Trainer(Ddpm_base):
 
@@ -41,7 +46,7 @@ class Trainer(Ddpm_base):
         self.optimizer = optimizer
         self.best_loss = float("inf")
         self.guided_diffusion = self.config.guiding_col is not None
-
+        #model = torch.compile(model,mode="reduce-overhead")
         if self.config.scheduler == "ReduceLROnPlateau":
             self.scheduler = ReduceLROnPlateau(
                 optimizer, mode="min", factor=0.1, patience=5, verbose=True
@@ -90,19 +95,67 @@ class Trainer(Ddpm_base):
         Returns:
             float: Loss value for the batch.
         """
-        
+        rank = int(os.environ.get("LOCAL_RANK",0))
         if validation:
             with torch.no_grad():
                 loss, denoised, masked_losses = self.model(**batch)
         else:
             self.optimizer.zero_grad()
-            loss, denoised, masked_losses = self.model(**batch)
+            # with profile(
+            #     activities = [ProfilerActivity.CPU,ProfilerActivity.CUDA],
+            #     record_shapes = True
+            # ) as prof:
+            #     with record_function("forward"):
+            #         loss, denoised, masked_losses = self.model(**batch)
+            #     with record_function("backward"):
+            #         loss.backward()
+        
+            # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+            
+            with torch.autocast(device_type='cuda'):
+                # start_compute_loss = time.perf_counter()
+                # torch.cuda.synchronize()
+                loss, denoised, masked_losses = self.model(**batch)
+                # torch.cuda.synchronize()
+                # elapsed_loss = time.perf_counter() - start_compute_loss
+                # if rank == 0:
+                #     print("time to compute loss, running trough model", elapsed_loss)
+            
 
-            loss.backward()
-            self.optimizer.step()
+                # start_grad = time.perf_counter()
+                # torch.cuda.synchronize()
+                loss.backward()
+                # torch.cuda.synchronize()
+                # elapsed_loss = time.perf_counter() - start_grad
+                
+                # if rank == 0:
+                        
+                #     print("time for computing gradients ", elapsed_loss)
+            
+            
+            # start_compute_loss = time.perf_counter()
+            # torch.cuda.synchronize()
+            # loss, denoised, masked_losses = self.model(**batch)
+            # torch.cuda.synchronize()
+            # elapsed_loss = time.perf_counter() - start_compute_loss
+            # if rank == 0:
+            #     print("time to compute loss, running trough model", elapsed_loss)
         
+
+            # start_grad = time.perf_counter()
+            # torch.cuda.synchronize()
+            # loss.backward()
+            # torch.cuda.synchronize()
+            # elapsed_loss = time.perf_counter() - start_grad
+            
+            # if rank == 0:
+                    
+            #     print("time for computing gradients ", elapsed_loss)  
+                      
+                self.optimizer.step()
+
         loss = loss.detach().cpu()
-        
+
         return loss, denoised, masked_losses
 
     def _run_epoch(self, epoch):
@@ -155,10 +208,11 @@ class Trainer(Ddpm_base):
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
 
-            if current_iter % 500 == 0: 
-                plotter_inconditionnal.plotter3D_3var(denoised,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/mode_output.png')
-                plotter_inconditionnal.plotter3D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/loss_maps.png')
-                plotter_inconditionnal.plotter2D_3var(loss_map,'/project/home/p200177/DE_371/avritj/models/run_with_mirror_outside_AROME/plots_during_training/loss_lat.png',300)
+            if current_iter % 5000 == 0: 
+                path_dir_output = "/project/home/p200177/DE_371/avritj/models/" + self.config.run_name
+                plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + "/mode_output.png")
+                plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + '/loss_maps.png')
+                plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + '/loss_lat.png',300)
                 
                 
         self.logger.debug(

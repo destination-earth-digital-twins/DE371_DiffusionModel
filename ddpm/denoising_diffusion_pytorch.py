@@ -399,10 +399,9 @@ class Unet(Module):
 
     def forward(self, x, time, x_self_cond = None):
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
-
         if self.self_condition:
-            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
-            x = torch.cat((x_self_cond, x), dim = 1)
+                x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
+                x = torch.cat((x_self_cond, x), dim = 1)                
 
         x = self.init_conv(x)
         r = x.clone()
@@ -438,7 +437,9 @@ class Unet(Module):
         x = torch.cat((x, r), dim = 1)
 
         x = self.final_res_block(x, t)
+        
         return self.final_conv(x)
+
 
 # gaussian diffusion trainer class
 

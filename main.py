@@ -7,8 +7,10 @@ import sys
 import time
 import warnings
 from multiprocessing import cpu_count
-
+import cProfile
+import pstats
 import torch
+
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
@@ -149,6 +151,10 @@ def load_train_objs(config):
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )
+    # model_cpu = model.to("cpu")
+    # model_cpu.compile(mode='', fullgraph = False,dynamic=True)
+    # model = model_cpu.to("cuda")
+    model.compile(fullgraph=False)
     return model, optimizer
 
 

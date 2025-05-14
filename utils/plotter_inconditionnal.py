@@ -13,10 +13,11 @@ def plotter3D_3var(img,save_path):
     
     if len(img.shape)!=3 and len(img.shape)!=4:
         raise ValueError(f"Length of img.shape must be 3 or 4 and is{len(img.shape)}")
-    
+
     if len(img.shape) == 4:
         img_copy = img.squeeze(0)
-       
+    elif len(img.shape) ==3:
+        img_copy = img   
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
     axes = axes.flatten()
 

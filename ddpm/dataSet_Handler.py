@@ -13,6 +13,7 @@ DataSet:DataLoader classes for test samples
 import os
 import re
 
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -26,6 +27,9 @@ from torch.utils.data import Dataset, Sampler
 import torch.distributed as dist
 
 ################
+
+rank = int(os.environ.get("LOCAL_RANK",0))
+
 class ISDataset(Dataset):
     def __init__(self, config, path, csv_file):
         """
@@ -256,6 +260,7 @@ class ISDataset(Dataset):
         sample_path = os.path.join(self.data_dir, file_name)
 
         sample = np.float32(np.load(sample_path))
+       
         date = file_name.split('_')[0]
         
         if self.config.data_processed:#datas have already been processed to have shape (nvar,h,w,m) 

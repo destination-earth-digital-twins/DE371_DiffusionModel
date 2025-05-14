@@ -37,7 +37,7 @@ class SpecialNormalize(object):
         # the transformation involves data <- 0.95 * (data - offset) / scale and is broadcasted to all selected variables
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
         scale = np.load(os.path.join(self.config.stat_folder,self.config.scale_file))[self.config.VI].astype(np.float32)
-        
+        print("la scale est scale",scale)
         
         self.offset = torch.from_numpy(offset).view(-1, 1, 1)
         self.scale = (1.0 / 0.95) * torch.from_numpy(scale).view(-1, 1, 1)
