@@ -101,18 +101,33 @@ class ISDataset(Dataset):
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
-
+        
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
         member = row["Member"]
 
-        # Using the mean and/or the var of the ensemble as additionnal conditions
-        if mean_cond or var_cond:
+        # Optional configs based on the ensemble mean and variance
+        if self.config.predict_residue and not self.config.learn_residue:
+            raise Exception(
+                f"The model must learn from the residue of the conditioning members to predict the residue"
+            )
+        ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
+        if mean_cond or var_cond or self.config.learn_residue:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
+            # Learn and predict the residue of the members (members - ensemble mean) instead of the members
+            if self.config.learn_residue:
+                ensemble_mean_tensor = mean_var_file[0]
+                batched_ensemble_mean_tensor = ensemble_mean_tensor.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1).repeat(1, self.config.n_conditions, 1, 1)
+                condition_tensor = torch.sub(condition_tensor, batched_ensemble_mean_tensor)
+                if self.config.predict_residue:
+                    sample = torch.sub(sample, ensemble_mean_tensor)
+                
+
+            # Using the mean and/or the var of the ensemble as additionnal conditions
             if mean_cond:
                 mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, mean], dim=1)
@@ -122,7 +137,7 @@ class ISDataset(Dataset):
 
 
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx):
         """
