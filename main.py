@@ -154,7 +154,7 @@ def load_train_objs(config):
     # model_cpu = model.to("cpu")
     # model_cpu.compile(mode='', fullgraph = False,dynamic=True)
     # model = model_cpu.to("cuda")
-    model.compile(fullgraph=False)
+    #model.compile(fullgraph=False)
     return model, optimizer
 
 

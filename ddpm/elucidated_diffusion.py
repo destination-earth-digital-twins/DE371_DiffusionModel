@@ -266,21 +266,21 @@ class ElucidatedDiffusion(nn.Module):
         
         
         mask = (torch.abs(img) < 1000)
-        
+
         # img_filled  = mirror_fill.mirror_fill(img,mask)
-        # img_filled = img.masked_fill(~mask,0.0)
+        img_filled = img.masked_fill(~mask,0.0)
      
         #mean computation 
-        means = []
-        img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
-        for i in range(3):
-            mean = torch.nanmean(img_masked[i,:,:])
-            means.append(mean)
+        # means = []
+        # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
+        # for i in range(3):
+        #     mean = torch.nanmean(img_masked[i,:,:])
+        #     means.append(mean)
     
-        means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
+        # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
 
-        img_filled = torch.where(mask == True,img,means_tensor)    
-                        
+        # img_filled = torch.where(mask == True,img,means_tensor)    
+           
         img = normalize_to_neg_one_to_one(img_filled)
         
         # img = normalize_to_neg_one_to_one(img_filled)
@@ -305,17 +305,20 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond.detach_()
                 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-
-        masked_denoised = denoised.masked_fill(~mask,float("nan"))
-
-        losses = F.mse_loss(denoised, img, reduction = 'none')
-
-        masked_losses = losses.masked_fill(~mask,float("nan"))
+        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=200.png",200)
+        plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
+        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=600.png",600)
+        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=800.png",700)
+        #denoised = denoised.masked_fill(~mask,0.)
         
-        masked_per_sample = torch.nanmean(masked_losses,dim=[1,2,3])   
+        masked_denoised = denoised.masked_fill(~mask,0.)
+        masked_img = img.masked_fill(~mask,0.)
         
-        loss = torch.mean(masked_per_sample)
+        
+        losses = F.mse_loss(masked_denoised, masked_img, reduction = 'none')
 
-        loss = loss * self.loss_weight(sigmas)
+        losses = reduce(losses, 'b ... -> b', 'mean')
 
-        return torch.nanmean(loss), masked_denoised, masked_losses
+        losses = losses * self.loss_weight(sigmas)
+        masked_losses = losses.masked_fill(~mask,0.)
+        return losses.mean(), denoised, masked_losses

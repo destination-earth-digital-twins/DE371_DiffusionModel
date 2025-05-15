@@ -1,6 +1,6 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_mean_AMP_compile_default"
+"run_name": "run_test"
 "output_dir": "/project/home/p200177/DE_371/avritj/models"
 "batch_size": 1
 "any_time": 5
