@@ -10,7 +10,6 @@ from utils import plotter_inconditionnal
 import os
 from utils import mirror_fill, plotter_inconditionnal
 import time
-from torch.utils.checkpoint import checkpoint_sequential
 
 
 rank = int(os.environ.get("LOCAL_RANK",0))
@@ -267,7 +266,7 @@ class ElucidatedDiffusion(nn.Module):
         
         mask = (torch.abs(img) < 1000)
 
-        # img_filled  = mirror_fill.mirror_fill(img,mask)
+        #img_filled  = mirror_fill.mirror_fill(img,mask)
         img_filled = img.masked_fill(~mask,0.0)
      
         #mean computation 
@@ -305,17 +304,17 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond.detach_()
                 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=200.png",200)
-        plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
+        # plotter_inconditionnal.plotter3D_3var(img,"/home/users/u102751/code/perso/img/img")
+        # plotter_inconditionnal.plotter2D_3var(img,"/home/users/u102751/code/perso/img/imglat=400.png",400)
+        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=600.png",600)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=800.png",700)
         #denoised = denoised.masked_fill(~mask,0.)
         
-        masked_denoised = denoised.masked_fill(~mask,0.)
-        masked_img = img.masked_fill(~mask,0.)
+        # masked_denoised = denoised.masked_fill(~mask,0.)
+        # masked_img = img.masked_fill(~mask,0.)
         
-        
-        losses = F.mse_loss(masked_denoised, masked_img, reduction = 'none')
+        losses = F.mse_loss(denoised, img, reduction = 'none')
 
         losses = reduce(losses, 'b ... -> b', 'mean')
 

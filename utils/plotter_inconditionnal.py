@@ -26,7 +26,10 @@ def plotter3D_3var(img,save_path):
         ax = axes[i]
         im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        ax.set_title(f"Channel {i}", fontsize=12)
+        if i==0:
+            ax.set_title(f"u : vent zonal", fontsize=12)
+        else : 
+            ax.set_title('v : vent méridional')
         ax.axis("off")
 
     # Plot du 3ᵉ canal en bas à gauche

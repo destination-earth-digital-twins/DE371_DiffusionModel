@@ -16,8 +16,7 @@ import mlflow
 from utils import plotter_inconditionnal
 from torch.profiler import profile, record_function, ProfilerActivity
 import torch.amp
-
-
+from ddpm import normalize
 
 
 class Trainer(Ddpm_base):
@@ -208,8 +207,13 @@ class Trainer(Ddpm_base):
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
 
-            if current_iter % 5000 == 0: 
+            if current_iter % 5 == 0: 
+                
+                denoised = normalize.SpecialNormalize(denoised).denorm
+                
                 path_dir_output = "/project/home/p200177/DE_371/avritj/models/" + self.config.run_name
+                
+                plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + "/model_output_lat.png",300)
                 plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + "/mode_output.png")
                 plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + '/loss_maps.png')
                 plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + '/loss_lat.png',300)
