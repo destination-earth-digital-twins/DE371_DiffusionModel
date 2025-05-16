@@ -268,7 +268,6 @@ class ElucidatedDiffusion(nn.Module):
 
         #img_filled  = mirror_fill.mirror_fill(img,mask)
         img_filled = img.masked_fill(~mask,0.0)
-     
         #mean computation 
         # means = []
         # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
@@ -309,15 +308,15 @@ class ElucidatedDiffusion(nn.Module):
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=600.png",600)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=800.png",700)
-        #denoised = denoised.masked_fill(~mask,0.)
+        # denoised = denoised.masked_fill(~mask,0.)
         
         # masked_denoised = denoised.masked_fill(~mask,0.)
         # masked_img = img.masked_fill(~mask,0.)
         
         losses = F.mse_loss(denoised, img, reduction = 'none')
+        masked_losses = losses.masked_fill(~mask,0.)
 
         losses = reduce(losses, 'b ... -> b', 'mean')
 
         losses = losses * self.loss_weight(sigmas)
-        masked_losses = losses.masked_fill(~mask,0.)
         return losses.mean(), denoised, masked_losses

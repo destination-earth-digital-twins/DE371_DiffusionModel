@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plotter3D_3var(img,save_path):
+def plotter3D_3var(img,save_path,title):
     """
     Plots 3 (for each variable) images, from img of shape(batch_size,variables,latitude,longitude) and saves it 
 
@@ -19,6 +19,7 @@ def plotter3D_3var(img,save_path):
     elif len(img.shape) ==3:
         img_copy = img   
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig.suptitle(title)
     axes = axes.flatten()
 
     # Plot des deux premiers canaux en haut
@@ -48,7 +49,7 @@ def plotter3D_3var(img,save_path):
     
     
 
-def plotter2D_3var(img,save_path,lat):
+def plotter2D_3var(img,save_path,lat,title):
     """
     Plots 3 (for each variable) images on a latitude, from img of shape(batch_size,variables,latitude,longitude) and saves it 
 
@@ -66,6 +67,7 @@ def plotter2D_3var(img,save_path,lat):
     x = np.arange(0, img.shape[3]) 
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(title)
     axes = axes.flatten()
 
     for i in range(3):

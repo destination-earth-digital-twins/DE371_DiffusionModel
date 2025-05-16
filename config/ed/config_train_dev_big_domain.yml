@@ -29,8 +29,8 @@
 "crop": [ 3,715,0,1120 ]
 "invert_norm": false
 "stat_folder": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0"
-"offset_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/max_3var_with0_rr.npy"
-"scale_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/mean_3var_with0_rr.npy"
+"offset_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/mean_3var_with0_rr.npy"
+"scale_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/max_3var_with0_rr.npy"
 "image_size": [712,1120]
 "guiding_col": "ensemble_id"
 "n_conditions": 0
