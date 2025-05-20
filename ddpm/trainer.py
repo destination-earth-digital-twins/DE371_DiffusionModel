@@ -110,17 +110,18 @@ class Trainer(Ddpm_base):
             #         loss.backward()
         
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-            
             with torch.autocast(device_type='cuda'):
                 # start_compute_loss = time.perf_counter()
-                # torch.cuda.synchronize()
+                # torch.cuda.synchronize()            
+               
                 loss, denoised, masked_losses = self.model(**batch)
+                
                 # torch.cuda.synchronize()
                 # elapsed_loss = time.perf_counter() - start_compute_loss
                 # if rank == 0:
                 #     print("time to compute loss, running trough model", elapsed_loss)
             
-
+            start= time.perf_counter()
                 # start_grad = time.perf_counter()
                 # torch.cuda.synchronize()
             scaler.scale(loss).backward()
@@ -153,6 +154,7 @@ class Trainer(Ddpm_base):
                       
             scaler.step(self.optimizer)
             scaler.update()
+            
         loss = loss.detach().cpu()
 
         return loss, denoised, masked_losses

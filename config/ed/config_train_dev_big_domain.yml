@@ -1,6 +1,6 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_with_0_outside_AROME_AMP_compiled_n4_old_loss"
+"run_name": "run_with_mirror_outside_AROME_pre_computed_amp_compiled_n4"
 "output_dir": "/project/home/p200177/DE_371/avritj/models"
 "batch_size": 1
 "any_time": 1
@@ -40,9 +40,9 @@
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 50
+"scheduler_epoch": 150
 "resume": false
-"epochs": 50
+"epochs": 150
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5

@@ -181,15 +181,15 @@ class ElucidatedDiffusion(nn.Module):
 
             eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling
 
-            sigma_hat = sigma + gamma * sigma
-            images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
+            sigma_horizat = sigma + gamma * sigma
+            images_horizat = images + sqrt(sigma_horizat ** 2 - sigma ** 2) * eps
 
             self_cond = condition if self.self_condition else None
 
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
-            denoised_over_sigma = (images_hat - model_output) / sigma_hat
+            model_output = self.preconditioned_network_forward(images_horizat, sigma_horizat, self_cond, clamp = clamp)
+            denoised_over_sigma = (images_horizat - model_output) / sigma_horizat
 
-            images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
+            images_next = images_horizat + (sigma_next - sigma_horizat) * denoised_over_sigma
 
             # second order correction, if not the last timestep
 
@@ -198,7 +198,7 @@ class ElucidatedDiffusion(nn.Module):
 
                 model_output_next = self.preconditioned_network_forward(images_next, sigma_next, self_cond, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
-                images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
+                images_next = images_horizat + 0.5 * (sigma_next - sigma_horizat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
             images = images_next
             x_start = model_output_next if sigma_next != 0 else model_output
@@ -263,34 +263,19 @@ class ElucidatedDiffusion(nn.Module):
 ####################################################################################
 ####################################################################################
         
+        # start = time.perf_counter()
 
         mask = (torch.abs(img) < 1000)
        
-        # img_fqqdfqs,valid_row,invalid_row,valid_r,invalid_r  = mirror_fill.mirror_fill(img,mask)
-        # print(max(invalid_row))
-        # img_filled = torch.clone(img)
-        # for x in range(712):
-        #     for i in range(len(invalid_row)):
-        #         img_filled[:,:,i,x] = img[:,:,i,x]
-        # img_filled[:,:,invalid_r,:] = img[:,:,valid_r,:]
-        img_filled = mirror_fill.mirror_fill(img,mask)
-        plotter_inconditionnal.plotter3D_3var(img_filled,"/home/users/u102751/code/perso/create_efficient_mirror/mirror.png","mirroir")
-        invalid_idx, source_idx = mirror_fill.compute_mirror_indices(mask)
-        img_filled = img.clone()
-        inv_i, inv_j = invalid_idx
-        src_i, src_j = source_idx
-        
+        valid_x_vert,invalid_x_vert,valid_y_vert,invalid_y_vert,valid_x_horiz,invalid_x_horiz,valid_y_horiz,invalid_y_horiz = mirror_fill.valid_x_vert,mirror_fill.invalid_x_vert,mirror_fill.valid_y_vert,mirror_fill.invalid_y_vert,mirror_fill.valid_x_horiz,mirror_fill.invalid_x_horiz,mirror_fill.valid_y_horiz,mirror_fill.invalid_y_horiz
 
-        start = time.perf_counter()
-        img_filled[0, :, inv_i, inv_j] = img[0, :, src_i, src_j]
-        # img_filled[0, inv_v,:,inv_j] = img[0, src_v,:, src_j]
+        img_filled = img.clone().to(img.device)
+        img_filled[0,:,invalid_y_vert,invalid_x_vert] = img_filled[0,:,valid_y_vert,valid_x_vert]
+        # img_filled[0, inv_vert,:,inv_j] = img[0, src_vert,:, src_j]
+        img_filled[0,:,invalid_y_horiz,invalid_x_horiz] = img_filled[0,:,valid_y_horiz,valid_x_horiz]
 
-        if rank==0:    
-            print("temps écoulé : ", time.perf_counter()-start)
-   
-    
-        
-        plotter_inconditionnal.plotter3D_3var(img_filled,"/home/users/u102751/code/perso/create_efficient_mirror/filling.png","éf")
+        # if rank==0:    
+        #     print("temps écoulé pour remplissage miroir avec les indices précalculés: ", time.perf_counter()-start)
         #img_filled = img.masked_fill(~mask,0.0)
         #mean computation 
         # means = []
@@ -301,9 +286,9 @@ class ElucidatedDiffusion(nn.Module):
     
         # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
         
-        img_filled = img.masked_fill(~mask,1.0)
+        #img_filled = img.masked_fill(~mask,1.0)
         
-        img = normalize_to_neg_one_to_one(img_filled)
+        img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
       
         sigmas = self.noise_distribution(batch_size)
         padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
@@ -322,26 +307,29 @@ class ElucidatedDiffusion(nn.Module):
             with torch.no_grad():
                 self_cond = kwargs.get('condition_tensor')
                 self_cond.detach_()
-                
+        # start = time.perf_counter()        
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-        # print("denboised centre",denoised[0,0,200:205,200:205])
-        # print("denboised bord",denoised[0,0,0:5,0:5])
-        # plotter_inconditionnal.plotter3D_3var(img,"/home/users/u102751/code/perso/img/img")
-        # plotter_inconditionnal.plotter2D_3var(img,"/home/users/u102751/code/perso/img/imglat=400.png",400)
-        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
-        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=600.png",600)
-        # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=800.png",700)
-        # denoised = denoised.masked_fill(~mask,0.)
-        masked_denoised = denoised.masked_fill(~mask,0.)
-        masked_img = img.masked_fill(~mask,0.)
-        # plotter_inconditionnal.plotter3D_3var(masked_denoised,"here.png",'ok')
+        # if rank==0:
+        #     print("temps pour une étape de débruitage (calcul de denoised) :",time.perf_counter() - start)
+        #loss to launch with mask 0 training
+        # masked_denoised = denoised.masked_fill(~mask,0.)
+        # masked_img = img.masked_fill(~mask,0.)
+        # # plotter_inconditionnal.plotter3D_3var(masked_denoised,"here.png",'ok')
     
         
-        losses = F.mse_loss(masked_denoised, img, reduction = 'none')
-        # print("loss centre",losses[0,0,200:205,200:205])
-        # print("loss bord",losses[0,0,0:5,0:5])
-        masked_losses = losses.masked_fill(~mask,float("nan"))
+        # losses = F.mse_loss(masked_denoised, img, reduction = 'none')
+        # # print("loss centre",losses[0,0,200:205,200:205])
+        # # print("loss bord",losses[0,0,0:5,0:5])
+        # masked_losses = losses.masked_fill(~mask,float("nan"))
 
-        losses = torch.nanmean(masked_losses,dim=[1,2,3])
+        # losses = torch.nanmean(masked_losses,dim=[1,2,3])
+        # losses = losses * self.loss_weight(sigmas)
+        # start = time.perf_counter()
+        losses = F.mse_loss(denoised,img,reduction='none')
+        loss_map = losses 
+        losses = reduce(losses,'b ... -> b','mean')
+        
         losses = losses * self.loss_weight(sigmas)
-        return losses.mean(), denoised, masked_losses
+        # if rank==0:
+        #     print("temps pour calcul de la loss :",time.perf_counter() - start)
+        return losses.mean(), denoised, loss_map

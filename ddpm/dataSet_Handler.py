@@ -28,8 +28,6 @@ import torch.distributed as dist
 
 ################
 
-rank = int(os.environ.get("LOCAL_RANK",0))
-
 class ISDataset(Dataset):
     def __init__(self, config, path, csv_file):
         """
