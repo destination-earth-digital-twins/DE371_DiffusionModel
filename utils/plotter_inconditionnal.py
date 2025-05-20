@@ -74,7 +74,13 @@ def plotter2D_3var(img,save_path,lat,title):
         ax = axes[i]
         y = img[0, i, 300, :].detach().cpu().numpy()
         ax.plot(x, y, lw=0.5)
-        ax.set_title(f"Channel {i} @ ligne 300", fontsize=10)
+        if i==0:
+            ax.set_title(f"u : vent zonal", fontsize=12)
+        elif i==1: 
+            ax.set_title('v : vent méridional')
+        else :
+            ax.set_title('t2m')
+
         ax.set_xlabel("Colonne")
         ax.set_ylabel("Valeur")
         ax.grid(True)

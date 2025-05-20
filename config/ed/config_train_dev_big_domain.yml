@@ -1,13 +1,13 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_test"
+"run_name": "run_with_0_outside_AROME_AMP_compiled_n4_old_loss"
 "output_dir": "/project/home/p200177/DE_371/avritj/models"
 "batch_size": 1
-"any_time": 5
+"any_time": 1
 
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
-"plot": False
+"plot": True
 "sampling_mode": "conditioned"
 "n_sample": 4
 "random_noise": true
@@ -22,7 +22,7 @@
 "data_processed": True
 "csv_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/big_domain_optim_u_v_t2m/big_domain_optim_train_u_v_t2m.csv"
 "validation": false
-"csv_val_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/big_domain_optim_u_v_t2m/big_domain_optim_val_u_v_t2m.csv"
+"csv_val_file": "/home/users/u102751/code/data_to_test/train_essai.csv"
 #"mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
@@ -40,9 +40,9 @@
 # Model parameters
 "elucidated_diffusion_sampler": true
 "scheduler": "OneCycleLR"
-"scheduler_epoch": 250
+"scheduler_epoch": 50
 "resume": false
-"epochs": 250
+"epochs": 50
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5

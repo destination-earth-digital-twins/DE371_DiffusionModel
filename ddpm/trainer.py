@@ -86,7 +86,7 @@ class Trainer(Ddpm_base):
                 batch[key] = batch[key].to(self.gpu_id)
         return batch
 
-    def _run_batch(self, batch, validation=False):
+    def _run_batch(self, batch, scaler, validation=False):
         """
         Run a single training batch.
         Args:
@@ -123,7 +123,7 @@ class Trainer(Ddpm_base):
 
                 # start_grad = time.perf_counter()
                 # torch.cuda.synchronize()
-                loss.backward()
+            scaler.scale(loss).backward()
                 # torch.cuda.synchronize()
                 # elapsed_loss = time.perf_counter() - start_grad
                 
@@ -151,13 +151,13 @@ class Trainer(Ddpm_base):
                     
             #     print("time for computing gradients ", elapsed_loss)  
                       
-                self.optimizer.step()
-
+            scaler.step(self.optimizer)
+            scaler.update()
         loss = loss.detach().cpu()
 
         return loss, denoised, masked_losses
 
-    def _run_epoch(self, epoch):
+    def _run_epoch(self, epoch, scaler):
         """
         Run a training epoch.
         Args:
@@ -187,7 +187,7 @@ class Trainer(Ddpm_base):
                 ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            loss, denoised, loss_map = self._run_batch(batch_prep)
+            loss, denoised, loss_map = self._run_batch(batch_prep,scaler)
             total_loss += loss
 
             if is_main_gpu():
@@ -207,7 +207,7 @@ class Trainer(Ddpm_base):
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
 
-            if current_iter % 5 == 0: 
+            if current_iter % 5000 == 0: 
                                 
                 path_dir_output = "/project/home/p200177/DE_371/avritj/models/" + self.config.run_name
                 
@@ -357,7 +357,7 @@ class Trainer(Ddpm_base):
         Returns:
             None
         """
-
+        scaler = torch.amp.GradScaler()
         filename_format = "sample_epoch{epoch}_{i}.npy"
         if is_main_gpu():
 
@@ -376,7 +376,7 @@ class Trainer(Ddpm_base):
             loop = range(self.epochs_run, self.config.epochs)
 
         for epoch in loop:
-            avg_train_loss, avg_val_loss = self._run_epoch(epoch)
+            avg_train_loss, avg_val_loss = self._run_epoch(epoch,scaler)
             if is_main_gpu():
                 loop.set_postfix_str(
                     f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
@@ -455,7 +455,7 @@ class Trainer(Ddpm_base):
             Warning(
                 "Sampling more than 6 images may take a long time because sampling uses only the main GPU."
             )
-
+        print("dans sample train, nb_img vaut", nb_img)
         self.logger.info(f"Sampling {nb_img} images...")
         samples = super()._sample_batch(nb_img=nb_img, condition=condition)
         for i, img in enumerate(samples):
@@ -472,7 +472,10 @@ class Trainer(Ddpm_base):
             )
             np.save(save_path, img.cpu())
         if self.config.plot:
-            self.plot_grid(f"/home/users/u102751/code/perso/experiments/plots/samples_grid_{ep}.jpg", samples.cpu())
+            sample_path = f"samples/sample_grid_{ep}.jpg"
+            save_plot_path = os.path.join("/project/home/p200177/DE_371/avritj/models/", self.config.run_name,sample_path)
+            
+            self.plot_grid_big_domain(save_plot_path, samples.cpu())
         self.logger.info(
             f"Sampling done. Images saved in {os.path.join(self.config.output_dir, self.config.run_name, 'samples')}"
         )

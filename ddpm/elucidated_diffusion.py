@@ -10,8 +10,8 @@ from utils import plotter_inconditionnal
 import os
 from utils import mirror_fill, plotter_inconditionnal
 import time
-
-
+from skimage.restoration import inpaint
+import cv2 as cv
 rank = int(os.environ.get("LOCAL_RANK",0))
 # helpers
 
@@ -263,11 +263,35 @@ class ElucidatedDiffusion(nn.Module):
 ####################################################################################
 ####################################################################################
         
-        
-        mask = (torch.abs(img) < 1000)
 
-        #img_filled  = mirror_fill.mirror_fill(img,mask)
-        img_filled = img.masked_fill(~mask,0.0)
+        mask = (torch.abs(img) < 1000)
+       
+        # img_fqqdfqs,valid_row,invalid_row,valid_r,invalid_r  = mirror_fill.mirror_fill(img,mask)
+        # print(max(invalid_row))
+        # img_filled = torch.clone(img)
+        # for x in range(712):
+        #     for i in range(len(invalid_row)):
+        #         img_filled[:,:,i,x] = img[:,:,i,x]
+        # img_filled[:,:,invalid_r,:] = img[:,:,valid_r,:]
+        img_filled = mirror_fill.mirror_fill(img,mask)
+        plotter_inconditionnal.plotter3D_3var(img_filled,"/home/users/u102751/code/perso/create_efficient_mirror/mirror.png","mirroir")
+        invalid_idx, source_idx = mirror_fill.compute_mirror_indices(mask)
+        img_filled = img.clone()
+        inv_i, inv_j = invalid_idx
+        src_i, src_j = source_idx
+        
+
+        start = time.perf_counter()
+        img_filled[0, :, inv_i, inv_j] = img[0, :, src_i, src_j]
+        # img_filled[0, inv_v,:,inv_j] = img[0, src_v,:, src_j]
+
+        if rank==0:    
+            print("temps écoulé : ", time.perf_counter()-start)
+   
+    
+        
+        plotter_inconditionnal.plotter3D_3var(img_filled,"/home/users/u102751/code/perso/create_efficient_mirror/filling.png","éf")
+        #img_filled = img.masked_fill(~mask,0.0)
         #mean computation 
         # means = []
         # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
@@ -276,19 +300,16 @@ class ElucidatedDiffusion(nn.Module):
         #     means.append(mean)
     
         # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
-
-        # img_filled = torch.where(mask == True,img,means_tensor)    
-           
-        img = normalize_to_neg_one_to_one(img_filled)
         
-        # img = normalize_to_neg_one_to_one(img_filled)
+        img_filled = img.masked_fill(~mask,1.0)
+        
+        img = normalize_to_neg_one_to_one(img_filled)
+      
         sigmas = self.noise_distribution(batch_size)
         padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
         noise = torch.randn_like(img)
         noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-
-
         
 ####################################################################################
 ####################################################################################
@@ -303,20 +324,24 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond.detach_()
                 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+        # print("denboised centre",denoised[0,0,200:205,200:205])
+        # print("denboised bord",denoised[0,0,0:5,0:5])
         # plotter_inconditionnal.plotter3D_3var(img,"/home/users/u102751/code/perso/img/img")
         # plotter_inconditionnal.plotter2D_3var(img,"/home/users/u102751/code/perso/img/imglat=400.png",400)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=400.png",400)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=600.png",600)
         # plotter_inconditionnal.plotter2D_3var(denoised,"/home/users/u102751/code/perso/img/lat=800.png",700)
         # denoised = denoised.masked_fill(~mask,0.)
+        masked_denoised = denoised.masked_fill(~mask,0.)
+        masked_img = img.masked_fill(~mask,0.)
+        # plotter_inconditionnal.plotter3D_3var(masked_denoised,"here.png",'ok')
+    
         
-        # masked_denoised = denoised.masked_fill(~mask,0.)
-        # masked_img = img.masked_fill(~mask,0.)
-        
-        losses = F.mse_loss(denoised, img, reduction = 'none')
-        masked_losses = losses.masked_fill(~mask,0.)
+        losses = F.mse_loss(masked_denoised, img, reduction = 'none')
+        # print("loss centre",losses[0,0,200:205,200:205])
+        # print("loss bord",losses[0,0,0:5,0:5])
+        masked_losses = losses.masked_fill(~mask,float("nan"))
 
-        losses = reduce(losses, 'b ... -> b', 'mean')
-
+        losses = torch.nanmean(masked_losses,dim=[1,2,3])
         losses = losses * self.loss_weight(sigmas)
         return losses.mean(), denoised, masked_losses
