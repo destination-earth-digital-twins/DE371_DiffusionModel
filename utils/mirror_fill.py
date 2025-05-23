@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os 
 import matplotlib.pyplot as plt
+
 def plotter3D_3var(img,save_path,title):
     """
     Plots 3 (for each variable) images, from img of shape(batch_size,variables,latitude,longitude) and saves it 

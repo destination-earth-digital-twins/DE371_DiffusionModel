@@ -111,26 +111,29 @@ class Trainer(Ddpm_base):
         
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             with torch.autocast(device_type='cuda'):
-                # start_compute_loss = time.perf_counter()
-                # torch.cuda.synchronize()            
+                start_compute_loss = time.perf_counter()
+                torch.cuda.synchronize()            
                
                 loss, denoised, masked_losses = self.model(**batch)
                 
-                # torch.cuda.synchronize()
-                # elapsed_loss = time.perf_counter() - start_compute_loss
-                # if rank == 0:
-                #     print("time to compute loss, running trough model", elapsed_loss)
+                torch.cuda.synchronize()
+                elapsed_loss = time.perf_counter() - start_compute_loss
+                if rank == 0:
+                    print("time forward pass", elapsed_loss)
             
             start= time.perf_counter()
                 # start_grad = time.perf_counter()
-                # torch.cuda.synchronize()
+            torch.cuda.synchronize()
             scaler.scale(loss).backward()
-                # torch.cuda.synchronize()
-                # elapsed_loss = time.perf_counter() - start_grad
-                
-                # if rank == 0:
-                        
-                #     print("time for computing gradients ", elapsed_loss)
+            scaler.step(self.optimizer)
+            scaler.update()
+            torch.cuda.synchronize()
+
+            elapsed = time.perf_counter() - start
+            # 
+            if rank == 0:
+                    # 
+                print("time forbakward pass ", elapsed)
             
             
             # start_compute_loss = time.perf_counter()
@@ -152,8 +155,7 @@ class Trainer(Ddpm_base):
                     
             #     print("time for computing gradients ", elapsed_loss)  
                       
-            scaler.step(self.optimizer)
-            scaler.update()
+            
             
         loss = loss.detach().cpu()
 
