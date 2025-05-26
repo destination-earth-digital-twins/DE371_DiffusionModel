@@ -267,26 +267,25 @@ class ElucidatedDiffusion(nn.Module):
 
         mask = (torch.abs(img) < 1000)
         #img_filled = img.masked_fill(~mask,0.0)
-        # valid_x_vert,invalid_x_vert,valid_y_vert,invalid_y_vert,valid_x_horiz,invalid_x_horiz,valid_y_horiz,invalid_y_horiz = mirror_fill.valid_x_vert,mirror_fill.invalid_x_vert,mirror_fill.valid_y_vert,mirror_fill.invalid_y_vert,mirror_fill.valid_x_horiz,mirror_fill.invalid_x_horiz,mirror_fill.valid_y_horiz,mirror_fill.invalid_y_horiz
+        valid_x_vert,invalid_x_vert,valid_y_vert,invalid_y_vert,valid_x_horiz,invalid_x_horiz,valid_y_horiz,invalid_y_horiz = mirror_fill.valid_x_vert,mirror_fill.invalid_x_vert,mirror_fill.valid_y_vert,mirror_fill.invalid_y_vert,mirror_fill.valid_x_horiz,mirror_fill.invalid_x_horiz,mirror_fill.valid_y_horiz,mirror_fill.invalid_y_horiz
 
-        # img_filled = img.clone().to(img.device)
-        # img_filled[0,:,invalid_y_vert,invalid_x_vert] = img_filled[0,:,valid_y_vert,valid_x_vert]
-        # # img_filled[0, inv_vert,:,inv_j] = img[0, src_vert,:, src_j]
-        # img_filled[0,:,invalid_y_horiz,invalid_x_horiz] = img_filled[0,:,valid_y_horiz,valid_x_horiz]
+        img_filled = img.clone().to(img.device)
+        img_filled[0,:,invalid_y_vert,invalid_x_vert] = img_filled[0,:,valid_y_vert,valid_x_vert]
+        img_filled[0,:,invalid_y_horiz,invalid_x_horiz] = img_filled[0,:,valid_y_horiz,valid_x_horiz]
 
         # if rank==0:    
         #     print("temps écoulé pour remplissage miroir avec les indices précalculés: ", time.perf_counter()-start)
         #img_filled = img.masked_fill(~mask,0.0)
         #mean computation 
-        means = []
-        img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
-        for i in range(3):
-            mean = torch.nanmean(img_masked[i,:,:])
-            means.append(mean)
+        # means = []
+        # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
+        # for i in range(3):
+        #     mean = torch.nanmean(img_masked[i,:,:])
+        #     means.append(mean)
     
-        means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
-        img_filled = torch.where(~mask,means_tensor,img)
-        #img_filled = img.masked_fill(~mask,1.0)
+        # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
+        # img_filled = torch.where(~mask,means_tensor,img)
+        # #img_filled = img.masked_fill(~mask,1.0)
         
         img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
       

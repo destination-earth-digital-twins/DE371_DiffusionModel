@@ -118,6 +118,10 @@ def load_train_objs(config):
         var_cond=config.var_conditionning,
         mean_cond=config.mean_conditionning,
     )
+    print(config.n_conditions)
+    print("var cond", config.var_conditionning)
+    print("mean_cnd ", config.mean_conditionning)
+    print("cond globalement", use_cond)
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
             cls = ConditionedGaussianDiffusion
@@ -154,7 +158,7 @@ def load_train_objs(config):
     # model_cpu = model.to("cpu")
     # model_cpu.compile(mode='', fullgraph = False,dynamic=True)
     # model = model_cpu.to("cuda")
-    # model.compile(fullgraph=False)
+    model.compile(fullgraph=False)
     return model, optimizer
 
 

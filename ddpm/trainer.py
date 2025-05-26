@@ -111,29 +111,25 @@ class Trainer(Ddpm_base):
         
             # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
             with torch.autocast(device_type='cuda'):
-                start_compute_loss = time.perf_counter()
+                
                 torch.cuda.synchronize()            
                
                 loss, denoised, masked_losses = self.model(**batch)
                 
-                torch.cuda.synchronize()
-                elapsed_loss = time.perf_counter() - start_compute_loss
-                if rank == 0:
-                    print("time forward pass", elapsed_loss)
+                
             
-            start= time.perf_counter()
-                # start_grad = time.perf_counter()
-            torch.cuda.synchronize()
+            # start= time.perf_counter()
+            # torch.cuda.synchronize()
             scaler.scale(loss).backward()
             scaler.step(self.optimizer)
             scaler.update()
-            torch.cuda.synchronize()
+            # torch.cuda.synchronize()
 
-            elapsed = time.perf_counter() - start
-            # 
-            if rank == 0:
-                    # 
-                print("time forbakward pass ", elapsed)
+            # elapsed = time.perf_counter() - start
+            # # 
+            # if rank == 0:
+            #         # 
+            #     print("time forbakward pass ", elapsed)
             
             
             # start_compute_loss = time.perf_counter()
@@ -459,7 +455,6 @@ class Trainer(Ddpm_base):
             Warning(
                 "Sampling more than 6 images may take a long time because sampling uses only the main GPU."
             )
-        print("dans sample train, nb_img vaut", nb_img)
         self.logger.info(f"Sampling {nb_img} images...")
         samples = super()._sample_batch(nb_img=nb_img, condition=condition)
         for i, img in enumerate(samples):
