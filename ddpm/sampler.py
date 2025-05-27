@@ -7,7 +7,7 @@ import logging
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
-from utils.plotter import online_plot, online_plot_var, online_plot_mean
+from utils.plotter import online_plot, online_plot_var, online_plot_mean, online_plot_quantiles
 from datetime import datetime
 
 
@@ -175,6 +175,14 @@ class Sampler(Ddpm_base):
                         figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_variance.png'),
                         figtitle=f'Var sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}'
                     )
+
+                    online_plot_quantiles(
+                        arome_ensemble,
+                        ensemble.numpy()[:,1:,:,:],
+                        figname_info=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_quantiles'),
+                        title_info=f'{batch["date"][0]}_{batch["leadtime"][0]}'
+                    )
+
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
 
