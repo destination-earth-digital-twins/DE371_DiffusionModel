@@ -92,10 +92,6 @@ class ISDataset(Dataset):
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample, sample_denorm = self.file_to_torch(file_name, return_denorm=True) # target
         
-        if self.config.sampling_mode == 'conditioned_sdedit':
-            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-            sample_denorm = sample_denorm.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-        
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
@@ -143,6 +139,11 @@ class ISDataset(Dataset):
                 var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
+        if self.config.sampling_mode == 'conditioned_sdedit':
+            # Note : if self.config.predict_residue is True, then sample is now the residue and sample_denorm is still the original sample denorm
+            # Maybe this has to be fixed afterwards
+            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            sample_denorm = sample_denorm.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
