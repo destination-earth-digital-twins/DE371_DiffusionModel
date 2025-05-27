@@ -37,6 +37,4 @@ profile.svg
 utils/make_mean_var_files.py
 config_perso/
 config/ed_sampling/
-unbias.py
-unbias*.sh
 *.sh
