@@ -37,9 +37,10 @@ profile.svg
 utils/make_mean_var_files.py
 config_perso/
 config/ed_sampling/
-slurm/appartainer_stuff/*
-!slurm/appartainer_stuff/.env
-!slurm/appartainer_stuff/sample_meluxina.sh
-!slurm/appartainer_stuff/train_meluxina.sh
+slurm/apptainer_stuff/*
+!slurm/apptainer_stuff/.env
+!slurm/apptainer_stuff/sample_meluxina.sh
+!slurm/apptainer_stuff/train_meluxina.sh
 unbias.py
 unbias*.sh
+*.sh
