@@ -2,7 +2,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 import pandas as pd
-
+import torch
 from utils.distributed import is_main_gpu
 
 def filter_dates(csvfile, datestart, datestop):
@@ -87,3 +87,81 @@ def batch_output_sample_files(data_dir, Shape=(4, 256, 256), conditioned=False, 
                     batch_index += 1
                     sample_local_index = 0
                     batched_samples = np.zeros((batch_file_size,) + tuple(Shape))
+
+
+def mirror_fill(img, mask):
+    """
+    Fills an img with invalid datas with valid datas, keeping a continuous physical aspect
+    Args:
+        img (torch.tensor) : an image of shape (batch_size,variables,latitude,longitude)
+        mask (torch.tensor) : a tensor of img's shape containing True (valid datas of img) and False (invalid datas of img)
+    """
+    device, dtype = img.device, img.dtype
+    img_np = img[0].cpu().numpy()      
+    mask_no_batch = mask[0].cpu().numpy() 
+    var, H, W = img_np.shape
+    filled = img_np.copy()
+    valid_x_v = []
+    invalid_x_v=[]
+    valid_y_v = []
+    invalid_y_v=[]
+    
+    valid_x_h = []
+    invalid_x_h=[]
+    valid_y_h = []
+    invalid_y_h=[]
+    # vertical filling
+    for x in range(W):
+        rows = np.where(mask_no_batch[0,:,x])[0]
+        if rows.size == 0:
+            continue
+        r_min, r_max = rows.min(), rows.max()
+        
+        for i in range(r_min):
+            i_ref = min(r_min + (r_min - i), H-1)
+            valid_x_v.append(x)
+            invalid_x_v.append(x)
+            # filled[0,i,x] = filled[0,i_ref,x]
+            valid_y_v.append(i_ref)
+            invalid_y_v.append(i)
+        for i in range(r_max+1, H):
+
+            i_ref = max(r_max - (i - r_max), 0)
+            
+            # filled[0,i,x] = filled[0,i_ref,x]
+            
+            valid_x_v.append(x)
+            invalid_x_v.append(x)
+            # filled[0,i,x] = filled[0,i_ref,x]
+            valid_y_v.append(i_ref)
+            invalid_y_v.append(i)
+            
+    # horizontal pass
+    for y in range(H):
+        cols = np.where(mask_no_batch[0,y,:])[0]
+        if cols.size == 0:
+            continue
+        c_min, c_max = cols.min(), cols.max()
+
+        for j in range(c_min):
+
+            j_ref = min(c_min + (c_min - j), W-1)
+            # filled[0,y,j] = filled[0,y,j_ref]
+            
+            valid_x_h.append(j_ref)
+            invalid_x_h.append(j)
+            # filled[0,i,x] = filled[0,i_ref,x]
+            valid_y_h.append(y)
+            invalid_y_h.append(y)
+
+        for j in range(c_max+1, W):
+            j_ref = max(c_max - (j - c_max), 0)
+            # filled[0,y,j] = filled[0,y,j_ref]
+            
+            valid_x_h.append(j_ref)
+            invalid_x_h.append(j)
+            # filled[0,i,x] = filled[0,i_ref,x]
+            valid_y_h.append(y)
+            invalid_y_h.append(y)
+
+    return torch.IntTensor(valid_x_v), torch.IntTensor(invalid_x_v), torch.IntTensor(valid_y_v), torch.IntTensor(invalid_y_v), torch.IntTensor(valid_x_h), torch.IntTensor(invalid_x_h), torch.IntTensor(valid_y_h), torch.IntTensor(invalid_y_h)

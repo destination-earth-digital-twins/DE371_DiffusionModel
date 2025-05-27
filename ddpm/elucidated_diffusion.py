@@ -7,8 +7,8 @@ import numpy as np
 from tqdm import tqdm
 from einops import rearrange, repeat, reduce
 from utils import plotter_inconditionnal
+from utils.utils import mirror_fill
 import os
-from utils import mirror_fill, plotter_inconditionnal
 import time
 from skimage.restoration import inpaint
 import cv2 as cv
@@ -56,6 +56,7 @@ class ElucidatedDiffusion(nn.Module):
         S_tmin = 0.05,
         S_tmax = 50,
         S_noise = 0.0,
+        config,
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
@@ -86,11 +87,33 @@ class ElucidatedDiffusion(nn.Module):
         self.S_tmin = S_tmin
         self.S_tmax = S_tmax
         self.S_noise = S_noise
+        self.config = config
+        # init data for mirroring
+        self.init_mirror_filling()
         
         
     @property
     def device(self):
         return next(self.model.parameters()).device
+
+    def init_mirror_filling(self):
+        """ 
+        That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
+        """
+        data_path = self.config.data_dir  
+        file_name = "2021-06-17T21:00:00Z_u_v_t2m_0_0.npy"
+        file = os.path.join(data_path,file_name)
+
+        img = np.load(file)
+        img=torch.from_numpy(img).to("cuda")
+
+        img = img.unsqueeze(0)
+        img = img.permute((0,3,1,2))
+
+        img = img[:,:,self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]  
+        mask = (torch.abs(img) == 9999) 
+
+        self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
 
     # derived preconditioning params - Table 1
 
@@ -263,29 +286,22 @@ class ElucidatedDiffusion(nn.Module):
 ####################################################################################
 ####################################################################################
         
-        # start = time.perf_counter()
+
+
+
 
         mask = (torch.abs(img) < 1000)
-        #img_filled = img.masked_fill(~mask,0.0)
-        valid_x_vert,invalid_x_vert,valid_y_vert,invalid_y_vert,valid_x_horiz,invalid_x_horiz,valid_y_horiz,invalid_y_horiz = mirror_fill.valid_x_vert,mirror_fill.invalid_x_vert,mirror_fill.valid_y_vert,mirror_fill.invalid_y_vert,mirror_fill.valid_x_horiz,mirror_fill.invalid_x_horiz,mirror_fill.valid_y_horiz,mirror_fill.invalid_y_horiz
-
         img_filled = img.clone().to(img.device)
-        img_filled[0,:,invalid_y_vert,invalid_x_vert] = img_filled[0,:,valid_y_vert,valid_x_vert]
-        img_filled[0,:,invalid_y_horiz,invalid_x_horiz] = img_filled[0,:,valid_y_horiz,valid_x_horiz]
 
-        # if rank==0:    
-        #     print("temps écoulé pour remplissage miroir avec les indices précalculés: ", time.perf_counter()-start)
-        #img_filled = img.masked_fill(~mask,0.0)
-        #mean computation 
-        # means = []
-        # img_masked = img.masked_fill(~mask,float("nan")).squeeze(0)
-        # for i in range(3):
-        #     mean = torch.nanmean(img_masked[i,:,:])
-        #     means.append(mean)
+        img_filled = img.masked_fill(~mask,0.0)
+
+        for batch in range(self.config.batch_size):
+            plotter_inconditionnal.plotter3D_3var(img_filled,"img.png","image avant remplissage")
+            img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert]
+            plotter_inconditionnal.plotter3D_3var(img_filled,"img_moitie_remplie.png", 'image après remplissage vertical')
+            img_filled[batch,:,self.invalid_y_horiz,self.valid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz]
+            plotter_inconditionnal.plotter3D_3var(img_filled,"img_remplie.png", 'image après remplissage vertical et horizontal')
     
-        # means_tensor = torch.tensor(means, dtype=img.dtype,device=img.device).view(1,3,1,1)
-        # img_filled = torch.where(~mask,means_tensor,img)
-        # #img_filled = img.masked_fill(~mask,1.0)
         
         img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
       
@@ -308,23 +324,25 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond.detach_()
         # start = time.perf_counter()        
         denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+        # plotter_inconditionnal.plotter3D_3var(denoised,"denoised.png","tite")
 
-        masked_denoised = denoised.masked_fill(~mask,0.)
-        masked_img = img.masked_fill(~mask,0.)
-    
-        
-        losses = F.mse_loss(masked_denoised, masked_img, reduction = 'none')
-        loss_map = losses 
-        #masked_losses = losses.masked_fill(~mask,float("nan"))
 
-        losses = torch.nanmean(losses,dim=[1,2,3])
-        losses = losses * self.loss_weight(sigmas)
-        # start = time.perf_counter()
-        # losses = F.mse_loss(denoised,img,reduction='none')
+
+        # masked_denoised = denoised.masked_fill(~mask,0.)
+        # masked_img = img.masked_fill(~mask,0.)
+        # losses = F.mse_loss(masked_denoised, masked_img, reduction = 'none')
         # loss_map = losses 
-        # losses = reduce(losses,'b ... -> b','mean')
-        
+        # losses = torch.nanmean(losses,dim=[1,2,3])
         # losses = losses * self.loss_weight(sigmas)
-        # if rank==0:
-        #     print("temps pour calcul de la loss :",time.perf_counter() - start)
+        
+        
+        
+        
+        losses = F.mse_loss(denoised,img,reduction='none')
+        loss_map = losses 
+        losses = reduce(losses,'b ... -> b','mean')
+        losses = losses * self.loss_weight(sigmas)
+        
+        
+        
         return losses.mean(), denoised, loss_map

@@ -18,33 +18,34 @@ def plotter3D_3var(img,save_path,title):
         img_copy = img.squeeze(0)
     elif len(img.shape) ==3:
         img_copy = img   
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-    fig.suptitle(title)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 10))
+    fig.suptitle(title,y=0.7)
     axes = axes.flatten()
 
     # Plot des deux premiers canaux en haut
-    for i in range(2):
+    for i in range(3):
         ax = axes[i]
-        im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         if i==0:
+            im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
             ax.set_title(f"u : vent zonal", fontsize=12)
-        else : 
-            ax.set_title('v : vent méridional')
-        ax.axis("off")
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            ax.axis("off")
+            
+        elif i==1 : 
+            
+            im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
+            ax.set_title('v : vent méridional',fontsize=12)
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            ax.axis("off")
+        else :
+            im = ax.imshow(img_copy[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            ax.set_title("t2m", fontsize=12)    
+            ax.axis("off")
 
-    # Plot du 3ᵉ canal en bas à gauche
-    ax = axes[2]
-    im = ax.imshow(img_copy[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    ax.set_title("t2m", fontsize=12)
-    ax.axis("off")
-
-    # Case vide en bas à droite
-    axes[3].axis("off")
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=300)
+    plt.savefig(save_path, dpi=1500)
     plt.close()
     
     

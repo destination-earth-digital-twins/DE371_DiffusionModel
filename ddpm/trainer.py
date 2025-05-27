@@ -206,16 +206,6 @@ class Trainer(Ddpm_base):
 
             if self._using_scheduler and self.config.scheduler == "OneCycleLR":
                 self.scheduler.step()
-
-            if current_iter % 5000 == 0: 
-                                
-                path_dir_output = "/project/home/p200177/DE_371/avritj/models/" + self.config.run_name
-                
-                plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + "/model_output_lat.png",300,"model output at lat 300")
-                plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + "/mode_output.png","model output")
-                plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + '/loss_maps.png',"loss map")
-                plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + '/loss_lat.png',300,"loss at lat 300")
-                
                 
         self.logger.debug(
             f"Epoch {epoch} | Batchsize: {self.config.batch_size} | Steps: {len(self.dataloader) * epoch} | "
@@ -235,6 +225,7 @@ class Trainer(Ddpm_base):
                     next(iter(self.dataloader)), ["condition_tensor"]
                 )
                 condition = condition["condition_tensor"][: self.config.n_sample]
+                
             self.sample_train(str(epoch), self.config.n_sample, condition)
 
         # validation loss computation (optional, default :  yes)
@@ -276,6 +267,15 @@ class Trainer(Ddpm_base):
         if epoch % self.config.any_time == 0.0:
             synchronize()
 
+            # plotting sample
+            # TODO : use config output path
+            
+            path_dir_output = os.path.join(self.config.output_dir, self.config.run_name)
+            plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + f"/model_output_lat_{epoch}.png",300,"model output at lat 300")
+            plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + f"/mode_output_{epoch}.png","model output")
+            plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + f'/loss_maps_{epoch}.png',"loss map")
+            plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + f'/loss_lat_{epoch}.png',300,"loss at lat 300")
+                
         return total_loss / len(self.dataloader), total_val_loss 
 
     def _save_snapshot(self, epoch, path, train_loss, val_loss):
