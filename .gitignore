@@ -39,3 +39,4 @@ config_perso/
 config/ed_sampling/
 unbias.py
 unbias*.sh
+*.sh
