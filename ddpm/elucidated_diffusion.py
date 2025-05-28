@@ -285,9 +285,8 @@ class ElucidatedDiffusion(nn.Module):
         
         mask = (torch.abs(img) < 1000) #need modification with adding variables
 
-        assert self.config.training_configuration == "zero" or self.config.training_configuration == "mirror", f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
+        assert self.config.training_configuration == "zero" or self.config.training_configuration == "mirror" or self.config.training_configuration == "rectangular", f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
         #TODO : stock the mask in memory (self.mask)
-        #TODO : raise error if not raining_configuration
         if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
             img_filled = img.masked_fill(~mask,0.0) 
             img = normalize_to_neg_one_to_one(img_filled) 
@@ -333,7 +332,24 @@ class ElucidatedDiffusion(nn.Module):
                         self_cond = kwargs.get('condition_tensor')
                         self_cond.detach_()
                 denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+        else :
+            img = normalize_to_neg_one_to_one(img) 
+        
+            sigmas = self.noise_distribution(batch_size)
+            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
+            noise = torch.randn_like(img)
+            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+            self_cond = None
+            
+            # Conditioned diffusion :
+            if self.self_condition:
+                with torch.no_grad():
+                    self_cond = kwargs.get('condition_tensor')
+                    self_cond.detach_()
+                    
+            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+            
         losses = F.mse_loss(denoised,img,reduction='none')
         loss_map = losses 
         losses = reduce(losses,'b ... -> b','mean')

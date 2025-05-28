@@ -222,17 +222,17 @@ class Trainer(Ddpm_base):
 
             self.model.train()
 
-        if epoch % self.config.any_time == 0.0:
-            synchronize()
+        # if epoch % self.config.any_time == 0.0:
+        #     synchronize()
 
-            # plotting sample
-            # TODO : use config output path
+        #     # plotting sample
+        #     # TODO : use config output path
             
-            path_dir_output = os.path.join(self.config.output_dir, self.config.run_name)
-            plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + f"/model_output_lat_{epoch}.png",300,"model output at lat 300")
-            plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + f"/mode_output_{epoch}.png","model output")
-            plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + f'/loss_maps_{epoch}.png',"loss map")
-            plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + f'/loss_lat_{epoch}.png',300,"loss at lat 300")
+        #     path_dir_output = os.path.join(self.config.output_dir, self.config.run_name)
+        #     plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + f"/model_output_lat_{epoch}.png",300,"model output at lat 300")
+        #     plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + f"/mode_output_{epoch}.png","model output")
+        #     plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + f'/loss_maps_{epoch}.png',"loss map")
+        #     plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + f'/loss_lat_{epoch}.png',300,"loss at lat 300")
                 
         return total_loss / len(self.dataloader), total_val_loss 
 
