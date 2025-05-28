@@ -4,6 +4,8 @@
 "output_dir": "/project/home/p200177/DE_371/avritj/models"
 "batch_size": 1
 "any_time": 1
+"training_configuration" : "mirror" #or zero
+"domain_type" : "big" #or small
 
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
@@ -19,7 +21,6 @@
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_big_domain_optim"
-"data_processed": True
 "csv_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/big_domain_optim_u_v_t2m/big_domain_optim_train_u_v_t2m.csv"
 "validation": false
 "csv_val_file": "/home/users/u102751/code/data_to_test/train_essai.csv"

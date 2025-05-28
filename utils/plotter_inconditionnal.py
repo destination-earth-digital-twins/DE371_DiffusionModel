@@ -45,7 +45,7 @@ def plotter3D_3var(img,save_path,title):
 
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=1500)
+    plt.savefig(save_path, dpi=300)
     plt.close()
     
     

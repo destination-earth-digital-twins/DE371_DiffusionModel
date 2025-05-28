@@ -175,77 +175,8 @@ class ISDataset(Dataset):
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
-        
-#####################NOT FINISHED#####################
-#To use to work with 4D tensors    
-    def subsample_concat(self, sample, n_cond):
-        """
-            sample members from the sample_without_target in get_conditioning_members_4D.
-            
-            returns the concatenated members
-            Args:
-                sample : sample of shape (var, h, w, members) a torch.tensor containing all the members except the target at a given lead time and date
-                n_cond (int): number of member to sample
-            Returns:
-                torch.Tensor: Torch tensor of shape [n_conditions*n_var, self.height_dim, self.width_dim] containing the concatenated members.
-        """
-        nb_members = sample.shape[-1]
-        rand_members_int = torch.randperm(nb_members,device = sample.device)[:n_cond] #permutation then sample the first n_cond members to generate
-        #random subsampling of members
-        subsample = sample[:,:,:,rand_members_int]
-        return subsample
     
-    
-    def get_conditioning_members_4D(self, sample, idx):
-        """
-            Loads the conditioning members for the training and the sampling, stacks them
-            and returns the result
-
-            Args:
-                ensemble_df (df): the sub df containing the considered ensemble
-                idx (int): ID in the __getitem__.
-                sample (torch.tensor): the torch tensor of shape (var, h, w, m) representing the img at a given date, lead time 
-            Returns:
-                list(torch.Tensor): The resulting list of tensors of shape [n_sampling_conditioning_sets*n_conditions*n_var, 
-                    self.height_dim, self.width_dim] 
-        """
-        if self.config.n_conditions > self.config.n_members_dataset:
-            raise ValueError(
-                f"The number of conditioning members must not exceed the number of members in the dataset. Got {self.config.n_conditions} conditioning members and {self.config.n_members_dataset} members in the dataset."
-            )
-        conditions = []
-        
-        # Remove the target from the possible conditions used for training
-        for member in range(sample.shape[-1]):#iterate on members
-            sample_without_target = torch.cat([sample[:,:,:,:member], sample[:,:,:,member + 1:]],dim = -1) # getting rid of the target member
-            condition = self.subsample_concat(sample_without_target,self.config.n_conditions)
-            conditions.append(condition)        
-        return conditions
-#################################################################################################    
-    
-    
-    
-    def to_nvar_file(self,files : list,lead_time):
-        """
-        Big domain : file.shape = (717,1121,45,16) for one variable. 
-        Returns a npy file with shape (len(files,717,1121,16) = (variables, h, w, members)
-        Args :
-            files : a list of LOADED files at a SAME DATE and different variables
-            lead_time : a leadtime to use in the returned file
-            member : a member id to use in the returned file
-        """
-        final_file = [] 
-        for i in range(len(files)):
-            file = files[i][:,:,lead_time,:]
-            
-            final_file.append(file)
-            
-        nvar_file = np.stack(final_file, axis=0) 
-        print(nvar_file.shape)
-        return nvar_file
-              
-               
-    def file_to_torch(self, file_name): #add argument lead_time if working with 4D tensors, shape(nvar,h,w,m) 
+    def file_to_torch(self, file_name, return_denorm=False):
         """
         Convert a file to a torch tensor.
         Args:
@@ -253,16 +184,29 @@ class ISDataset(Dataset):
         Returns:
             torch.Tensor: Torch tensor representing the sample.
         """
-        if type(file_name) == list:
-            file_name = file_name[0]
-        sample_path = os.path.join(self.data_dir, file_name)
-
-        sample = np.float32(np.load(sample_path))
-       
-        date = file_name.split('_')[0]
+        assert self.config.domain_type == 'small' or self.config.domain_type == 'big', f"domain_type must be 'small' or 'big' and is {self.config.domain_type}"
         
-        if self.config.data_processed:#datas have already been processed to have shape (nvar,h,w,m) 
-            
+        if self.config.domain_type=='small': #adding this to the config because data shape for small and big domain are not the same
+            #thus, permutation is not the same. 
+            if type(file_name) == list:
+                file_name = file_name[0]
+            sample_path = os.path.join(self.data_dir, file_name)
+            sample = np.float32(np.load(sample_path + ".npy"))[
+                self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+            ]
+            norm_sample = sample.transpose((1, 2, 0))
+            norm_sample = self.transform(norm_sample)
+            if return_denorm:
+                return norm_sample, torch.tensor(sample)
+            else :
+                return norm_sample
+        else: #if using big domain datas
+            if type(file_name) == list:
+                file_name = file_name[0]
+            sample_path = os.path.join(self.data_dir, file_name)
+
+            sample = np.float32(np.load(sample_path))
+                
             sample = sample[
                 self.CI[0] : self.CI[1],
                 self.CI[2] : self.CI[3]
@@ -270,20 +214,21 @@ class ISDataset(Dataset):
             sample = self.transform(sample)
 
             return sample
-        
-        ################""NOT FINISHED#################""
-        # else : #data weren't processed : shape (h,w,lt,m)
-        #     #output shape(variables, height,width, member) ------> every variables and members at a given lead time
-        #     date = file_name.split('_')[0]
-        #     print(date)
             
             
-             
-        # sample = np.float32(np.load(sample_path))[
-        #     self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        # ]
-        ####################################################
 
+    def file_to_torch_big_domain(self, file_name): #Adding this function because data shape for the big domain is not the same (717,1121,var)
+        #and need a different permutation, to avoid conflict
+        """
+        Convert a file to a torch tensor.
+        Args:
+            file_name (str or list): Name of the file or list of file names.
+        Returns:
+            torch.Tensor: Torch tensor representing the sample.
+        """
+        
+    
+    
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
         if num_replicas is None:
@@ -310,14 +255,3 @@ class CustomDistributedSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
-
-class ToTensor4D:
-    def __call__(self,img):
-        """
-        Returns a tensor4D from a numpy image, as the function transforms.ToTensor in torch
-        Args : 
-            img : ndarray of shape (variables, height, width, members)"
-        """
-        tensor = torch.from_numpy(img)
-                
-        return tensor

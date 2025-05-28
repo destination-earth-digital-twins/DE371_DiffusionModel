@@ -91,7 +91,8 @@ def batch_output_sample_files(data_dir, Shape=(4, 256, 256), conditioned=False, 
 
 def mirror_fill(img, mask):
     """
-    Fills an img with invalid datas with valid datas, keeping a continuous physical aspect
+    Fills an img with invalid datas with valid datas, keeping a continuous physical aspect. The goal of this function is to define
+    indexes pointing to invalid datas and their corresponding valid datas for mirror filling.
     Args:
         img (torch.tensor) : an image of shape (batch_size,variables,latitude,longitude)
         mask (torch.tensor) : a tensor of img's shape containing True (valid datas of img) and False (invalid datas of img)
@@ -101,67 +102,60 @@ def mirror_fill(img, mask):
     mask_no_batch = mask[0].cpu().numpy() 
     var, H, W = img_np.shape
     filled = img_np.copy()
+    #because of the AROME domain's shape, it is needed to fill vertically then horizontally 
+    #indexes for vertical filling
     valid_x_v = []
     invalid_x_v=[]
     valid_y_v = []
     invalid_y_v=[]
-    
+    #indexes for horizontal filling
     valid_x_h = []
     invalid_x_h=[]
     valid_y_h = []
     invalid_y_h=[]
     # vertical filling
     for x in range(W):
-        rows = np.where(mask_no_batch[0,:,x])[0]
+        
+        rows = np.where(mask_no_batch[0,:,x])[0] #for a given longitude x, find every invalid datas on each latitude 
         if rows.size == 0:
             continue
-        r_min, r_max = rows.min(), rows.max()
+        r_min, r_max = rows.min(), rows.max() #looking for the extremes valid datas to fill symetrically with respect to theses extremes
         
-        for i in range(r_min):
+        for i in range(r_min): #computing every pairs of indexes (pair for valid and invalid datas (lat,lon)) for invalid datas below the domain 
             i_ref = min(r_min + (r_min - i), H-1)
             valid_x_v.append(x)
             invalid_x_v.append(x)
-            # filled[0,i,x] = filled[0,i_ref,x]
             valid_y_v.append(i_ref)
             invalid_y_v.append(i)
-        for i in range(r_max+1, H):
-
+            
+        for i in range(r_max+1, H): #computing every pairs of indexes (pair for valid and invalid datas (lat,lon)) for invalid datas above the domain 
             i_ref = max(r_max - (i - r_max), 0)
-            
-            # filled[0,i,x] = filled[0,i_ref,x]
-            
             valid_x_v.append(x)
             invalid_x_v.append(x)
-            # filled[0,i,x] = filled[0,i_ref,x]
             valid_y_v.append(i_ref)
             invalid_y_v.append(i)
             
-    # horizontal pass
+    # horizontal filling
     for y in range(H):
-        cols = np.where(mask_no_batch[0,y,:])[0]
+        cols = np.where(mask_no_batch[0,y,:])[0]#for a given latitude y, find every invalid datas on each longitude 
         if cols.size == 0:
             continue
         c_min, c_max = cols.min(), cols.max()
 
-        for j in range(c_min):
+        for j in range(c_min): #computing every pairs of indexes (pair for valid and invalid datas (lat,lon)) for invalid datas to the left of the domain
 
-            j_ref = min(c_min + (c_min - j), W-1)
-            # filled[0,y,j] = filled[0,y,j_ref]
-            
+            j_ref = min(c_min + (c_min - j), W-1)          
             valid_x_h.append(j_ref)
             invalid_x_h.append(j)
-            # filled[0,i,x] = filled[0,i_ref,x]
             valid_y_h.append(y)
             invalid_y_h.append(y)
 
-        for j in range(c_max+1, W):
-            j_ref = max(c_max - (j - c_max), 0)
-            # filled[0,y,j] = filled[0,y,j_ref]
-            
+        for j in range(c_max+1, W):#computing every pairs of indexes (pair for valid and invalid datas (lat,lon)) for invalid datas to the right of the domain
+            j_ref = max(c_max - (j - c_max), 0)            
             valid_x_h.append(j_ref)
             invalid_x_h.append(j)
-            # filled[0,i,x] = filled[0,i_ref,x]
             valid_y_h.append(y)
             invalid_y_h.append(y)
 
     return torch.IntTensor(valid_x_v), torch.IntTensor(invalid_x_v), torch.IntTensor(valid_y_v), torch.IntTensor(invalid_y_v), torch.IntTensor(valid_x_h), torch.IntTensor(invalid_x_h), torch.IntTensor(valid_y_h), torch.IntTensor(invalid_y_h)
+

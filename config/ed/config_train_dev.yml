@@ -4,7 +4,6 @@
 "output_dir": "/path/to/the/models/dir"
 "batch_size": 16
 "any_time": 5
-
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
 "plot": true

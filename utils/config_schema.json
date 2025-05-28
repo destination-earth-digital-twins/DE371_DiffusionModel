@@ -230,7 +230,7 @@
     },
     "image_size": {
       "type": "array",
-      "default": 128,
+      "default": [712,1120],
       "description": "Size of the input image"
     },
     "scheduler": {

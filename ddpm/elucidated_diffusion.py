@@ -100,7 +100,7 @@ class ElucidatedDiffusion(nn.Module):
         """ 
         That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
         """
-        data_path = self.config.data_dir  
+        data_path = "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_big_domain_optim"
         file_name = "2021-06-17T21:00:00Z_u_v_t2m_0_0.npy"
         file = os.path.join(data_path,file_name)
 
@@ -109,9 +109,10 @@ class ElucidatedDiffusion(nn.Module):
 
         img = img.unsqueeze(0)
         img = img.permute((0,3,1,2))
+        crop = self.config.crop
+        img = img[:,:,crop[0]:crop[1],crop[2]:crop[3]]
+        mask = (torch.abs(img) < 1000)
 
-        img = img[:,:,self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]  
-        mask = (torch.abs(img) == 9999) 
 
         self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
 
@@ -132,7 +133,7 @@ class ElucidatedDiffusion(nn.Module):
     # preconditioned network output
     # equation (7) in the paper
 
-    def preconditioned_network_forward(self, noised_images, sigma, self_cond = None, clamp = False):
+    def     preconditioned_network_forward(self, noised_images, sigma, self_cond = None, clamp = False):
         batch, device = noised_images.shape[0], noised_images.device
 
         if isinstance(sigma, float):
@@ -204,15 +205,15 @@ class ElucidatedDiffusion(nn.Module):
 
             eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling
 
-            sigma_horizat = sigma + gamma * sigma
-            images_horizat = images + sqrt(sigma_horizat ** 2 - sigma ** 2) * eps
+            sigma_hat = sigma + gamma * sigma
+            images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
 
             self_cond = condition if self.self_condition else None
 
-            model_output = self.preconditioned_network_forward(images_horizat, sigma_horizat, self_cond, clamp = clamp)
-            denoised_over_sigma = (images_horizat - model_output) / sigma_horizat
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
+            denoised_over_sigma = (images_hat - model_output) / sigma_hat
 
-            images_next = images_horizat + (sigma_next - sigma_horizat) * denoised_over_sigma
+            images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
 
             # second order correction, if not the last timestep
 
@@ -221,7 +222,7 @@ class ElucidatedDiffusion(nn.Module):
 
                 model_output_next = self.preconditioned_network_forward(images_next, sigma_next, self_cond, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
-                images_next = images_horizat + 0.5 * (sigma_next - sigma_horizat) * (denoised_over_sigma + denoised_prime_over_sigma)
+                images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
             images = images_next
             x_start = model_output_next if sigma_next != 0 else model_output
@@ -282,67 +283,60 @@ class ElucidatedDiffusion(nn.Module):
         assert c == channels, 'mismatch of image channels'
         
         
-####################################################################################
-####################################################################################
-####################################################################################
+        mask = (torch.abs(img) < 1000) #need modification with adding variables
+
+        assert self.config.training_configuration == "zero" or self.config.training_configuration == "mirror", f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
+        #TODO : stock the mask in memory (self.mask)
+        #TODO : raise error if not raining_configuration
+        if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
+            img_filled = img.masked_fill(~mask,0.0) 
+            img = normalize_to_neg_one_to_one(img_filled) 
         
+            sigmas = self.noise_distribution(batch_size)
+            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
+            noise = torch.randn_like(img)
+            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+            self_cond = None
 
+            # Conditioned diffusion :
+            if self.self_condition:
+                with torch.no_grad():
+                    self_cond = kwargs.get('condition_tensor')
+                    self_cond.detach_()
+                    
+            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+            
+            denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
+            img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
 
+        elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+            img_filled = img.clone().to(img.device)
+            for batch in range(self.config.batch_size):
+                
+                #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+                img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+                img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
+            
+                sigmas = self.noise_distribution(batch_size)
+                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        mask = (torch.abs(img) < 1000)
-        img_filled = img.clone().to(img.device)
-
-        img_filled = img.masked_fill(~mask,0.0)
-
-        for batch in range(self.config.batch_size):
-            plotter_inconditionnal.plotter3D_3var(img_filled,"img.png","image avant remplissage")
-            img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert]
-            plotter_inconditionnal.plotter3D_3var(img_filled,"img_moitie_remplie.png", 'image après remplissage vertical')
-            img_filled[batch,:,self.invalid_y_horiz,self.valid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz]
-            plotter_inconditionnal.plotter3D_3var(img_filled,"img_remplie.png", 'image après remplissage vertical et horizontal')
-    
+                noise = torch.randn_like(img)
+                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
         
-        img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
-      
-        sigmas = self.noise_distribution(batch_size)
-        padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+                self_cond = None
 
-        noise = torch.randn_like(img)
-        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-        
-####################################################################################
-####################################################################################
-####################################################################################
-        
-        self_cond = None
+                # Conditioned diffusion :
+                if self.self_condition:
+                    with torch.no_grad():
+                        self_cond = kwargs.get('condition_tensor')
+                        self_cond.detach_()
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
 
-        # Conditioned diffusion :
-        if self.self_condition:
-            with torch.no_grad():
-                self_cond = kwargs.get('condition_tensor')
-                self_cond.detach_()
-        # start = time.perf_counter()        
-        denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-        # plotter_inconditionnal.plotter3D_3var(denoised,"denoised.png","tite")
-
-
-
-        # masked_denoised = denoised.masked_fill(~mask,0.)
-        # masked_img = img.masked_fill(~mask,0.)
-        # losses = F.mse_loss(masked_denoised, masked_img, reduction = 'none')
-        # loss_map = losses 
-        # losses = torch.nanmean(losses,dim=[1,2,3])
-        # losses = losses * self.loss_weight(sigmas)
-        
-        
-        
-        
         losses = F.mse_loss(denoised,img,reduction='none')
         loss_map = losses 
         losses = reduce(losses,'b ... -> b','mean')
         losses = losses * self.loss_weight(sigmas)
         
-        
-        
-        return losses.mean(), denoised, loss_map
+        return losses.mean(), denoised, loss_map #denoised and loss map returned to have a look while training

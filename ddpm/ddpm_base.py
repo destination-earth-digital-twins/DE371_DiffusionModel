@@ -167,64 +167,32 @@ class Ddpm_base:
             np_img (numpy.ndarray): Array of images to plot.
         """
         nb_image = len(np_img)
-        print("nb image est ", nb_image)
-        # fig, axes = plt.subplots(
-        #     nrows=min(6, nb_image),
-        #     ncols=len(self.config.var_indexes),
-        #     figsize=(10, 10),
-        # )
-        print("le minimum est", min(6,nb_image))
+        fig, axes = plt.subplots(
+            nrows=min(6, nb_image),
+            ncols=len(self.config.var_indexes),
+            figsize=(10, 10),
+        )
         for i in range(min(6, nb_image)):
-            print("i",i)
             for j in range(len(self.config.var_indexes)):
                 cmap = (
                     "viridis" if self.config.var_indexes[j] != "t2m" else "bwr"
                 )
-                print("ici i vaut : ",i)
-
                 image = np_img[i, j]
                 if len(self.config.var_indexes) > 1 and min(6, nb_image) > 1:
                     im = axes[i, j].imshow(image, cmap=cmap, origin="lower")
                     axes[i, j].axis("off")
                     fig.colorbar(im, ax=axes[i, j])
                 else:
-                    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-                    axes = axes.flatten()
-                    fig.suptitle("model sample")
-                    img = np_img[0].cpu()
-                    # img = img.masked_fill(~mask,float("nan"))
-                    # img = np.where(np.abs(img) > 1, np.nan,img)
-                    for i in range(2):
-                        ax = axes[i]
-                        im = ax.imshow(img[i], cmap='viridis', origin='lower')
-                        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                        if i ==0:
-                            ax.set_title(f"u", fontsize=12)
-                        else:
-                            ax.set_title(f"v", fontsize=12)
-
-                        ax.axis("off")
-                    ax = axes[2]
-                    im = ax.imshow(img[2], cmap='bwr', origin='lower')
-                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                    ax.set_title("t2m", fontsize=12)
-                    ax.axis("off")
-
-                    axes[3].axis("off")
-
-                    plt.tight_layout()
-                   
-                    # im = axes[i].imshow(image, cmap=cmap, origin="lower")
-                    # axes[i].axis("off")
-                    # fig.colorbar(im, ax=axes[i])
-                    
+                    im = axes[i].imshow(image, cmap=cmap, origin="lower")
+                    axes[i].axis("off")
+                    fig.colorbar(im, ax=axes[i])
         # Save the plot to the specified file path
         plt.savefig(
             os.path.join(f"{self.config.output_dir}" , f"{self.config.run_name}", "samples", file_name),
             bbox_inches="tight",
         )
         plt.close()
-
+        
     def plot_grid_big_domain(self, file_name, np_img):
         """
         Plot a grid of images.
@@ -233,50 +201,38 @@ class Ddpm_base:
             np_img (numpy.ndarray): Array of images to plot.
         """
         nb_image = len(np_img)
-        #for i in range(min(6, nb_image)):
-            #for j in range(len(self.config.var_indexes)):
-                # cmap = (
-                #     "viridis" if self.config.var_indexes[j] != "t2m" else "bwr"
-                # )
-                # image = np_img[i, j]
-                # if len(self.config.var_indexes) > 1 and min(6, nb_image) > 1:
-                #     im = axes[i, j].imshow(image, cmap=cmap, origin="lower")
-                #     axes[i, j].axis("off")
-                #     fig.colorbar(im, ax=axes[i, j])
-                # else:
-        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+        
+        fig, axes = plt.subplots(1, 3, figsize=(12, 10))
         axes = axes.flatten()
-        fig.suptitle("model sample")
+        fig.suptitle("model sample",y=0.67)
         img = np_img[0].detach()
         # img = img.masked_fill(~mask,float("nan"))
         # img = np.where(np.abs(img) > 1, np.nan,img)
-        for i in range(2):
+        for i in range(3):
             ax = axes[i]
-            im = ax.imshow(img[i], cmap='viridis', origin='lower')
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
             if i ==0:
+                im = ax.imshow(img[i], cmap='viridis', origin='lower')
                 ax.set_title(f"u", fontsize=12)
-            else:
+                ax.axis("off")
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+            elif i==1:
+                im = ax.imshow(img[i], cmap='viridis', origin='lower')
                 ax.set_title(f"v", fontsize=12)
-
-            ax.axis("off")
-        ax = axes[2]
-        im = ax.imshow(img[2], cmap='bwr', origin='lower')
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        ax.set_title("t2m", fontsize=12)
-        ax.axis("off")
-
-        axes[3].axis("off")
+                ax.axis("off")
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            else : 
+                ax = axes[2]
+                im = ax.imshow(img[2], cmap='coolwarm', origin='lower')
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title("t2m", fontsize=12)
+                ax.axis("off")
 
         plt.tight_layout()
-        
-        # im = axes[i].imshow(image, cmap=cmap, origin="lower")
-        # axes[i].axis("off")
-        # fig.colorbar(im, ax=axes[i])
                 
         # Save the plot to the specified file path
         plt.savefig(
             os.path.join(f"{self.config.output_dir}" , f"{self.config.run_name}", "samples", file_name),
-            bbox_inches="tight",
+            bbox_inches="tight", dpi = 1500
         )
         plt.close()
