@@ -186,8 +186,7 @@ class ISDataset(Dataset):
         """
         assert self.config.domain_type == 'small' or self.config.domain_type == 'big', f"domain_type must be 'small' or 'big' and is {self.config.domain_type}"
         
-        if self.config.domain_type=='small': #adding this to the config because data shape for small and big domain are not the same
-            #thus, permutation is not the same. 
+        if self.config.domain_type=='small': #adding this to the config because data shape for small and big domain are not the same ((VAR,LAT,LON) AND (LAT,LON,VAR))
             if type(file_name) == list:
                 file_name = file_name[0]
             sample_path = os.path.join(self.data_dir, file_name)
@@ -204,29 +203,17 @@ class ISDataset(Dataset):
             if type(file_name) == list:
                 file_name = file_name[0]
             sample_path = os.path.join(self.data_dir, file_name)
-
-            sample = np.float32(np.load(sample_path))
-                
+            try:
+                sample = np.float32(np.load(sample_path))
+            except Exception as e :
+                print(f"Erreur pour le fichier {e}")
             sample = sample[
                 self.CI[0] : self.CI[1],
-                self.CI[2] : self.CI[3]
+                self.CI[2] : self.CI[3],
                 ]
             sample = self.transform(sample)
 
             return sample
-            
-            
-
-    def file_to_torch_big_domain(self, file_name): #Adding this function because data shape for the big domain is not the same (717,1121,var)
-        #and need a different permutation, to avoid conflict
-        """
-        Convert a file to a torch tensor.
-        Args:
-            file_name (str or list): Name of the file or list of file names.
-        Returns:
-            torch.Tensor: Torch tensor representing the sample.
-        """
-        
     
     
 class CustomDistributedSampler(Sampler):

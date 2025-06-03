@@ -35,6 +35,8 @@
 "image_size": [712,1120]
 "guiding_col": "ensemble_id"
 "n_conditions": 0
+"use_AMP": false
+"use_scaler": True
 # "mean_conditionning": true
 # # "var_conditionning": true
 

@@ -27,6 +27,8 @@ from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
 import numpy as np
 
+import faulthandler
+
 warnings.filterwarnings(
     "ignore",
     message="This DataLoader will create .* worker processes in total.*",
@@ -180,7 +182,7 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
         persistent_workers=True if num_workers is None else False,
         # non_blocking=True,
         shuffle=not torch.cuda.device_count() >= 2,
-        num_workers=cpu_count() if num_workers is None else num_workers,
+        num_workers=cpu_count() if num_workers is None else num_workers, #MODIF HERE cpu_count
         sampler=(
             dataSet_Handler.CustomDistributedSampler(train_set) if config.mode == "Sample"
             else DistributedSampler(train_set, rank=get_rank_num(), shuffle=False, drop_last=False)
@@ -319,6 +321,9 @@ def convert_to_type(value, type_list):
 
 if __name__ == "__main__":
 
+    # os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
+    # with open("faulthandler_run_var_env.log","w") as f:
+    #     faulthandler.enable(file=f)
     # Parse command line arguments and load configuration
     parser = argparse.ArgumentParser(
         description="Deep Learning Training and Testing Script"

@@ -202,32 +202,24 @@ class Ddpm_base:
         """
         nb_image = len(np_img)
         
+        var_names = ["u","v","t2m"]
+        dict_var={'u':0,'v':1,'t2m':2}
+        colormap=["viridis","viridis","coolwarm"]
+        
         fig, axes = plt.subplots(1, 3, figsize=(12, 10))
         axes = axes.flatten()
         fig.suptitle("model sample",y=0.67)
         img = np_img[0].detach()
         # img = img.masked_fill(~mask,float("nan"))
         # img = np.where(np.abs(img) > 1, np.nan,img)
-        for i in range(3):
-            ax = axes[i]
-            if i ==0:
-                im = ax.imshow(img[i], cmap='viridis', origin='lower')
-                ax.set_title(f"u", fontsize=12)
-                ax.axis("off")
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-            elif i==1:
-                im = ax.imshow(img[i], cmap='viridis', origin='lower')
-                ax.set_title(f"v", fontsize=12)
-                ax.axis("off")
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-            else : 
-                ax = axes[2]
-                im = ax.imshow(img[2], cmap='coolwarm', origin='lower')
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                ax.set_title("t2m", fontsize=12)
-                ax.axis("off")
-
+        for id, var in enumerate(var_names):
+            var_id=dict_var[var]
+            ax = axes[id]
+            im=ax.imshow(img[id],cmap = colormap[id],origin='lower')
+            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04)
+            ax.set_title(f'{var}',fontsize=12)
+            ax.axis('off')
+       
         plt.tight_layout()
                 
         # Save the plot to the specified file path

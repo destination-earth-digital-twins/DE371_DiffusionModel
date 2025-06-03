@@ -97,23 +97,37 @@ class Trainer(Ddpm_base):
         rank = int(os.environ.get("LOCAL_RANK",0))
         if validation:
             with torch.no_grad():
-                loss, denoised, masked_losses = self.model(**batch)
+                loss= self.model(**batch)
         else:
             self.optimizer.zero_grad()
 
-            with torch.autocast(device_type='cuda'):
+            if self.config.use_AMP and self.config.use_scaler:  
+                with torch.autocast(device_type='cuda'):
+                    
+                    torch.cuda.synchronize()            
                 
-                torch.cuda.synchronize()            
-               
-                loss, denoised, masked_losses = self.model(**batch)
+                    loss = self.model(**batch)
+                    
+                scaler.scale(loss).backward()
+                scaler.step(self.optimizer)
+                scaler.update()
                 
-            scaler.scale(loss).backward()
-            scaler.step(self.optimizer)
-            scaler.update()
+            elif self.config.use_AMP and not self.config.use_scaler:
 
+                with torch.autocast(device_type='cuda'):
+                    loss=self.model(**batch)
+                loss.backward()
+                self.optimizer.step()
+                
+            else : 
+
+                loss = self.model(**batch)
+                loss.backward()
+                self.optimizer.step()
+                
         loss = loss.detach().cpu()
 
-        return loss, denoised, masked_losses
+        return loss
 
     def _run_epoch(self, epoch, scaler):
         """
@@ -145,7 +159,7 @@ class Trainer(Ddpm_base):
                 ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            loss, denoised, loss_map = self._run_batch(batch_prep,scaler)
+            loss= self._run_batch(batch_prep,scaler)
             total_loss += loss
 
             if is_main_gpu():
@@ -222,17 +236,6 @@ class Trainer(Ddpm_base):
 
             self.model.train()
 
-        # if epoch % self.config.any_time == 0.0:
-        #     synchronize()
-
-        #     # plotting sample
-        #     # TODO : use config output path
-            
-        #     path_dir_output = os.path.join(self.config.output_dir, self.config.run_name)
-        #     plotter_inconditionnal.plotter2D_3var(denoised, path_dir_output + f"/model_output_lat_{epoch}.png",300,"model output at lat 300")
-        #     plotter_inconditionnal.plotter3D_3var(denoised, path_dir_output + f"/mode_output_{epoch}.png","model output")
-        #     plotter_inconditionnal.plotter3D_3var(loss_map, path_dir_output + f'/loss_maps_{epoch}.png',"loss map")
-        #     plotter_inconditionnal.plotter2D_3var(loss_map, path_dir_output + f'/loss_lat_{epoch}.png',300,"loss at lat 300")
                 
         return total_loss / len(self.dataloader), total_val_loss 
 

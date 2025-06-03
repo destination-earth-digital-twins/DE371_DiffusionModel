@@ -287,7 +287,7 @@
     },
     "num_workers": {
       "type": "integer",
-      "default": 1,
+      "default": 0, 
       "description": "Number of workers to load data"
     },
     "guidance_loss_scale": {

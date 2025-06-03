@@ -10,8 +10,7 @@ from utils import plotter_inconditionnal
 from utils.utils import mirror_fill
 import os
 import time
-from skimage.restoration import inpaint
-import cv2 as cv
+
 rank = int(os.environ.get("LOCAL_RANK",0))
 # helpers
 
@@ -88,8 +87,9 @@ class ElucidatedDiffusion(nn.Module):
         self.S_tmax = S_tmax
         self.S_noise = S_noise
         self.config = config
-        # init data for mirroring
-        self.init_mirror_filling()
+        if self.config.training_configuration == "mirror":
+            # init data for mirroring   
+            self.init_mirror_filling()  
         
         
     @property
@@ -100,7 +100,7 @@ class ElucidatedDiffusion(nn.Module):
         """ 
         That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
         """
-        data_path = "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_big_domain_optim"
+        data_path = self.config.data_dir
         file_name = "2021-06-17T21:00:00Z_u_v_t2m_0_0.npy"
         file = os.path.join(data_path,file_name)
 
@@ -285,12 +285,11 @@ class ElucidatedDiffusion(nn.Module):
         
         mask = (torch.abs(img) < 1000) #need modification with adding variables
 
-        assert self.config.training_configuration == "zero" or self.config.training_configuration == "mirror" or self.config.training_configuration == "rectangular", f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
-        #TODO : stock the mask in memory (self.mask)
+        assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
+        #TODO : stock the mask in memory (self.mask) to use the condition with different variables
         if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
-            img_filled = img.masked_fill(~mask,0.0) 
+            img_filled = img.masked_fill(~mask,0.5) 
             img = normalize_to_neg_one_to_one(img_filled) 
-        
             sigmas = self.noise_distribution(batch_size)
             padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
@@ -308,7 +307,13 @@ class ElucidatedDiffusion(nn.Module):
             
             denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
             img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
-
+            
+            losses = F.mse_loss(denoised,img,reduction='none')
+            losses = reduce(losses,'b ... -> b','mean')
+            losses = losses * self.loss_weight(sigmas)
+            
+            return losses.mean()
+        
         elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
             img_filled = img.clone().to(img.device)
             for batch in range(self.config.batch_size):
@@ -318,41 +323,54 @@ class ElucidatedDiffusion(nn.Module):
                 img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
                 img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
             
-                sigmas = self.noise_distribution(batch_size)
-                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-
-                noise = torch.randn_like(img)
-                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-        
-                self_cond = None
-
-                # Conditioned diffusion :
-                if self.self_condition:
-                    with torch.no_grad():
-                        self_cond = kwargs.get('condition_tensor')
-                        self_cond.detach_()
-                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-        else :
-            img = normalize_to_neg_one_to_one(img) 
-        
             sigmas = self.noise_distribution(batch_size)
             padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
             noise = torch.randn_like(img)
             noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+    
             self_cond = None
+
+            # Conditioned diffusion :
+            if self.self_condition:
+                with torch.no_grad():
+                    self_cond = kwargs.get('condition_tensor')
+                    self_cond.detach_()
+            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+            losses = F.mse_loss(denoised,img,reduction='none')
+            losses = reduce(losses,'b ... -> b','mean')
+            losses = losses * self.loss_weight(sigmas)
             
+            return losses.mean()
+        else :
+            img = normalize_to_neg_one_to_one(img)
+
+            sigmas = self.noise_distribution(batch_size)
+            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+
+            noise = torch.randn_like(img)
+
+            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+
+            self_cond = None
+
             # Conditioned diffusion :
             if self.self_condition:
                 with torch.no_grad():
                     self_cond = kwargs.get('condition_tensor')
                     self_cond.detach_()
                     
+            # if self.self_condition and random() < 0.5:
+            #     # from hinton's group's bit diffusion paper
+            #     with torch.no_grad():
+            #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
+            #         self_cond.detach_()
+
             denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-            
-        losses = F.mse_loss(denoised,img,reduction='none')
-        loss_map = losses 
-        losses = reduce(losses,'b ... -> b','mean')
-        losses = losses * self.loss_weight(sigmas)
-        
-        return losses.mean(), denoised, loss_map #denoised and loss map returned to have a look while training
+
+            losses = F.mse_loss(denoised, img, reduction = 'none')
+            losses = reduce(losses, 'b ... -> b', 'mean')
+
+            losses = losses * self.loss_weight(sigmas)
+            return losses.mean()
+ 
