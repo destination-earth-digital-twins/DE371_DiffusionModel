@@ -1,8 +1,7 @@
 # General parameters
 "mode": "Sample"
 "run_name": "test_sampling_500steps"
-"output_dir": "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit/test_sampling_sdedit_ddpm/"
-"batch_size": 16
+"output_dir": "/path/to/the/samples/dir""batch_size": 16
 "any_time": 1
 
 # Sampling parameters
@@ -57,7 +56,7 @@ leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "P_mean" : -1.2
 "P_std": 1.2
 "beta_schedule": "linear"
-"model_path": "/project/home/p200177/DE_371/maxencelame/models/unconditioned/run_train_unconditional/best.pt"
+"model_path": "/path/to/model/snapshots/best.pt"
 
 # Tracking parameters
 "wandbproject": "my_project"
