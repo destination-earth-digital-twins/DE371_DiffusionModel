@@ -115,7 +115,7 @@ class ISDataset(Dataset):
             )
         ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
         if mean_cond or var_cond or self.config.learn_residue:
-            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) )))
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             # Learn and predict the residue of the members (members - ensemble mean) instead of the members
@@ -198,12 +198,17 @@ class ISDataset(Dataset):
         """
         if type(file_name) == list:
             file_name = file_name[0]
-        sample_path = os.path.join(self.data_dir, file_name)
-        sample = np.float32(np.load(sample_path + ".npy"))[
+        sample_path = os.path.join(self.data_dir, file_name )
+        sample = np.float32(np.transpose(np.load(sample_path), (2, 0, 1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
+        # # place l'axe 2 en première position)
+        # sample = np.float32(np.load(sample_path ))[
+        #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        # ]
         sample = sample.transpose((1, 2, 0))
         sample = self.transform(sample)
+
         return sample
 
 class CustomDistributedSampler(Sampler):

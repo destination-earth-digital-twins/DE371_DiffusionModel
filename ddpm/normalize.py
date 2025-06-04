@@ -8,17 +8,17 @@ from utils.distributed import is_main_gpu, get_rank
 
 ################ reference dictionary to know how to index variables in base numpy arrays
 ################ do not modify unless you know what you are doing
-
-var_dict = {
-    "rr": 0,
-    "u": 1,
-    "v": 2,
-    "t2m": 3,
-    "orog": 4,
-    "z500": 5,
-    "t850": 6,
-    "tpw850": 7,
-}
+var_dict ={"u":0, "v":1,"t2m":2,"rr":4,"t850":5,"tpw850":6,"z500":7 }
+# var_dict = {
+#     "rr": 0,
+#     "u": 1,
+#     "v": 2,
+#     "t2m": 3,
+#     "orog": 4,
+#     "z500": 5,
+#     "t850": 6,
+#     "tpw850": 7,
+# }
 
 class SpecialNormalize(object):
     """
@@ -27,14 +27,15 @@ class SpecialNormalize(object):
     """
     def __init__(self, config):
         self.config = config
-        
         # gathering variable-specific special transformations
         self.data_transforms = {}
         for var in self.config.var_indexes:
             special_transform = getattr(self.config,f"{var}_transform",None)
             self.data_transforms[var] = getattr(special_transforms, str(special_transform), None)
+
         # loading shaping normalization constants
         # the transformation involves data <- 0.95 * (data - offset) / scale and is broadcasted to all selected variables
+
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
         scale = np.load(os.path.join(self.config.stat_folder,self.config.scale_file))[self.config.VI].astype(np.float32)
         

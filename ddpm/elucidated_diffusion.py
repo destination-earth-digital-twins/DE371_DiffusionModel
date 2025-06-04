@@ -247,7 +247,6 @@ class ElucidatedDiffusion(nn.Module):
     def forward(self, img, *args, **kwargs):
         #TODO change terminology from self_cond to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
-
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
 
