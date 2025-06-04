@@ -101,7 +101,7 @@ class Trainer(Ddpm_base):
         else:
             self.optimizer.zero_grad()
 
-            if self.config.use_AMP and self.config.use_scaler:  
+            if self.config.use_AMP:  
                 with torch.autocast(device_type='cuda'):
                     
                     torch.cuda.synchronize()            
@@ -111,13 +111,6 @@ class Trainer(Ddpm_base):
                 scaler.scale(loss).backward()
                 scaler.step(self.optimizer)
                 scaler.update()
-                
-            elif self.config.use_AMP and not self.config.use_scaler:
-
-                with torch.autocast(device_type='cuda'):
-                    loss=self.model(**batch)
-                loss.backward()
-                self.optimizer.step()
                 
             else : 
 
