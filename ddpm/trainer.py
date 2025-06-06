@@ -109,7 +109,9 @@ class Trainer(Ddpm_base):
                     loss = self.model(**batch)
                     
                 scaler.scale(loss).backward()
+
                 scaler.step(self.optimizer)
+                
                 scaler.update()
                 
             else : 

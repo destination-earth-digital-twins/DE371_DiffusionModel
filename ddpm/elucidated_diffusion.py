@@ -282,7 +282,6 @@ class ElucidatedDiffusion(nn.Module):
         assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
         assert c == channels, 'mismatch of image channels'
         
-        
         mask = (torch.abs(img) < 1000) #need modification with adding variables
 
         assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
