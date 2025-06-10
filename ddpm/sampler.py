@@ -109,6 +109,7 @@ class Sampler(Ddpm_base):
                     b += batch_size
                     pbar.update(1)
         elif "conditioned" in self.config.sampling_mode:
+
             if is_main_gpu():
                 self.logger.info(
                     f"Sampling {len(self.dataloader) * self.config.batch_size * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
@@ -122,7 +123,6 @@ class Sampler(Ddpm_base):
                 conditioning_sets = batch['condition_tensor']
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-
                 if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                         ensemble = torch.cat([
@@ -136,7 +136,7 @@ class Sampler(Ddpm_base):
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-                    
+                        print('ENSEMNLE',ensemble)
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing

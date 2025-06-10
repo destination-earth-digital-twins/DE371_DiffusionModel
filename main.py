@@ -169,11 +169,12 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
-    
     train_set = dataSet_Handler.ISDataset(config, path, csv_file)
     if validation:
         val_set = dataSet_Handler.ISDataset(config, path, csv_val_file)
     
+    
+
     train_dataloader = DataLoader(
         train_set,
         batch_size=config.batch_size,

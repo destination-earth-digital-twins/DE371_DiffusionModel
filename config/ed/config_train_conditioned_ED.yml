@@ -1,7 +1,7 @@
 # General parameters
 "mode": "Train"
-"run_name": "model_name"
-"output_dir": "/path/to/the/models/dir"
+"run_name": "model_test"
+"output_dir": "/project/scratch/p200177/DE_371/angeliquebonamy/Diffusion/"
 "batch_size": 16
 "any_time": 5
 "use_AMP": false
@@ -52,7 +52,7 @@
 "scheduler": "OneCycleLR"
 "scheduler_epoch": 250
 "resume": false
-"epochs": 250
+"epochs": 2
 "sigma_min": 0.002
 "sigma_max": 80
 "sigma_data": 0.5
