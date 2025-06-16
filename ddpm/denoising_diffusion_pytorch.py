@@ -32,6 +32,9 @@ from denoising_diffusion_pytorch.attend import Attend
 
 from denoising_diffusion_pytorch.version import __version__
 
+import os
+rank = int(os.environ.get("LOCAL_RANK",0))
+
 # constants
 
 ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
@@ -96,8 +99,17 @@ def Upsample(dim, dim_out = None):
 
 def Downsample(dim, dim_out = None):
     return nn.Sequential(
-        Rearrange('b c (h p1) (w p2) -> b (c p1 p2) h w', p1 = 2, p2 = 2),
+        Rearrange('b c (h p1) (w p2) -> b (c p1 p2) h w', p1 = 2, p2 = 2), 
         nn.Conv2d(dim * 4, default(dim_out, dim), 1)
+        
+    )
+    
+def Downsample_maxpool(dim, dim_out = None):
+    return nn.Sequential(
+        nn.MaxPool2d(kernel_size = 2, stride = 2), #increases receptive field, but does not increase channels size
+        nn.Conv2d(dim, dim*4,kernel_size=1),
+        nn.Conv2d(dim * 4, default(dim_out, dim), 1)
+        
     )
 
 class RMSNorm(Module):
@@ -107,7 +119,7 @@ class RMSNorm(Module):
         self.g = nn.Parameter(torch.ones(1, dim, 1, 1))
 
     def forward(self, x):
-        return F.normalize(x, dim = 1) * self.g * self.scale
+        return torch.mul(torch.mul(F.normalize(x, dim = 1),self.g), self.scale) #reduce memory consumption
 
 # sinusoidal positional embeds
 
@@ -277,9 +289,10 @@ class Unet(Module):
     def __init__(
         self,
         dim,
+        config,
         init_dim = None,
         out_dim = None,
-        dim_mults = (1, 2, 4, 8),
+        dim_mults = (1, 2, 4, 8, 16),
         channels = 3,
         self_condition = False,
         n_conditions = 1,
@@ -294,20 +307,22 @@ class Unet(Module):
         attn_dim_head = 32,
         attn_heads = 4,
         full_attn = None,    # defaults to full attention only for inner most layer
-        flash_attn = False
+        flash_attn = False 
     ):
         super().__init__()
 
         # determine dimensions
-
+        self.config = config
         self.channels = channels
         self.self_condition = self_condition
 
         input_channels = channels * ((n_conditions + 1) if self_condition else 1)
+        
         if var_cond:
             input_channels += channels
         if mean_cond:
             input_channels += channels
+
 
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
@@ -346,7 +361,7 @@ class Unet(Module):
         attn_dim_head = cast_tuple(attn_dim_head, num_stages)
 
         assert len(full_attn) == len(dim_mults)
-
+        print("dim mults : ", dim_mults)
         # prepare blocks
 
         FullAttention = partial(Attention, flash = flash_attn)
@@ -362,14 +377,24 @@ class Unet(Module):
             is_last = ind >= (num_resolutions - 1)
 
             attn_klass = FullAttention if layer_full_attn else LinearAttention
-
-            self.downs.append(ModuleList([
-                resnet_block(dim_in, dim_in),
-                resnet_block(dim_in, dim_in),
-                attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
-                Downsample(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
-            ]))
-
+            if self.config.use_maxpool:
+                print('maxpool')
+                self.downs.append(ModuleList([
+                    resnet_block(dim_in, dim_in),
+                    resnet_block(dim_in, dim_in),
+                    attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
+                    Downsample_maxpool(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
+                
+                ]))
+            else :
+                print("sans maxpool") 
+                self.downs.append(ModuleList([
+                    resnet_block(dim_in, dim_in),
+                    resnet_block(dim_in, dim_in),
+                    attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
+                    Downsample(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
+                
+                ]))
         mid_dim = dims[-1]
         self.mid_block1 = resnet_block(mid_dim, mid_dim)
         self.mid_attn = FullAttention(mid_dim, heads = attn_heads[-1], dim_head = attn_dim_head[-1])
@@ -401,44 +426,90 @@ class Unet(Module):
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
         if self.self_condition:
                 x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
-                x = torch.cat((x_self_cond, x), dim = 1)                
-
+                x = torch.cat((x_self_cond, x), dim = 1)       
+        # if rank == 0:         
+        #     print("shape de img avant le forward", x.shape)
         x = self.init_conv(x)
         r = x.clone()
-
+        # if rank == 0:
+        #     print("shape de img après première convolution :", x.shape)
         t = self.time_mlp(time)
 
         h = []
-
-        for block1, block2, attn, downsample in self.downs:
+        # if rank == 0:
+        #     print("partie down du Unet")
+        for i,(block1, block2, attn, downsample) in enumerate(self.downs):
             x = block1(x, t)
+            
             h.append(x)
+            # if rank == 0:
+
+            #     print(f"shape de img après block1 passage {i} : ", x.shape)
 
             x = block2(x, t)
+            # if rank == 0:
+    
+            #     print(f"shape de img après block2 passage {i} : ", x.shape) 
             x = attn(x) + x
             h.append(x)
 
             x = downsample(x)
-
+            # if rank == 0:
+    
+            #     print(f"shape de img après downsample {i} : ", x.shape)
+        # if rank == 0:
+        #     print('sortie du down')
         x = self.mid_block1(x, t)
+        # if rank == 0:
+        
+        #         print(f"shape de img après midblock1 : ", x.shape)
         x = self.mid_attn(x) + x
         x = self.mid_block2(x, t)
-
-        for block1, block2, attn, upsample in self.ups:
+        # if rank == 0:
+        
+        #         print(f"shape de img après midblock2 : ", x.shape)
+        # if rank == 0:
+        #     print("partie up du Unet")
+        for i,(block1, block2, attn, upsample) in enumerate(self.ups):
             x = torch.cat((x, h.pop()), dim = 1)
+            # if rank == 0:
+        
+            #     print(f"shape de img après torch.cat {i} : ", x.shape)
             x = block1(x, t)
-
+            # if rank == 0:
+        # 
+                # print(f"shape de img après block1 passage {i} : ", x.shape)
             x = torch.cat((x, h.pop()), dim = 1)
+            # if rank == 0:
+            # 
+                # print(f"shape de img après torch.cat passage {i} : ", x.shape)
             x = block2(x, t)
+            # if rank == 0:
+            # 
+                # print(f"shape de img après block2 passage {i} : ", x.shape)
             x = attn(x) + x
 
             x = upsample(x)
-
+            # if rank == 0:
+            # 
+                # print(f"shape de img après upsample {i} : ", x.shape)
+        # if rank == 0:
+            # print("sortie du up")
         x = torch.cat((x, r), dim = 1)
-
+        # if rank == 0:
+            # 
+                # print(f"shape de img après torch.cat : ", x.shape)
         x = self.final_res_block(x, t)
+        # if rank == 0:
+            # 
+                # print(f"shape de img après dernier resnet block : ", x.shape)
+        x = self.final_conv(x)
+        # if rank == 0:
+            
+        #         print(f"shape finale de img : ", x.shape)
         
-        return self.final_conv(x)
+        return x
+ 
 
 
 # gaussian diffusion trainer class

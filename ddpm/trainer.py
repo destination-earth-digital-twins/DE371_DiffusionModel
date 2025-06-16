@@ -18,6 +18,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import torch.amp
 from ddpm import normalize
 
+rank = int(os.environ.get("LOCAL_RANK",0))
 
 class Trainer(Ddpm_base):
 
@@ -94,7 +95,6 @@ class Trainer(Ddpm_base):
         Returns:
             float: Loss value for the batch.
         """
-        rank = int(os.environ.get("LOCAL_RANK",0))
         if validation:
             with torch.no_grad():
                 loss= self.model(**batch)
@@ -103,11 +103,8 @@ class Trainer(Ddpm_base):
 
             if self.config.use_AMP:  
                 with torch.autocast(device_type='cuda'):
-                    
                     torch.cuda.synchronize()            
-                
                     loss = self.model(**batch)
-                    
                 scaler.scale(loss).backward()
 
                 scaler.step(self.optimizer)
@@ -120,8 +117,6 @@ class Trainer(Ddpm_base):
                 loss.backward()
                 self.optimizer.step()
                 
-        loss = loss.detach().cpu()
-
         return loss
 
     def _run_epoch(self, epoch, scaler):
@@ -227,12 +222,12 @@ class Trainer(Ddpm_base):
                 if is_main_gpu():
                     val_loop.set_postfix_str(f"Loss : {total_val_loss / (i + 1):.6f}")
 
-            total_val_loss = total_val_loss / len(self.val_dataloader)
+            total_val_loss = torch.div(total_val_loss,len(self.val_dataloader))
 
             self.model.train()
 
                 
-        return total_loss / len(self.dataloader), total_val_loss 
+        return torch.div(total_loss, len(self.dataloader)), total_val_loss 
 
     def _save_snapshot(self, epoch, path, train_loss, val_loss):
         """
@@ -428,7 +423,7 @@ class Trainer(Ddpm_base):
             np.save(save_path, img.cpu())
         if self.config.plot:
             sample_path = f"samples/sample_grid_{ep}.jpg"
-            save_plot_path = os.path.join("/project/home/p200177/DE_371/avritj/models/", self.config.run_name,sample_path)
+            save_plot_path = os.path.join(self.config.output_dir, self.config.run_name,sample_path)
             
             self.plot_grid_big_domain(save_plot_path, samples.cpu())
         self.logger.info(

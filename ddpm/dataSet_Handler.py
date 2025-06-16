@@ -155,7 +155,7 @@ class ISDataset(Dataset):
             return condition
 
         condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, torch.mul(self.config.n_var,self.config.n_conditions), self.height_dim, self.width_dim))
         return condition
     
     
@@ -232,10 +232,10 @@ class CustomDistributedSampler(Sampler):
         if not drop_last and len(self.dataset) % self.num_replicas != 0:
             self.num_samples += 1
 
-        self.total_size = self.num_samples * self.num_replicas
+        self.total_size = torch.mul(self.num_samples, self.num_replicas)
 
     def __iter__(self):
-        start = self.rank * self.num_samples
+        start = torch.mul(self.rank, self.num_samples)
         end = min(start + self.num_samples, len(self.dataset))
         indices = list(range(start, end))
         return iter(indices)

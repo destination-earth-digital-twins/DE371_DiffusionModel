@@ -29,6 +29,7 @@ import numpy as np
 
 import faulthandler
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 warnings.filterwarnings(
     "ignore",
     message="This DataLoader will create .* worker processes in total.*",
@@ -111,9 +112,12 @@ def load_train_objs(config):
         and "conditioned" in config.sampling_mode
     )
     # Create a U-Net model and a diffusion model based on configuration
+    dim_mults = tuple(2 ** i for i in range(config.nb_layers))
+        
     umodel = Unet(
         dim=64,
-        dim_mults=(1, 2, 4, 8),
+        config=config,
+        dim_mults=dim_mults,
         channels=len(config.var_indexes),
         self_condition=use_cond,
         n_conditions=config.n_conditions,
@@ -153,7 +157,7 @@ def load_train_objs(config):
             config = config,
         )
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.lr, betas=config.adam_betas
+        model.parameters(), lr=config.lr, betas=config.adam_betas,  #set foreach=False to reduce memory consumption : but loss of performance
     )
     if config.compile_model:
         model.compile(fullgraph=False)

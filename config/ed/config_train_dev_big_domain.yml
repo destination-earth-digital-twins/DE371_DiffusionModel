@@ -6,7 +6,7 @@
 "any_time": 1
 "training_configuration" : "mirror" #or zero
 "domain_type" : "big" #or small
-
+"nb_layers": 6 
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
 "plot": True
