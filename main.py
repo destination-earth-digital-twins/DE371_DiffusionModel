@@ -16,7 +16,6 @@ from torch.utils.data.distributed import DistributedSampler
 
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
-from ddpm.SDEdit_gaussian_diffusion import SDEeditGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.SDEdit_elucidated_diffusion import SDEditElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
@@ -134,16 +133,6 @@ def load_train_objs(config):
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
             )
-        elif use_cond_sdedit:
-            model = SDEeditGaussianDiffusion(
-                umodel,
-                image_size=config.image_size,
-                timesteps=1000,
-                beta_schedule=config.beta_schedule,
-                auto_normalize=config.auto_normalize,
-                sampling_timesteps=config.ddim_timesteps,
-                num_edition_timesteps=config.num_edition_timesteps,
-            )
         else:
             model = GaussianDiffusion(
                 umodel,
@@ -152,6 +141,7 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
             )
     else:
         if not use_cond_sdedit :

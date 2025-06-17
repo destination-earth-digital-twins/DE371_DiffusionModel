@@ -91,9 +91,12 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
+<<<<<<< HEAD
         
         if self.config.sampling_mode == 'conditioned_sdedit':
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+=======
+>>>>>>> a30a206 (merging sdedit sampler with existing gaussian sampler)
         
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
@@ -105,7 +108,11 @@ class ISDataset(Dataset):
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
+<<<<<<< HEAD
         
+=======
+  
+>>>>>>> a30a206 (merging sdedit sampler with existing gaussian sampler)
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
