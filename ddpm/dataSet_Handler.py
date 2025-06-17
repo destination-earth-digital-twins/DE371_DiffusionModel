@@ -90,7 +90,7 @@ class ISDataset(Dataset):
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
-        sample, sample_denorm = self.file_to_torch(file_name, return_denorm=True) # target
+        sample = self.file_to_torch(file_name) # target
         
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
@@ -101,7 +101,7 @@ class ISDataset(Dataset):
         ensemble_df = self.ensembles.get_group((ensemble_id,)) # Group every membre from this ensemble in a df
 
         # Build the tensors for the sampling and the training
-        condition_tensor, condition_tensor_denorm = self.get_conditioning_members(ensemble_df, idx, return_denorm=True)
+        condition_tensor = self.get_conditioning_members(ensemble_df, idx)
   
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
@@ -143,10 +143,9 @@ class ISDataset(Dataset):
             # Note : if self.config.predict_residue is True, then sample is now the residue and sample_denorm is still the original sample denorm
             # Maybe this has to be fixed afterwards
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-            sample_denorm = sample_denorm.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-
+        
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 
     def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """

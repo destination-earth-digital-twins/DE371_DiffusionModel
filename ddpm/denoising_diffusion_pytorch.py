@@ -500,7 +500,8 @@ class GaussianDiffusion(Module):
         offset_noise_strength = 0.,  # https://www.crosslabs.org/blog/diffusion-with-offset-noise
         min_snr_loss_weight = False, # https://arxiv.org/abs/2303.09556
         min_snr_gamma = 5,
-        immiscible = False
+        immiscible = False,
+        num_edition_timesteps=1000 # Num step for SDEdit setting
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -537,6 +538,12 @@ class GaussianDiffusion(Module):
 
         timesteps, = betas.shape
         self.num_timesteps = int(timesteps)
+
+        # SDEdit flag setting
+        self.sdedit_flag = False
+        self.num_edition_timesteps = int(num_edition_timesteps)
+        if num_edition_timesteps < timesteps:
+            self.sdedit_flag = True
 
         # sampling related parameters
 
@@ -689,15 +696,33 @@ class GaussianDiffusion(Module):
         return pred_img, x_start
 
     @torch.inference_mode()
-    def p_sample_loop(self, shape, return_all_timesteps = False):
+    def p_sample_loop(self, shape, return_all_timesteps = False, condition=None):
+        r"""
+        Sample from SDEdit diffusion using a loop over timesteps.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
         batch, device = shape[0], self.device
 
-        img = torch.randn(shape, device = device)
+        if not self.sdedit_flag:
+            # Start from random image
+            img = torch.randn(shape, device = device)
+        else :
+            # Start from noised condition
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
+
         imgs = [img]
 
         x_start = None
 
-        for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
+        num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
+
+        for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
             self_cond = x_start if self.self_condition else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
@@ -708,23 +733,51 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def ddim_sample(self, shape, return_all_timesteps = False):
-        batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+    def ddim_sample(
+        self,
+        shape,
+        return_all_timesteps = False,
+        condition=None
+        ):
+        r"""
+        Sample from conditioned diffusion using ddim sampling.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information  (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        batch, device, sampling_timesteps, eta, objective = shape[0], self.device, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+
+        if not self.sdedit_flag:
+            # Start from a random image
+            img = torch.randn(shape, device = device)
+            total_timesteps=self.num_timesteps
+        else :
+            # Start from a noised version of the condition
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
+            total_timesteps=self.num_edition_timesteps
 
         times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:])) # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
 
-        img = torch.randn(shape, device = device)
         imgs = [img]
 
         x_start = None
 
-        for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step'):
-            time_cond = torch.full((batch,), time, device = device, dtype = torch.long)
+        for time, time_next in tqdm(
+            time_pairs,
+            desc = 'sampling loop time step'
+        ):
+            time_cond = torch.full(
+                (batch,), time, device = device, dtype = torch.long
+            )
             self_cond = x_start if self.self_condition else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
-
+            
             if time_next < 0:
                 img = x_start
                 imgs.append(img)
@@ -750,10 +803,27 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False):
-        (h, w), channels = self.image_size, self.channels
-        sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn((batch_size, channels, h, w), return_all_timesteps = return_all_timesteps)
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None):
+        r"""
+        Generate samples using SDEdit diffusion.
+        Args:
+            batch_size (int): Number of samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        image_size, channels = self.image_size, self.channels
+        sample_fn = (
+            self.p_sample_loop
+            if not self.is_ddim_sampling
+            else self.ddim_sample
+        )
+        return sample_fn(
+            (batch_size, channels, *image_size),
+            return_all_timesteps=return_all_timesteps,
+            condition=condition,
+        )
 
     @torch.inference_mode()
     def interpolate(self, x1, x2, t = None, lam = 0.5):

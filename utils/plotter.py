@@ -16,8 +16,6 @@ def online_plot_mean(
           clim_global=[(-5,5),(-5,5),(270,300)],
           axis_title_global=''
           ):
-        # print('packsample.shape', packsample.shape)
-        # print('pert_sample.shape', pert_sample.shape)
         fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=3, ncols=len(var_names))
         for id, var in enumerate(var_names):
             var_id = dict_var[var]
@@ -44,7 +42,7 @@ def online_plot_mean(
         fig.tight_layout()
         try:
             fig.savefig(figname, dpi=100)
-        except Exception:
+        except Exception as e : 
             print(f"unable to save figure: {figname}")
         plt.close()
         return
@@ -64,8 +62,6 @@ def online_plot_var(
           clim_global=[(0,5),(0,5),(0,5)],
           axis_title_global=''
           ):
-        # print('packsample.shape', packsample.shape)
-        # print('pert_sample.shape', pert_sample.shape)
         fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=3, ncols=len(var_names))
         for id, var in enumerate(var_names):
             var_id = dict_var[var]
@@ -92,7 +88,7 @@ def online_plot_var(
         fig.tight_layout()
         try:
             fig.savefig(figname, dpi=100)
-        except Exception:
+        except Exception as e : 
             print(f"unable to save figure: {figname}")
         plt.close()
         return
@@ -139,7 +135,7 @@ def online_plot(
         fig.tight_layout()
         try:
             fig.savefig(figname, dpi=100)
-        except Exception:
+        except Exception as e : 
             print(f"unable to save figure: {figname}")
         plt.close()
         return
@@ -183,8 +179,9 @@ def online_plot_quantiles(
         fig.tight_layout()
         try:
             fig.savefig(figname_info+'_AROME.png', dpi=100)
-        except Exception:
+        except Exception as e : 
             print(f"unable to save figure: {figname_info+'_AROME.png'}")
+            print('reason: ', e)
         plt.close()
         
         # Quantiles of Generated samples
@@ -201,7 +198,8 @@ def online_plot_quantiles(
         fig.tight_layout()
         try:
             fig.savefig(figname_info+'_GEN.png', dpi=100)
-        except Exception:
+        except Exception as e : 
             print(f"unable to save figure: {figname_info+'_GEN.png'}")
+            print('reason: ', e)
         plt.close()
         return

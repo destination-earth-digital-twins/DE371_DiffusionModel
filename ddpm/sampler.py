@@ -153,36 +153,12 @@ class Sampler(Ddpm_base):
 
                 if self.config.plot:# and is_main_gpu():
 
-                    if not self.config.invert_norm:
-                        arome_ensemble = conditioning_sets[0].numpy()
-                    else:
-                        arome_ensemble = batch['img_denorm'].permute(1, 0, 2, 3, 4)[0].numpy()
+                    arome_ensemble = conditioning_sets[0].numpy()
                     online_plot(
                         arome_ensemble,
-                        ensemble.numpy()[:,1:,:,:],
+                        ensemble.numpy()[:,1:,:,:], # find a way to denorm here
                         figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
                         figtitle=f'Sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}',
-                    )
-
-                    online_plot_mean(
-                        arome_ensemble,
-                        ensemble.numpy()[:,1:,:,:],
-                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_mean.png'),
-                        figtitle=f'Mean sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}'
-                    )
-
-                    online_plot_var(
-                        arome_ensemble,
-                        ensemble.numpy()[:,1:,:,:],
-                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_variance.png'),
-                        figtitle=f'Var sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}'
-                    )
-
-                    online_plot_quantiles(
-                        arome_ensemble,
-                        ensemble.numpy()[:,1:,:,:],
-                        figname_info=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_quantiles'),
-                        title_info=f'{batch["date"][0]}_{batch["leadtime"][0]}'
                     )
 
         else:
