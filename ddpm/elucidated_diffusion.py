@@ -50,13 +50,21 @@ class ElucidatedDiffusion(nn.Module):
         S_tmin = 0.05,
         S_tmax = 50,
         S_noise = 0.0,
+        num_edition_timesteps=5,
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
         self.model = model
         self.self_condition = model.self_condition
 
-
+        self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
+        
+        # SDEdit flag setting
+        self.num_edition_timesteps=num_edition_timesteps
+        self.sdedit_flag = False
+        self.num_edition_timesteps = int(num_edition_timesteps)
+        if num_edition_timesteps < num_sample_steps:
+            self.sdedit_flag = True
 
         # image dimensions
 
@@ -73,8 +81,6 @@ class ElucidatedDiffusion(nn.Module):
 
         self.P_mean = P_mean
         self.P_std = P_std
-
-        self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
 
         self.S_churn = S_churn
         self.S_tmin = S_tmin
@@ -154,14 +160,31 @@ class ElucidatedDiffusion(nn.Module):
             min(self.S_churn / num_sample_steps, sqrt(2) - 1),
             0.
         )
+        if not self.sdedit_flag:
+            sigmas_and_gammas = list(zip(sigmas[:-1], sigmas[1:], gammas[:-1]))
+            
+            # images is noise at the beginning
+            init_sigma = sigmas[0]
+            images = init_sigma * torch.randn(shape, device = self.device)
 
-        sigmas_and_gammas = list(zip(sigmas[:-1], sigmas[1:], gammas[:-1]))
+        
+        else :
+            sigmas_and_gammas = list(
+            zip(
+            sigmas[num_sample_steps - self.num_edition_timesteps:-1],
+            sigmas[num_sample_steps - self.num_edition_timesteps+1:],
+            gammas[num_sample_steps - self.num_edition_timesteps:-1]
+            )
+            )
 
-        # images is noise at the beginning
+            # Noising condition
+            condition = normalize_to_neg_one_to_one(condition)
+            init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
+            noise = torch.randn_like(condition, device = self.device)
 
-        init_sigma = sigmas[0]
-        images = init_sigma * torch.randn(shape, device = self.device)
+            images = init_sigma * noise  + condition
 
+        
         # for self conditioning
 
         x_start = None
@@ -209,8 +232,19 @@ class ElucidatedDiffusion(nn.Module):
 
         sigmas = self.sample_schedule(num_sample_steps)
 
+        if not self.sdedit_flag:
+            images  = sigmas[0] * torch.randn(shape, device = device)
+        
+        else :
+            # Noising condition
+            condition = normalize_to_neg_one_to_one(condition)
+            init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
+            noise = torch.randn_like(condition, device = self.device)
+
+            images = init_sigma * noise  + condition
+
         shape = (batch_size, self.channels, self.image_size, self.image_size)
-        images  = sigmas[0] * torch.randn(shape, device = device)
+        
 
         sigma_fn = lambda t: t.neg().exp()
         t_fn = lambda sigma: sigma.log().neg()
