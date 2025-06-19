@@ -152,13 +152,18 @@ class Sampler(Ddpm_base):
                 np.save(save_path, ensemble.numpy())
 
                 if self.config.plot:# and is_main_gpu():
+                    if self.config.invert_norm == True:
+                        detransform_func = self.transforms_func()
+                        arome_ensemble = torch.stack([detransform_func(image) for image in conditioning_sets])
+                    else :
+                        arome_ensemble = conditioning_sets.detach().clone()
 
-                    arome_ensemble = conditioning_sets[0].numpy()
                     online_plot(
-                        arome_ensemble,
-                        ensemble.numpy()[:,1:,:,:], # find a way to denorm here
+                        arome_ensemble.numpy()[0], # normalized
+                        ensemble.numpy()[:,1:,:,:], # normalized if not invert_norm
                         figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
                         figtitle=f'Sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}',
+                        clim_global=None
                     )
 
         else:
