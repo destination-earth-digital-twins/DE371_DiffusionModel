@@ -17,7 +17,7 @@ from utils import plotter_inconditionnal
 from torch.profiler import profile, record_function, ProfilerActivity
 import torch.amp
 from ddpm import normalize
-
+from pickle import dump
 rank = int(os.environ.get("LOCAL_RANK",0))
 
 class Trainer(Ddpm_base):
@@ -116,7 +116,7 @@ class Trainer(Ddpm_base):
                 loss = self.model(**batch)
                 loss.backward()
                 self.optimizer.step()
-                
+        
         return loss
 
     def _run_epoch(self, epoch, scaler):
@@ -127,7 +127,6 @@ class Trainer(Ddpm_base):
         Returns:
             float: Average loss for the epoch.
         """
-
         iters = len(self.dataloader)
         current_iter = 0
         if dist.is_initialized():
@@ -226,7 +225,7 @@ class Trainer(Ddpm_base):
 
             self.model.train()
 
-                
+
         return torch.div(total_loss, len(self.dataloader)), total_val_loss 
 
     def _save_snapshot(self, epoch, path, train_loss, val_loss):

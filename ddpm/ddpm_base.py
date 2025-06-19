@@ -208,7 +208,7 @@ class Ddpm_base:
         
         fig, axes = plt.subplots(1, 3, figsize=(12, 10))
         axes = axes.flatten()
-        fig.suptitle("model sample",y=0.67)
+        fig.suptitle("model sample",y=0.7)
         img = np_img[0].detach()
         # img = img.masked_fill(~mask,float("nan"))
         # img = np.where(np.abs(img) > 1, np.nan,img)

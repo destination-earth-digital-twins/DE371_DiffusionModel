@@ -1,12 +1,16 @@
 # General parameters
 "mode": "Train"
-"run_name": "run_test"
+"run_name": "test"
 "output_dir": "/project/home/p200177/DE_371/avritj/models"
-"batch_size": 1
+"batch_size": 8
 "any_time": 1
 "training_configuration" : "mirror" #or zero
 "domain_type" : "big" #or small
-"nb_layers": 6 
+"compile_model": true
+"use_maxpool": false
+"nb_layers": 4
+"model_used": "unet" #or unet
+
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
 "plot": True
@@ -27,7 +31,7 @@
 #"mean_var_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/mean_var_files"
 "n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
-"crop": [ 3,715,0,1120 ]
+"crop": [3 ,715,0,1120 ]
 "invert_norm": false
 "stat_folder": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0"
 "offset_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/mean_3var_with0_rr.npy"
@@ -35,8 +39,7 @@
 "image_size": [712,1120]
 "guiding_col": "ensemble_id"
 "n_conditions": 0
-"use_AMP": false
-"use_scaler": True
+"use_AMP": true
 # "mean_conditionning": true
 # # "var_conditionning": true
 
@@ -55,7 +58,7 @@
 "lr": 5.0e-05
 
 # Tracking parameters
-"use_mlflow": true # activation mlflow log
+"use_mlflow": false # activation mlflow log
 "ml_tracking_uri": "../mlruns" # path to log mlflow
 "ml_experiment_name": "ddpm_dev" # experience name  "wandbproject": "your_wandb_project",
 "use_wandb": false

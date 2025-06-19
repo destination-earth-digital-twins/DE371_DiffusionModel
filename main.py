@@ -10,12 +10,11 @@ from multiprocessing import cpu_count
 import cProfile
 import pstats
 import torch
-
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
+from ddpm.denoising_diffusion_pytorch import SwinUNETR
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
@@ -26,10 +25,10 @@ from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
 import numpy as np
+from pickle import dump
+rank = int(os.environ.get("LOCAL_RANK",0))
 
-import faulthandler
-
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 warnings.filterwarnings(
     "ignore",
     message="This DataLoader will create .* worker processes in total.*",
@@ -113,17 +112,26 @@ def load_train_objs(config):
     )
     # Create a U-Net model and a diffusion model based on configuration
     dim_mults = tuple(2 ** i for i in range(config.nb_layers))
-        
-    umodel = Unet(
-        dim=64,
-        config=config,
-        dim_mults=dim_mults,
-        channels=len(config.var_indexes),
-        self_condition=use_cond,
-        n_conditions=config.n_conditions,
-        var_cond=config.var_conditionning,
-        mean_cond=config.mean_conditionning,
-    )
+    
+    if config.model_used == "swinunetr": 
+        umodel = SwinUNETR(
+            in_channels=len(config.var_indexes),
+            out_channels=len(config.var_indexes),
+            img_size=(512,512),
+            self_condition = False,
+                        
+        )
+    else :
+        umodel = Unet(
+            dim=64,
+            config=config,
+            dim_mults=dim_mults,
+            channels=len(config.var_indexes),
+            self_condition=use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
+        )
 
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
@@ -156,11 +164,14 @@ def load_train_objs(config):
             S_noise = config.S_noise,
             config = config,
         )
+    
+
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.lr, betas=config.adam_betas,  #set foreach=False to reduce memory consumption : but loss of performance
+        model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
     )
     if config.compile_model:
         model.compile(fullgraph=False)
+    
     return model, optimizer
 
 
@@ -378,7 +389,19 @@ if __name__ == "__main__":
 
     # Execute the main training or sampling function based on the mode
     if config.mode == "Train":
+        # if rank==0:
+            # 
+            # torch.cuda.memory._record_memory_history(enabled="all")
+
         main_train(config)
+        # s = torch.cuda.memory._snapshot()
+        # print("ok")
+        # if rank == 0:
+        #     with open(f'snapshot.pickle',"wb") as f:
+        #         dump(s,f)   
+        #         print("on est ici")
+        #     torch.cuda.memory._record_memory_history(enabled=None)
+        
     elif config.mode != "Train":
         main_sample(config)
 
