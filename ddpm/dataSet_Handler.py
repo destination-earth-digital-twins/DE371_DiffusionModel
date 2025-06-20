@@ -105,12 +105,15 @@ class ISDataset(Dataset):
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
-        
+  
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
-        member = row["Member"]
+        if self.config.guiding_col is not None:
+            member = row[self.config.guiding_col]
+        else:
+            member = row["Member"]
 
         # Optional configs based on the ensemble mean and variance
         if self.config.predict_residue and not self.config.learn_residue:
@@ -140,7 +143,6 @@ class ISDataset(Dataset):
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
         if self.config.sampling_mode == 'conditioned_sdedit':
-
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         
         sample_id = re.search(r"\d+", file_name).group()
@@ -195,9 +197,13 @@ class ISDataset(Dataset):
         )
         return condition_tensor
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> dc79401 (finishing to merge SDEdit to original sampler)
+=======
+
+>>>>>>> 0d838615d9b1f550cd2b68ab953f2e7b49d9a51e
         
     def file_to_torch(self, file_name):
         """
