@@ -12,7 +12,7 @@ from dataclasses_json import dataclass_json
 from monai.networks.blocks.dynunet_block import UnetResBlock
 from monai.networks.nets.swin_unetr import SwinUNETR as MonaiSwinUNETR
 from torch import nn
-from .base_transformers import ModelABC, ModelType
+from .ddpm_base import ModelABC, ModelType
 from utils.plotter_inconditionnal import plotter3D_3var
 
 import torch
@@ -436,87 +436,50 @@ class Unet(Module):
         if self.self_condition:
                 x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
                 x = torch.cat((x_self_cond, x), dim = 1)       
-        # if rank == 0:         
-        #     print("shape de img avant le forward", x.shape)
+
         x = self.init_conv(x)
         r = x.clone()
-        # if rank == 0:
-        #     print("shape de img après première convolution :", x.shape)
+
         t = self.time_mlp(time)
 
         h = []
-        # if rank == 0:
-        #     print("partie down du Unet")
+
         for i,(block1, block2, attn, downsample) in enumerate(self.downs):
             x = block1(x, t)
             
             h.append(x)
-            # if rank == 0:
 
-            #     print(f"shape de img après block1 passage {i} : ", x.shape)
 
             x = block2(x, t)
-            # if rank == 0:
-    
-            #     print(f"shape de img après block2 passage {i} : ", x.shape) 
+
             x = attn(x) + x
             h.append(x)
 
             x = downsample(x)
-            # if rank == 0:
-    
-            #     print(f"shape de img après downsample {i} : ", x.shape)
-        # if rank == 0:
-        #     print('sortie du down')
+
         x = self.mid_block1(x, t)
-        # if rank == 0:
-        
-        #         print(f"shape de img après midblock1 : ", x.shape)
+
         x = self.mid_attn(x) + x
         x = self.mid_block2(x, t)
-        # if rank == 0:
-        
-        #         print(f"shape de img après midblock2 : ", x.shape)
-        # if rank == 0:
-        #     print("partie up du Unet")
+ 
         for i,(block1, block2, attn, upsample) in enumerate(self.ups):
             x = torch.cat((x, h.pop()), dim = 1)
-            # if rank == 0:
-        
-            #     print(f"shape de img après torch.cat {i} : ", x.shape)
+
             x = block1(x, t)
-            # if rank == 0:
-        # 
-                # print(f"shape de img après block1 passage {i} : ", x.shape)
+
             x = torch.cat((x, h.pop()), dim = 1)
-            # if rank == 0:
-            # 
-                # print(f"shape de img après torch.cat passage {i} : ", x.shape)
+
             x = block2(x, t)
-            # if rank == 0:
-            # 
-                # print(f"shape de img après block2 passage {i} : ", x.shape)
+
             x = attn(x) + x
 
             x = upsample(x)
-            # if rank == 0:
-            # 
-                # print(f"shape de img après upsample {i} : ", x.shape)
-        # if rank == 0:
-            # print("sortie du up")
+
         x = torch.cat((x, r), dim = 1)
-        # if rank == 0:
-            # 
-                # print(f"shape de img après torch.cat : ", x.shape)
+
         x = self.final_res_block(x, t)
-        # if rank == 0:
-            # 
-                # print(f"shape de img après dernier resnet block : ", x.shape)
+
         x = self.final_conv(x)
-        # if rank == 0:
-            
-        #         print(f"shape finale de img : ", x.shape)
-        
         return x
  
 

@@ -406,8 +406,11 @@ class Trainer(Ddpm_base):
                 "Sampling more than 6 images may take a long time because sampling uses only the main GPU."
             )
         self.logger.info(f"Sampling {nb_img} images...")
+        #le modèle swinunetr ne passe pas dans la fonction _sample_batch
         samples = super()._sample_batch(nb_img=nb_img, condition=condition)
+        print("ici 2")
         for i, img in enumerate(samples):
+            print("3")
             filename = (
                 f"_sample_{ep}_{i}.npy"
                 if ep is not None
