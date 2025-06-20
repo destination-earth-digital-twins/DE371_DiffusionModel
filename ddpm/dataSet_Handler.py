@@ -211,9 +211,9 @@ class ISDataset(Dataset):
         sample = np.float32(np.load(sample_path + ".npy"))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        norm_sample = sample.transpose((1, 2, 0))
-        norm_sample = self.transform(norm_sample)
-        return norm_sample
+        sample = sample.transpose((1, 2, 0))
+        sample = self.transform(sample)
+        return sample
 
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
