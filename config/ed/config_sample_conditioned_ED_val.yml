@@ -4,7 +4,8 @@
 "output_dir": "/path/to/the/samples/dir"
 "batch_size": 16
 "any_time": 1
-
+"use_AMP": false
+"compile_model": false
 # Sampling parameters
 # "n_sampling_conditioning_sets": 4
 "n_sampling_conditioning_sets": 1

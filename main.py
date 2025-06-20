@@ -149,6 +149,9 @@ def load_train_objs(config):
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )
+    
+    if config.compile_model:
+        model.compile()
     return model, optimizer
 
 
