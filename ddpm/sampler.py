@@ -28,7 +28,7 @@ class Sampler(Ddpm_base):
         """
         super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
-
+        self.inversion_transforms = inversion_transforms
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
         # OUTDATED FOR NOW. USED WITH DDIM
@@ -70,7 +70,7 @@ class Sampler(Ddpm_base):
         return sampled_images_unnorm
 
     @torch.no_grad()
-    def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
+    def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256),start_index=0):
         """
         Generate and save sample images during training.
         Args:
@@ -78,8 +78,7 @@ class Sampler(Ddpm_base):
         Returns:
             None
         """
-
-        i = self.gpu_id if type(self.gpu_id) is int else 0
+        i = start_index + self.gpu_id if type(self.gpu_id) is int else 0
 
         # shape of the images 
         x, y  = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
@@ -104,10 +103,14 @@ class Sampler(Ddpm_base):
 
                         filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
-                        np.save(save_path, s)
+                        print('je suis s',s)
+                        s = self.inversion_transforms(s)
+                        np.save(save_path, s.cpu())
                         i += max(torch.cuda.device_count(), 1)
                     b += batch_size
                     pbar.update(1)
+                    
+    
         elif "conditioned" in self.config.sampling_mode:
 
             if is_main_gpu():
@@ -131,17 +134,17 @@ class Sampler(Ddpm_base):
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
-                        for set in conditioning_sets:
-                            print('JE SUIS LEN', len(set))
                         ensemble = torch.cat([
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-                        print('ENSEMNLE',ensemble)
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
+                print('je suis ensemble',ensemble)
+                ensemble = self.inversion_transforms(ensemble)
+                print('je suis ensemble',ensemble)
                 np.save(save_path, ensemble.numpy())
                 
 

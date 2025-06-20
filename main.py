@@ -130,6 +130,7 @@ def load_train_objs(config):
             sampling_timesteps=config.ddim_timesteps,
         )
     else:
+        print('JE PASSE BIEN PAR ICIC')
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
@@ -268,33 +269,61 @@ def main_train(config):
             f"The best model was not created or is not found in {config.run_name}."
         )
 
-
 def main_sample(config):
-    """
-    Main function for testing.
-    Args:
-        config (Namespace): Configuration parameters.
-    """
-    # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+    sample_data, _ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
     inversion_tf = sample_data.dataset.inversion_transforms
-    data = sample_data if config.sampling_mode!="simple" else None
+    data = sample_data if config.sampling_mode != "simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
-    if is_main_gpu():
-        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
-    if config.sampling_mode == "conditioned":
-        file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
-    else:
-        file_format = "fake_sample_{sample_index}.npy" 
-    sampler.sample(filename_format=file_format)
+    total_samples = 50000
+    samples_per_call = 5000
 
-    samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+    for i in range(total_samples // samples_per_call):
+        config.n_sample = samples_per_call
 
-    barrier() # Wait for every GPU to finish their sampling
+        # facultatif : passer un index de départ pour éviter les collisions
+        start_index = i * samples_per_call
+
+        # format de nom de fichier unique
+        file_format = f"fake_sample" + "_{sample_index}.npy"
+
+        if is_main_gpu():
+            logger.info(f"Sampling batch {i+1}/{total_samples // samples_per_call} — {samples_per_call} samples")
+
+        sampler.sample(filename_format=file_format, start_index=start_index)
+
+    samples_dir = os.path.join(config.output_dir, config.run_name, "samples")
+    barrier()
+
     if is_main_gpu():
-        logger.info(f"Sampling done")
+        logger.info("Sampling done")
+# def main_sample(config):
+#     """
+#     Main function for testing.
+#     Args:
+#         config (Namespace): Configuration parameters.
+#     """
+#     # Load the model and start the sampling process
+#     model, _ = load_train_objs(config)
+#     sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+#     inversion_tf = sample_data.dataset.inversion_transforms
+#     data = sample_data if config.sampling_mode!="simple" else None
+#     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
+
+#     if is_main_gpu():
+#         logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+#     if config.sampling_mode == "conditioned":
+#         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
+#     else:
+#         file_format = "fake_sample_{sample_index}.npy" 
+#     sampler.sample(filename_format=file_format)
+
+#     samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+
+#     barrier() # Wait for every GPU to finish their sampling
+#     if is_main_gpu():
+#         logger.info(f"Sampling done")
         
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
