@@ -66,7 +66,7 @@ class ISDataset(Dataset):
         )
         
         self.labels = self.labels.reset_index(drop=True)
-
+    @property
     def inversion_transforms(self):
         """
         Returns function to revert normalisation and special transforms for generated samples.
@@ -198,7 +198,7 @@ class ISDataset(Dataset):
         """
         if type(file_name) == list:
             file_name = file_name[0]
-        sample_path = os.path.join(self.data_dir, file_name )
+        sample_path = os.path.join(self.data_dir, file_name)# +'.npy')
         sample = np.float32(np.transpose(np.load(sample_path), (2, 0, 1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
