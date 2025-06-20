@@ -196,14 +196,6 @@ class ISDataset(Dataset):
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
->>>>>>> dc79401 (finishing to merge SDEdit to original sampler)
-=======
-
->>>>>>> 0d838615d9b1f550cd2b68ab953f2e7b49d9a51e
         
     def file_to_torch(self, file_name):
         """
