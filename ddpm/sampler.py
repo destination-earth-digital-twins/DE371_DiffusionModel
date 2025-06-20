@@ -142,9 +142,6 @@ class Sampler(Ddpm_base):
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
 
-                # Unbiasing ensemble
-                # ensemble = ensemble + np.expand_dims(conditioning_sets[0].mean(axis=0),0) - np.expand_dims(ensemble.mean(axis=0),0)
-
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
