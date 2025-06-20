@@ -82,7 +82,7 @@ class Trainer(Ddpm_base):
                 batch[key] = batch[key].to(self.gpu_id)
         return batch
 
-    def _run_batch(self, batch, validation=False):
+    def _run_batch(self, batch, scaler, validation=False):
         """
         Run a single training batch.
         Args:
@@ -90,21 +90,31 @@ class Trainer(Ddpm_base):
         Returns:
             float: Loss value for the batch.
         """
-        
         if validation:
             with torch.no_grad():
-                loss = self.model(**batch)
+                loss= self.model(**batch)
         else:
             self.optimizer.zero_grad()
-            loss = self.model(**batch)
-            loss.backward()
-            self.optimizer.step()
-        
-        loss = loss.detach().cpu()
+
+            if self.config.use_AMP:  
+                with torch.autocast(device_type='cuda'):
+                    torch.cuda.synchronize()            
+                    loss = self.model(**batch)
+                scaler.scale(loss).backward()
+
+                scaler.step(self.optimizer)
+                
+                scaler.update()
+                
+            else : 
+
+                loss = self.model(**batch)
+                loss.backward()
+                self.optimizer.step()
         
         return loss
 
-    def _run_epoch(self, epoch):
+    def _run_epoch(self, epoch, scaler):
         """
         Run a training epoch.
         Args:
@@ -133,7 +143,7 @@ class Trainer(Ddpm_base):
                 ["condition_tensor"] if self.guided_diffusion else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            loss = self._run_batch(batch_prep)
+            loss = self._run_batch(batch_prep, scaler)
             total_loss += loss
 
             if is_main_gpu():
@@ -293,7 +303,7 @@ class Trainer(Ddpm_base):
         Returns:
             None
         """
-
+        scaler = torch.amp.GradScaler()
         filename_format = "sample_epoch{epoch}_{i}.npy"
         if is_main_gpu():
 
@@ -312,7 +322,7 @@ class Trainer(Ddpm_base):
             loop = range(self.epochs_run, self.config.epochs)
 
         for epoch in loop:
-            avg_train_loss, avg_val_loss = self._run_epoch(epoch)
+            avg_train_loss, avg_val_loss = self._run_epoch(epoch, scaler)
             if is_main_gpu():
                 loop.set_postfix_str(
                     f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
