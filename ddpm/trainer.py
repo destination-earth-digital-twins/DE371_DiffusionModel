@@ -186,9 +186,9 @@ class Trainer(Ddpm_base):
                     next(iter(self.dataloader)), ["condition_tensor"]
                 )
                 condition = condition["condition_tensor"][: self.config.n_sample]
-                
+            self.model.eval()    
             self.sample_train(str(epoch), self.config.n_sample, condition)
-
+            self.model.train()
         # validation loss computation (optional, default :  yes)
         total_val_loss = torch.tensor(0.0,dtype=torch.float32)
         

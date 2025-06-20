@@ -202,7 +202,8 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
         sampler=(
             dataSet_Handler.CustomDistributedSampler(train_set) if config.mode == "Sample"
             else DistributedSampler(train_set, rank=get_rank_num(), shuffle=False, drop_last=False)
-            )
+            ),
+        drop_last=True
 
     )
     
