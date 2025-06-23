@@ -2,8 +2,9 @@ import numpy as np
 import os
 from tqdm import tqdm
 import pandas as pd
-
+import torch
 from utils.distributed import is_main_gpu
+import random
 
 def filter_dates(csvfile, datestart, datestop):
     if datestart and datestop :
@@ -87,3 +88,28 @@ def batch_output_sample_files(data_dir, Shape=(4, 256, 256), conditioned=False, 
                     batch_index += 1
                     sample_local_index = 0
                     batched_samples = np.zeros((batch_file_size,) + tuple(Shape))
+
+
+# Functions related to GrandEnsemble
+lstlbc = [2,20,9,5,32,15,19,21,13,1,34,12,10,31,23,11,8,24,29,22,28,25,6,33,14,7,30,27,0,18,4,26,3,16,17]
+lstic  = list(range(1,26))
+Ns = 16
+Nlbc = 35 
+random.seed(0)
+def initsmall(seed):
+    """
+    
+    Select distinct boundary and initial conditions for AROME-EPS members
+    Func  by L. Raynaud
+    
+    """
+    yic = random.sample(lstic, Ns)
+    ybc = random.sample(lstlbc, Ns)
+    mb = np.zeros((Ns))
+    # Find members corresponding to yic/ybc pairs
+    for k in range(Ns):
+        loc_bc = np.where(np.asarray(lstlbc)==ybc[k])
+        #index member of the PEARO experiment start from 1
+        #if python storage of members start at 0 remove '+1'
+        mb[k] = ( yic[k] - 1 ) * Nlbc + loc_bc[0][0] # + 1
+    return mb

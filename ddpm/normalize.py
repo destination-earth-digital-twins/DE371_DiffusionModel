@@ -76,7 +76,7 @@ class SpecialNormalize(object):
             if self.data_transforms[var] is not None:
                 sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
 
-        sample = (sample - self.offset) / self.scale
+        sample = (sample - self.offset.to(sample.device)) / self.scale.to(sample.device)
         
         return sample
 

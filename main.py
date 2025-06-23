@@ -7,21 +7,22 @@ import sys
 import time
 import warnings
 from multiprocessing import cpu_count
-
+import numpy as np
 import torch
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
+from ddpm.normalize import var_dict, SpecialNormalize
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
-from ddpm.sampler import Sampler
+from ddpm.sampler import Sampler, SamplerGrandEnsemble
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+from utils.utils import initsmall
 
 warnings.filterwarnings(
     "ignore",
@@ -313,7 +314,66 @@ def main_sample(config):
     barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
         logger.info(f"Sampling done")
+
+def main_sample_grand_ensemble(config):
+    """
+    Main function for testing.
+    Args:
+        config (Namespace): Configuration parameters.
+    """
+    # Load the model and start the sampling process
+    model, _ = load_train_objs(config)
+    config.VI = [var_dict[var] for var in config.var_indexes]
+    transform = SpecialNormalize(config)
+    sampler = SamplerGrandEnsemble(model, config, inversion_transforms=transform.denorm)
+
+    if is_main_gpu():
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = 'fake_ensemble_date_leadtime.npy'")
+    
+    file_format = "fake_grand_ensemble_{date}_{leadtime}_{draw_idx}.npy"
+    var_indices=[var_dict[var] for var in config.var_indexes]
+    for draw_idx in range(config.N_draws_grand_ensemble) : # we make N_draws choices of random 16 members
+        print(f"Drawing {draw_idx}th")
+        mb = initsmall(seed=0).astype(np.uint32)
+        print(mb)
+        mb_path = os.path.join(config.output_dir, config.run_name, 'mb_files')
+        if not os.path.exists(mb_path):
+            os.makedirs(mb_path, exist_ok=True)
+            np.save(mb_path+f'/mb_{draw_idx}.npy', np.array(mb))
+        for lt in config.leadtimes:
+            # Loading Grand Ensemble fro leadtime lt
+            dataloaded = torch.from_numpy(np.load(config.data_dir + f'_grand_sample_{lt+1}_875.npy', mmap_mode='r').astype(np.float32))
+            filename = file_format.format(date = '2021-10-01', leadtime = lt+1, draw_idx=draw_idx)
+            # Selecting and saving only the needed members
+            sample = dataloaded[mb][:,1:,:,:]
+            
+            path_GE = os.path.join(config.output_dir, config.run_name,'samples')
+            if not os.path.exists(path_GE):
+                os.makedirs(path_GE)
+            np.save(path_GE+f'/true_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', dataloaded[mb])
+            m,c,h,w = sample.shape
+            
+            # Normalizing sample
+            norm_sample = torch.cat([transform(i).unsqueeze(0) for i in sample], dim=0)
+            # Creating sample for generation
+            condition = norm_sample.unsqueeze(0).expand_as(
+                torch.zeros((config.n_sampling_conditioning_sets, m, c, h, w))
+            )
+            # Generating members
+            gen_sample = sampler.sample(samples=condition, filename=filename)
+
+            # Unbiasing samples
+            if config.unbias_sample :
+                gen_sample = gen_sample + np.expand_dims(dataloaded[mb].mean(axis=0),0) - np.expand_dims(gen_sample.mean(axis=0),0)
         
+            save_path = os.path.join(config.output_dir, config.run_name,'samples',filename)
+            np.save(path_GE+f'/fake_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', gen_sample)
+    
+
+    barrier() # Wait for every GPU to finish their sampling
+    if is_main_gpu():
+        logger.info(f"Sampling done")
+
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):
@@ -384,7 +444,10 @@ if __name__ == "__main__":
     if config.mode == "Train":
         main_train(config)
     elif config.mode != "Train":
-        main_sample(config)
+        if not config.grand_ensemble:
+            main_sample(config)
+        else :
+            main_sample_grand_ensemble(config)
 
     # Clean up distributed processes if initialized
     if dist.is_initialized():
