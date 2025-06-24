@@ -339,7 +339,7 @@ def main_sample_grand_ensemble(config):
         mb_path = os.path.join(config.output_dir, config.run_name, 'mb_files')
         if not os.path.exists(mb_path):
             os.makedirs(mb_path, exist_ok=True)
-            np.save(mb_path+f'/mb_{draw_idx}.npy', np.array(mb))
+        np.save(mb_path+f'/mb_{draw_idx}.npy', np.array(mb))
         for lt in config.leadtimes:
             # Loading Grand Ensemble fro leadtime lt
             dataloaded = torch.from_numpy(np.load(config.data_dir + f'_grand_sample_{lt+1}_875.npy', mmap_mode='r').astype(np.float32))
