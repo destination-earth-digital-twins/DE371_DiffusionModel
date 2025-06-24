@@ -92,9 +92,6 @@ class ISDataset(Dataset):
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
         
-        if self.config.sampling_mode == 'conditioned_sdedit':
-            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-        
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
