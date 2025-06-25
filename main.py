@@ -110,7 +110,7 @@ def load_train_objs(config):
     umodel = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
-        channels=len(config.var_indexes),
+        channels=len(config.var_indexes) + (1 if self.config.add_orography else 0),
         self_condition=use_cond,
         n_conditions=config.n_conditions,
         var_cond=config.var_conditionning,
@@ -133,7 +133,7 @@ def load_train_objs(config):
         model = ElucidatedDiffusion(
             umodel,
             image_size=config.image_size,
-            channels = len(config.var_indexes),
+            channels = len(config.var_indexes) + (1 if self.config.add_orography else 0),
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
             sigma_min = config.sigma_min,      # min noise level
             sigma_max = config.sigma_max,       # max noise level
