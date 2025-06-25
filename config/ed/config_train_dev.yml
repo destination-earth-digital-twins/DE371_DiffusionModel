@@ -4,7 +4,8 @@
 "output_dir": "/path/to/the/models/dir"
 "batch_size": 16
 "any_time": 5
-
+"use_AMP": false
+"compile_model": false
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
 "plot": true
@@ -20,8 +21,9 @@
 # Optional functions
 # "mean_conditioning": true
 # "var_conditioning": true
-# "predict_residue": true
 # "leatimes_conditioning": true
+# "learn_residue": true
+# "predict_residue": true
 
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done"
