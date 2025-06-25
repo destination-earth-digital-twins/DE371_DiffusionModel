@@ -146,7 +146,6 @@ class ISDataset(Dataset):
         if self.config.add_orography:
             # Check if 'orog' is in variable list 
             condition_tensor = torch.cat([condition_tensor, self.orography_normalized], dim=1)
-            sample = torch.cat([sample, self.orography_normalized], dim=1)
             # WARNOING : CHECK THAT IT IS DOING WHAT WE WANT
 
 
