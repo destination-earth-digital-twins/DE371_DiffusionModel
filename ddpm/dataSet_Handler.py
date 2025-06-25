@@ -144,6 +144,7 @@ class ISDataset(Dataset):
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
         if self.config.add_orography:
+            # Check if 'orog' is in variaable list 
             condition_tensor = torch.cat([condition_tensor, self.orography_normalized], dim=1)
             sample = torch.cat([sample, self.orography_normalized], dim=1)
 
