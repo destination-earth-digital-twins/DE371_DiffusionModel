@@ -55,7 +55,7 @@ class ElucidatedDiffusion(nn.Module):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
         self.model = model
-        self.self_condition = model.self_condition
+        self.spatial_conditions = model.spatial_conditions
         self.embedding_cond_dims = n_leadtimes
 
 
@@ -104,7 +104,7 @@ class ElucidatedDiffusion(nn.Module):
     # preconditioned network output
     # equation (7) in the paper
 
-    def preconditioned_network_forward(self, noised_images, sigma, self_cond = None, embedded_cond = None, clamp = False):
+    def preconditioned_network_forward(self, noised_images, sigma, cond_2d = None, embedded_cond = None, clamp = False):
         batch, device = noised_images.shape[0], noised_images.device
 
         if isinstance(sigma, float):
@@ -115,7 +115,7 @@ class ElucidatedDiffusion(nn.Module):
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
-            self_cond,
+            cond_2d,
             embedded_cond=embedded_cond
         )
 
@@ -180,9 +180,9 @@ class ElucidatedDiffusion(nn.Module):
             sigma_hat = sigma + gamma * sigma
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
 
-            self_cond = condition if self.self_condition else None
+            cond_2d = condition if self.spatial_conditions else None
             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, cond_emb, clamp = clamp)
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, cond_2d, cond_emb, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat
 
             images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
@@ -190,10 +190,10 @@ class ElucidatedDiffusion(nn.Module):
             # second order correction, if not the last timestep
 
             if sigma_next != 0:
-                self_cond = condition if self.self_condition else None
+                cond_2d = condition if self.spatial_conditions else None
                 cond_emb = lt_cond if self.embedding_cond_dims is not None else None
 
-                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, self_cond, cond_emb, clamp = clamp)
+                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, cond_2d, cond_emb, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
                 images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
@@ -212,7 +212,7 @@ class ElucidatedDiffusion(nn.Module):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
     def forward(self, img, *args, **kwargs):
-        #TODO change terminology from self_cond to cond
+        #TODO change terminology from cond_2d to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
 
         assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
@@ -229,19 +229,15 @@ class ElucidatedDiffusion(nn.Module):
 
 
         # Conditioned diffusion :
-        self_cond = None
-        if self.self_condition:
-            with torch.no_grad():
-                self_cond = kwargs.get('condition_tensor')
-                self_cond.detach_()
+        cond_2d = None
+        if self.spatial_conditions:
+            cond_2d = kwargs.get('condition_tensor')
         
         cond_emb = None
         if self.embedding_cond_dims is not None:
-            with torch.no_grad():
-                cond_emb = kwargs.get('leadtime')
-                cond_emb.detach_()
+            cond_emb = kwargs.get('leadtime')
 
-        denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond, cond_emb)
+        denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
 
         losses = F.mse_loss(denoised, img, reduction = 'none')
         losses = reduce(losses, 'b ... -> b', 'mean')

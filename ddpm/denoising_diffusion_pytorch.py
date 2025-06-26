@@ -281,7 +281,7 @@ class Unet(Module):
         out_dim = None,
         dim_mults = (1, 2, 4, 8),
         channels = 3,
-        self_condition = False,
+        spatial_conditions = False,
         n_conditions = 1,
         var_cond = False,
         mean_cond = False,
@@ -302,9 +302,9 @@ class Unet(Module):
         # determine dimensions
 
         self.channels = channels
-        self.self_condition = self_condition
+        self.spatial_conditions = spatial_conditions
 
-        input_channels = channels * ((n_conditions + 1) if self_condition else 1)
+        input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
         if var_cond:
             input_channels += channels
         if mean_cond:
@@ -409,7 +409,7 @@ class Unet(Module):
     def forward(self, x, time, x_self_cond = None, embedded_cond = None):
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
 
-        if self.self_condition:
+        if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
 
@@ -523,7 +523,7 @@ class GaussianDiffusion(Module):
         self.model = model
 
         self.channels = self.model.channels
-        self.self_condition = self.model.self_condition
+        self.spatial_conditions = self.model.spatial_conditions
 
         if isinstance(image_size, int):
             image_size = (image_size, image_size)
@@ -712,7 +712,7 @@ class GaussianDiffusion(Module):
         x_start = None
 
         for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
 
@@ -736,7 +736,7 @@ class GaussianDiffusion(Module):
 
         for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step'):
             time_cond = torch.full((batch,), time, device = device, dtype = torch.long)
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
 
             if time_next < 0:
@@ -784,7 +784,7 @@ class GaussianDiffusion(Module):
         x_start = None
 
         for i in tqdm(reversed(range(0, t)), desc = 'interpolation sample time step', total = t):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, i, self_cond)
 
         return img
@@ -830,7 +830,7 @@ class GaussianDiffusion(Module):
         # this technique will slow down training by 25%, but seems to lower FID significantly
 
         x_self_cond = None
-        if self.self_condition and random() < 0.5:
+        if self.spatial_conditions and random() < 0.5:
             with torch.no_grad():
                 x_self_cond = self.model_predictions(x, t).pred_x_start
                 x_self_cond.detach_()

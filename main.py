@@ -112,7 +112,7 @@ def load_train_objs(config):
         dim=64,
         dim_mults=(1, 2, 4, 8),
         channels=len(config.var_indexes),
-        self_condition=use_cond,
+        spatial_conditions=use_cond,
         n_conditions=config.n_conditions,
         var_cond=config.var_conditioning,
         mean_cond=config.mean_conditioning,
