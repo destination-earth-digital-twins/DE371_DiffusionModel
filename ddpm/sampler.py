@@ -122,7 +122,17 @@ class Sampler(Ddpm_base):
                 
                 # print('date, lt, member_id', (batch["date"],batch["leadtime"],batch["member_id"]))
                 # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
+<<<<<<< HEAD
                 conditioning_sets = batch['condition_tensor']
+=======
+                if self.config.sampling_mode == 'conditioned_input':
+                    conditioning_sets = batch['condition_tensor']
+                elif self.config.sampling_mode == 'conditioned_sdedit':
+                    conditioning_sets = batch["img"]
+                else :
+                    raise NotImplementedError
+
+>>>>>>> 0c842ffd477b9b556b67e9b66e2de4ccb9c2af5a
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 if self.config.n_var != self.config.n_var_in_dataset:
@@ -138,12 +148,13 @@ class Sampler(Ddpm_base):
                             self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-                    
+
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
+<<<<<<< HEAD
                 print(conditioning_sets.numpy().shape)
                 raise NotImplementedError
                 if self.config.plot:# and is_main_gpu():
@@ -177,6 +188,22 @@ class Sampler(Ddpm_base):
                         ensemble.numpy()[:,1:,:,:],
                         figname_info=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'_quantiles'),
                         title_info=f'{batch["date"][0]}_{batch["leadtime"][0]}'
+=======
+
+                if self.config.plot:# and is_main_gpu():
+                    if self.config.invert_norm == True:
+                        detransform_func = self.transforms_func()
+                        arome_ensemble = torch.stack([detransform_func(image) for image in conditioning_sets])
+                    else :
+                        arome_ensemble = conditioning_sets.detach().clone()
+
+                    online_plot(
+                        arome_ensemble.numpy()[0], # normalized
+                        ensemble.numpy()[:,1:,:,:], # normalized if not invert_norm
+                        figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
+                        figtitle=f'Sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}',
+                        clim_global=None
+>>>>>>> 0c842ffd477b9b556b67e9b66e2de4ccb9c2af5a
                     )
 
         else:

@@ -119,6 +119,11 @@
       "default": false,
       "description": "Predict the residue of the members (members - ensemble mean) instead of the members"
     },
+    "num_edition_timesteps":{
+      "type": "integer",
+      "default": 1000,
+      "description": "Number of steps for SDEdit Method"
+    },
     "mean_var_dir": {
       "type": [
         "string",

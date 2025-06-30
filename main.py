@@ -135,16 +135,6 @@ def load_train_objs(config):
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
             )
-        elif use_cond_sdedit:
-            model = SDEeditGaussianDiffusion(
-                umodel,
-                image_size=config.image_size,
-                timesteps=1000,
-                beta_schedule=config.beta_schedule,
-                auto_normalize=config.auto_normalize,
-                sampling_timesteps=config.ddim_timesteps,
-                num_edition_timesteps=config.num_edition_timesteps,
-            )
         else:
             model = GaussianDiffusion(
                 umodel,
@@ -153,6 +143,7 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
             )
     else:
         model = ElucidatedDiffusion(
@@ -170,8 +161,10 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
-            n_leadtimes = n_lt
-        )
+            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps
+            )
+        
+            
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )
