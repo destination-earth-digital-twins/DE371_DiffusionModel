@@ -125,15 +125,16 @@ class Sampler(Ddpm_base):
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
 
                 if self.config.n_var != self.config.n_var_in_dataset:
-                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                         ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
-                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
                         ensemble = torch.cat([
-                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                     
