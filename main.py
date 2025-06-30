@@ -16,7 +16,6 @@ from torch.utils.data.distributed import DistributedSampler
 
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
-from ddpm.SDEdit_gaussian_diffusion import SDEeditGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from ddpm.sampler import Sampler
