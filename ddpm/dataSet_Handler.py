@@ -36,16 +36,23 @@ class ISDataset(Dataset):
             csv_file (str): CSV file containing sample labels (file names, dates, lead times, members id) 
         """
         self.data_dir = path
+
         self.labels = pd.read_csv( csv_file, index_col=False)
         self.config = config
+        self.var_dict = self.config.var_dict
+
         self.labels = filter_dates(self.labels, self.config.date_start, self.config.date_stop)
         self.labels = filter_lead_times(self.labels, self.config.leadtimes)
         if "Unnamed: 0" in self.labels:
             self.labels = self.labels.drop("Unnamed: 0", axis=1)
 
         self.CI = config.crop
-        self.config.VI = [var_dict[var] for var in config.var_indexes]
+        self.config.VI = [self.var_dict[var] for var in config.var_indexes]
         self.ensembles = None
+        self.var_dict_subset = {var: new_idx for new_idx, var_idx in enumerate(self.config.VI)
+        for var, full_idx in self.var_dict.items()
+        if var_idx == full_idx
+    }
         # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
         # if training : Prepare only 1 conditioning set
         self.n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
@@ -89,7 +96,7 @@ class ISDataset(Dataset):
         Returns:
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
-        file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
+        file_name = self.labels.loc[idx, "Name"]
         sample = self.file_to_torch(file_name) # target
         mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
         var_cond = self.config.var_conditionning # Use the var as a condition ?
@@ -199,7 +206,9 @@ class ISDataset(Dataset):
         if type(file_name) == list:
             file_name = file_name[0]
         sample_path = os.path.join(self.data_dir, file_name)# +'.npy')
-        sample = np.float32(np.transpose(np.load(sample_path), (2, 0, 1)))[
+        # np.save('idc.npy',np.load(sample_path))
+        # print('VI',self.config.VI)
+        sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
         # # place l'axe 2 en première position)
@@ -207,7 +216,9 @@ class ISDataset(Dataset):
         #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         # ]
         sample = sample.transpose((1, 2, 0))
+
         sample = self.transform(sample)
+
 
         return sample
 
