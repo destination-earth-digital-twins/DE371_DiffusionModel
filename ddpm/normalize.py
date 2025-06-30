@@ -20,6 +20,7 @@ var_dict ={"u":0, "v":1,"t2m":2,"rr":4,"t850":5,"tpw850":6,"z500":7 }
 #     "tpw850": 7,
 # }
 
+
 class SpecialNormalize(object):
     """
     Class to Compose special transformations applied to some specific variables and classical normalization.
@@ -32,8 +33,8 @@ class SpecialNormalize(object):
         for var in self.config.var_indexes:
             special_transform = getattr(self.config,f"{var}_transform",None)
             self.data_transforms[var] = getattr(special_transforms, str(special_transform), None)
-
-        # loading shaping normalization constants
+        self.var_dict_subset = self.config.var_dict_subset
+              # loading shaping normalization constants
         # the transformation involves data <- 0.95 * (data - offset) / scale and is broadcasted to all selected variables
 
         offset = np.load(os.path.join(self.config.stat_folder,self.config.offset_file))[self.config.VI].astype(np.float32)
@@ -75,10 +76,12 @@ class SpecialNormalize(object):
 
         for var in self.data_transforms:
             if self.data_transforms[var] is not None:
-                sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
+                # print('je usis var data ftransform',var,self.var_dict_subset,sample.shape)
+                sample[self.var_dict_subset[var]] = self.data_transforms[var].direct(sample[self.var_dict_subset[var]])
 
         sample = (sample - self.offset) / self.scale
-        
+        # np.save('idx2.npy',sample)
+
         return sample
 
     def denorm(self, sample):

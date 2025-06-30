@@ -103,7 +103,6 @@ class Sampler(Ddpm_base):
 
                         filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
-                        print('je suis s',s)
                         s = self.inversion_transforms(s)
                         np.save(save_path, s.cpu())
                         i += max(torch.cuda.device_count(), 1)
@@ -144,9 +143,7 @@ class Sampler(Ddpm_base):
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
-                print('je suis ensemble',ensemble)
                 ensemble = self.inversion_transforms(ensemble)
-                print('je suis ensemble',ensemble)
                 np.save(save_path, ensemble.numpy())
                 
 
