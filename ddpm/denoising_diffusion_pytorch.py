@@ -544,6 +544,7 @@ class GaussianDiffusion(Module):
         self.num_edition_timesteps = int(num_edition_timesteps)
         if num_edition_timesteps < timesteps:
             self.sdedit_flag = True
+            print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < timesteps : {timesteps} ; SDEdit mode activated')
 
         # sampling related parameters
 
