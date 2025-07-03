@@ -136,12 +136,13 @@ class Ddpm_base:
 
         self.epochs_run += 1
 
-    def _sample_batch(self, nb_img=4, condition=None):
+    def _sample_batch(self, nb_img=4, condition=None, image_pos=None):
         """
         Sample a batch of images.
         Args:
             nb_img (int): Number of images to sample.
             condition: Optional condition for conditional sampling.
+            image_pos : Optional image position encoding when using patch diffusion
         Returns:
             numpy.ndarray: Array of sampled images.
         """
@@ -152,7 +153,7 @@ class Ddpm_base:
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
             print("dans la fonction _sample_batch, le modèle arrive jusqu'avant le model.sample(batchsize)")
-            sampled_images = self.model.sample(batch_size=nb_img, condition=condition)
+            sampled_images = self.model.sample(batch_size=nb_img, condition=condition,image_pos=image_pos)
         if self.config.invert_norm == True:
             detransform_func = self.transforms_func()
             denorm_images = torch.stack([detransform_func(image) for image in sampled_images])

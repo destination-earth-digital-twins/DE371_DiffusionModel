@@ -1,15 +1,17 @@
 # General parameters
 "mode": "Train"
-"run_name": "test"
-"output_dir": "/project/home/p200177/DE_371/avritj/models"
+"run_name": "run_name"
+"output_dir": "/path/to/the/models/dir"
 "batch_size": 8
 "any_time": 1
-"training_configuration" : "mirror" #or zero
-"domain_type" : "big" #or small
+"training_configuration" : "mirror" #in ["zero","rectangular","mirror"]
+"domain_type" : "big" # in ["small","big"]
 "compile_model": true
 "use_maxpool": false
-"nb_layers": 4
-"model_used": "unet" #or unet
+"nb_layers": 4 
+"model_used": "unet" # in ["unet","swinunetr","karras_unet"]
+"patch_diffusion": false # wether patch images or not
+
 
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10
@@ -36,7 +38,7 @@
 "stat_folder": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0"
 "offset_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/mean_3var_with0_rr.npy"
 "scale_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/stats/stats_4var_but_rr_is_0/max_3var_with0_rr.npy"
-"image_size": [712,1120]
+"image_size": [712,1120] #divisible by 8
 "guiding_col": "ensemble_id"
 "n_conditions": 0
 "use_AMP": true

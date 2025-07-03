@@ -45,6 +45,8 @@ class ElucidatedDiffusion(nn.Module):
         *,
         image_size = (717,1121),
         channels = 3,
+        image_pos = None, #Added to use patch diffusion
+        patch_size= None, #Added to use patch diffusion
         num_sample_steps = 100, # number of sampling steps
         sigma_min = 0.002,      # min noise level
         sigma_max = 0.80,       # max noise level
@@ -62,8 +64,8 @@ class ElucidatedDiffusion(nn.Module):
         #assert net.random_or_learned_sinusoidal_cond
         self.model = model
         self.self_condition = model.self_condition
-
-
+        self.image_pos = image_pos
+        self.patch_size= patch_size
 
         # image dimensions
 
@@ -134,7 +136,7 @@ class ElucidatedDiffusion(nn.Module):
     # preconditioned network output
     # equation (7) in the paper
 
-    def preconditioned_network_forward(self, noised_images, sigma, self_cond = None, clamp = False):
+    def preconditioned_network_forward(self, noised_images, sigma, image_pos, patch_size = None, self_cond = None, clamp = False):
         batch, device = noised_images.shape[0], noised_images.device
 
         if isinstance(sigma, float):
@@ -144,13 +146,16 @@ class ElucidatedDiffusion(nn.Module):
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
-            self_cond
+            self_cond,
+            x_pos = image_pos,
+            patch_size=patch_size,
         )
         out = self.c_skip(padded_sigma) * noised_images +  self.c_out(padded_sigma) * net_out
 
         if clamp:
             out = out.clamp(-1., 1.)
         return out
+    
 
     # sampling
 
@@ -170,7 +175,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = False):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = False, image_pos=None):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
         
         shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
@@ -207,7 +212,7 @@ class ElucidatedDiffusion(nn.Module):
             sigma_hat = sigma + gamma * sigma
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
             self_cond = condition if self.self_condition else None
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos,  self_cond, clamp = clamp)
             # plotter_inconditionnal.plotter3D_3var(model_output,'model_ouput.png',"")
             denoised_over_sigma = (images_hat - model_output) / sigma_hat
 
@@ -218,7 +223,7 @@ class ElucidatedDiffusion(nn.Module):
             
             if sigma_next != 0:
                 self_cond = condition if self.self_condition else None
-                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, self_cond, clamp = clamp)
+                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, image_pos, self_cond, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
                 images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
@@ -272,94 +277,133 @@ class ElucidatedDiffusion(nn.Module):
     def noise_distribution(self, batch_size):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
-    def forward(self, img, *args, **kwargs):
-        #TODO change terminology from self_cond to cond
-        batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
-           
-        assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
-        assert c == channels, 'mismatch of image channels'
+    def forward(self, img, image_pos = None, patch_size = None, *args, **kwargs):
+        #TODO change terminology from self_cond to cond 
         
-        mask = (torch.abs(img) < 1000) #need modification with adding variables
-
-        assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero' or 'mirror' and is {self.config.training_configuration}"
-        #TODO : stock the mask in memory (self.mask) to use the condition with different variables
-        if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
-            img_filled = img.masked_fill(~mask,0.5) 
-            img = normalize_to_neg_one_to_one(img_filled) 
+        mask = (torch.abs(img) < 1000) #need modification when adding variables
+        
+        if self.config.patch_diffusion:
+            
+            batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+            patch_coords = image_pos
+            patch_size = patch_size
+            assert h == patch_size, f"img's height must be patch size"
+            assert w == patch_size, f"img's width must be patch size"
+            # assert c == channels, 'mismatch of image channels'
+            img = normalize_to_neg_one_to_one(img) 
             sigmas = self.noise_distribution(batch_size)
             padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
             noise = torch.randn_like(img)
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+            noised_images = img
+            noised_images[:,:3,:,:] = img[:,:3,:,:] + padded_sigmas * noise[:,:3,:,:]  # alphas are 1. in the paper
             self_cond = None
 
             # Conditioned diffusion :
             if self.self_condition:
                 with torch.no_grad():
                     self_cond = kwargs.get('condition_tensor')
-                    self_cond.detach_()
-                    
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                    #self_cond.detach_()
+            denoised = self.preconditioned_network_forward(noised_images, sigmas, patch_coords, patch_size, self_cond)
             
             denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
             img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
             
-            losses = F.mse_loss(denoised,img,reduction='none')
+            losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
             losses = reduce(losses,'b ... -> b','mean')
             losses = losses * self.loss_weight(sigmas)
+            # if rank ==0:
+            #     print("la loss ici a pour shape :", losses.shape)
+            #     print("la loss a pour valeur",losses)
+            #     print("quand on applique la moyenne",losses.mean())
             return losses.mean()
         
-        elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
-            img_filled = img.clone().to(img.device)
-            for batch in range(self.config.batch_size):
-                #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
-                img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
-                img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
-                img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-            noise = torch.randn_like(img)
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-    
-            self_cond = None
-
-            # Conditioned diffusion :
-            if self.self_condition:
-                with torch.no_grad():
-                    self_cond = kwargs.get('condition_tensor')
-                    self_cond.detach_()
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-            losses = F.mse_loss(denoised,img,reduction='none')
-            losses = reduce(losses,'b ... -> b','mean')
-            losses = losses * self.loss_weight(sigmas)
-            
-            return losses.mean()
         else :
-            img = normalize_to_neg_one_to_one(img)
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-            noise = torch.randn_like(img)
+            batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+            assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
+            assert c == channels, 'mismatch of image channels'
+            assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
+            #TODO : stock the mask in memory (self.mask) to use the condition with different variables
+            if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
+                img_filled = img.masked_fill(~mask,0.5) 
+                img = normalize_to_neg_one_to_one(img_filled) 
+                sigmas = self.noise_distribution(batch_size)
+                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-            self_cond = None
+                noise = torch.randn_like(img)
+                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+                self_cond = None
+
+                # Conditioned diffusion :
+                if self.self_condition:
+                    with torch.no_grad():
+                        self_cond = kwargs.get('condition_tensor')
+                        #self_cond.detach_()
+                        
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                
+                denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
+                img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
+                
+                losses = F.mse_loss(denoised,img,reduction='none')
+                losses = reduce(losses,'b ... -> b','mean')
+                losses = losses * self.loss_weight(sigmas)
+                # if rank ==0:
+                #     print("la loss ici a pour shape :", losses.shape)
+                #     print("la loss a pour valeur",losses)
+                #     print("quand on applique la moyenne",losses.mean())
+                return losses.mean()
             
-            # Conditioned diffusion :
-            if self.self_condition:
-                with torch.no_grad():
-                    self_cond = kwargs.get('condition_tensor')
-                    self_cond.detach_()
-                    
-            # if self.self_condition and random() < 0.5:
-            #     # from hinton's group's bit diffusion paper
-            #     with torch.no_grad():
-            #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
-            #         self_cond.detach_()
+            elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+                img_filled = img.clone().to(img.device)
+                for batch in range(self.config.batch_size):
+                    #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+                    img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+                    img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                    img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
+                sigmas = self.noise_distribution(batch_size)
+                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+                noise = torch.randn_like(img)
+                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+        
+                self_cond = None
 
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                # Conditioned diffusion :
+                if self.self_condition:
+                    with torch.no_grad():
+                        self_cond = kwargs.get('condition_tensor')
+                        self_cond.detach_()
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                losses = F.mse_loss(denoised,img,reduction='none')
+                losses = reduce(losses,'b ... -> b','mean')
+                losses = losses * self.loss_weight(sigmas)
+                return losses.mean()
+            else :
+                img = normalize_to_neg_one_to_one(img)
+                sigmas = self.noise_distribution(batch_size)
+                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+                noise = torch.randn_like(img)
 
-            losses = F.mse_loss(denoised, img, reduction = 'none')
-            losses = reduce(losses, 'b ... -> b', 'mean')
+                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+                self_cond = None
+                
+                # Conditioned diffusion :
+                if self.self_condition:
+                    with torch.no_grad():
+                        self_cond = kwargs.get('condition_tensor')
+                        #self_cond.detach_()
+                        
+                # if self.self_condition and random() < 0.5:
+                #     # from hinton's group's bit diffusion paper
+                #     with torch.no_grad():
+                #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
+                #         self_cond.detach_()
 
-            losses = losses * self.loss_weight(sigmas)
-            return losses.mean()
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+
+                losses = F.mse_loss(denoised, img, reduction = 'none')
+                losses = reduce(losses, 'b ... -> b', 'mean')
+
+                losses = losses * self.loss_weight(sigmas)
+                return losses.mean()
  

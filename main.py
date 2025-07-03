@@ -26,6 +26,9 @@ from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
 import numpy as np
 from pickle import dump
+from ddpm.karras_unet import KarrasUnet 
+
+# from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
 
 #os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -117,9 +120,16 @@ def load_train_objs(config):
         umodel = SwinUNETR(
             in_channels=len(config.var_indexes),
             out_channels=len(config.var_indexes),
-            img_size=(512,512),
+            img_size=config.image_size,
             self_condition = False,
-                        
+        )
+    
+    elif config.model_used == "karras_unet":
+        umodel = KarrasUnet(
+            config = config,
+            image_size = config.image_size,
+            channels = len(config.var_indexes),
+            self_condition = False,
         )
     else :
         umodel = Unet(
@@ -172,6 +182,10 @@ def load_train_objs(config):
     if config.compile_model:
         model.compile(fullgraph=False)
     
+    total_params = sum(p.numel() for p in model.parameters())
+    if rank==0:
+        
+        print("number of parameters in the model : ", total_params)
     return model, optimizer
 
 
