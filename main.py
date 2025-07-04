@@ -350,7 +350,7 @@ def main_sample_grand_ensemble(config):
             path_GE = os.path.join(config.output_dir, config.run_name,'samples')
             if not os.path.exists(path_GE):
                 os.makedirs(path_GE)
-            np.save(path_GE+f'/true_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', dataloaded[mb])
+            # np.save(path_GE+f'/true_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', dataloaded[mb])
             m,c,h,w = sample.shape
             
             # Normalizing sample
@@ -359,6 +359,10 @@ def main_sample_grand_ensemble(config):
             condition = norm_sample.unsqueeze(0).expand_as(
                 torch.zeros((config.n_sampling_conditioning_sets, m, c, h, w))
             )
+            # To speed up computation
+            # condition = condition.reshape((m, config.n_sampling_conditioning_sets, c, h, w))
+            condition = condition.permute(1, 0, 2, 3, 4)
+            print('condition.shape', condition.shape)
             # Generating members
             gen_sample = sampler.sample(samples=condition, filename=filename)
 
@@ -366,7 +370,7 @@ def main_sample_grand_ensemble(config):
             if config.unbias_sample :
                 gen_sample = gen_sample + np.expand_dims(dataloaded[mb].mean(axis=0),0) - np.expand_dims(gen_sample.mean(axis=0),0)
         
-            save_path = os.path.join(config.output_dir, config.run_name,'samples',filename)
+            # save_path = os.path.join(config.output_dir, config.run_name,'samples',filename)
             np.save(path_GE+f'/fake_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', gen_sample)
     
 

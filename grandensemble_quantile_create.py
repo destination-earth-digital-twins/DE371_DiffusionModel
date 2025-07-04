@@ -13,7 +13,7 @@ from tqdm import trange
 
 def load_tab_var(tab, param):
     return {'rr' : tab[:,0],
-                        'ff': np.sqrt(tab[:,1]**2+tab[:,2]),
+                        'ff': np.sqrt(tab[:,1]**2+tab[:,2]**2),
                         't2m': tab[:,3]
         }[param]
 
@@ -66,7 +66,7 @@ def plot_quantile(
         fig.colorbar(im, ax=axs[idx], shrink=0.5)
         axs[idx].set_title(F'{name}', fontdict=font)
 
-        fig.suptitle(f"Quantiles of {name_quantile} for {param} variable", fontdict=font)
+        fig.suptitle(f"Quantiles of {name_quantile} for {param} variable") #, fontdict=font)
         fig.tight_layout()
         fig.savefig(
             output_dir+f'/{name_quantile}/plot_{name_quantile}_{param}_{leadtime}.pdf'
@@ -81,7 +81,7 @@ if __name__=="__main__" :
     parser.add_argument('--base_dir', type=str, default='/project/home/p200177/DE_371/datasets/dataset_Meteo_France/grandEnsemble/AROME/')
     parser.add_argument('--generated_sample_dir', type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_4steps/')
     parser.add_argument('--output_dir', type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_4steps/quantiles_data/')
-    parser.add_argument('--exp_name', type=str, default='Sdedit_4steps')
+    parser.add_argument('--exp_name', type=str, default='Sdedit_ED_4steps')
     parser.add_argument('--leadtimes', type=str2intlist, default=[6,12,18,24,30,36,42]) # echeance de la prevision, n'importe quelle valeur entre 0 et 45h est disponible (par pas de 1h)
     parser.add_argument('--inv_step', type=int, default=1000)
 
@@ -99,7 +99,7 @@ if __name__=="__main__" :
     plot_id_nbrandinit = 0
     os.makedirs(args.output_dir, exist_ok=True)
 
-    AROME_large_ensemble_file_format = "_grand_ensemble_{leadtime}_875.npy"
+    AROME_large_ensemble_file_format = "_grand_sample_{leadtime}_875.npy"
     AROME_small_ensemble_file_format = "true_grand_ensemble_{leadtime}_draw_{draw_idx}.npy"
     Generated_large_ensemble_file_format = "fake_grand_ensemble_{leadtime}_draw_{draw_idx}.npy"
 
@@ -195,9 +195,15 @@ if __name__=="__main__" :
             qavg_small=pd.DataFrame(columns=['leadtime','Quantiles','Init','DiffSmall', 'DiffRelSmall'])
             print("Computing quantiles and stdev of small real ensemble")
             for i in trange(nbrandinit):
-                filename = AROME_small_ensemble_file_format.format(leadtime = leadtime, draw_idx=i)
-                tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + filename, allow_pickle=True), param=param)
-
+                # filename = AROME_small_ensemble_file_format.format(leadtime = leadtime, draw_idx=i)
+                # tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + filename, allow_pickle=True), param=param)
+                
+                ### This loop should maybe be rewritten and using numpy array reindexing directly
+                tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
+                mb = np.load(args.generated_sample_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
+                for mb_idx in range(Nsmall):
+                    tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
+                
                 Qsmall = np.percentile(tabs, quantile_to_compute, interpolation='nearest',axis=0)
                 q0small.append(Qsmall[0])
                 q05small.append(Qsmall[1]) 
@@ -241,17 +247,17 @@ if __name__=="__main__" :
                 data_list = [np.percentile(np.array(q),50,method='nearest',axis=0) for q in data_list]
 
                 print("Plotting AROME Quantile Small")
-                
-                plot_quantile(
-                    data_list=Qsmall,
-                    output_dir=args.output_dir,
-                    name_quantile='small_AROME',
-                    param=param,
-                    leadtime=leadtime,
-                    clim=clim_quantiles,
-                    id_quantile_to_plot = [0,1,6,9,12],
-                    denom = ["Q0","Q05", "Q1", "Q5", "Q10","Q25","Q50","Q75","Q90","Q95", "Q99", "Q995", "Q100", "Sdev"]
-                )
+                if i ==0:
+                    plot_quantile(
+                        data_list=Qsmall,
+                        output_dir=args.output_dir,
+                        name_quantile='small_AROME',
+                        param=param,
+                        leadtime=leadtime,
+                        clim=clim_quantiles,
+                        id_quantile_to_plot = [0,1,6,9,12],
+                        denom = ["Q0","Q05", "Q1", "Q5", "Q10","Q25","Q50","Q75","Q90","Q95", "Q99", "Q995", "Q100", "Sdev"]
+                    )
 
                 print("Computing diff wrt to large real ensemble")
 
@@ -263,46 +269,51 @@ if __name__=="__main__" :
             ################################################
             ############# Large Generated Ensemble #############
             ################################################
-
-            qavg=pd.DataFrame(columns=['leadtime','Quantiles','Init','Diff'+Generatednameout[k], 'DiffRel'+Generatednameout[k]])
-            Qs = []
-            for i in trange(nbrandinit):
-                print("Loading files containing generated members")
-                gen_filename = Generated_large_ensemble_file_format.format(leadtime = leadtime, draw_idx=i)
-                gen_tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + gen_filename, allow_pickle=True), param=param)
-
-                print("Computing percentiles on Generated")
-                percentile = np.percentile(gen_filename,quantile_to_compute,interpolation='nearest',axis=0)
-                Qs.append(np.concatenate([percentile, np.std(gen_tabs,axis=0,ddof=1)[np.newaxis,:]]))
-                print("Keeping track of spatial means of quantiles for Generated")
-                for q in range(np.size(quantile_to_compute)):
-                    qm = np.mean(Qs[-1][q])
-                    newq = pd.DataFrame([[leadtime,quantile_to_compute[q],i,qm-qref_avg[q],(qm-qref_avg[q])/qref_avg[q]]],columns=['leadtime','Quantiles','Init','Diff'+Generatednameout[k],'DiffRel'+Generatednameout[k]])
-                    qavg = qavg._append(newq,ignore_index=True)
+            for k in range(len(Generatednameout)):
+                qavg=pd.DataFrame(columns=['leadtime','Quantiles','Init','Diff'+Generatednameout[k], 'DiffRel'+Generatednameout[k]])
+                Qs = []
+                for i in trange(nbrandinit):
+                    print("Loading files containing generated members")
+                    gen_filename = Generated_large_ensemble_file_format.format(leadtime = leadtime, draw_idx=i)
+                    # gen_tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + gen_filename, allow_pickle=True), param=param)
+                    ### This loop should maybe be rewritten and using numpy array reindexing directly
+                    gen_tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
+                    mb = np.load(args.generated_sample_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
+                    for mb_idx in range(Nsmall):
+                        gen_tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
                     
-                if plot_id_nbrandinit == i:
-                    print("Plotting Generated Quantile")
-                    
-                    plot_quantile(
-                            data_list=percentile,
-                            output_dir=args.output_dir,
-                            name_quantile='Generated',
-                            param=param,
-                            leadtime=leadtime,
-                            clim=clim_quantiles,
-                            id_quantile_to_plot = [0,1,6,9,12],
-                            denom = ["Q0","Q05", "Q1", "Q5", "Q10","Q25","Q50","Q75","Q90","Q95", "Q99", "Q995", "Q100", "Sdev"]
-                    )
+                    print("Computing percentiles on Generated")
+                    percentile = np.percentile(gen_tabs,quantile_to_compute,interpolation='nearest',axis=0)
+                    Qs.append(np.concatenate([percentile, np.std(gen_tabs,axis=0,ddof=1)[np.newaxis,:]]))
+                    print("Keeping track of spatial means of quantiles for Generated")
+                    for q in range(np.size(quantile_to_compute)):
+                        qm = np.mean(Qs[-1][q])
+                        newq = pd.DataFrame([[leadtime,quantile_to_compute[q],i,qm-qref_avg[q],(qm-qref_avg[q])/qref_avg[q]]],columns=['leadtime','Quantiles','Init','Diff'+Generatednameout[k],'DiffRel'+Generatednameout[k]])
+                        qavg = qavg._append(newq,ignore_index=True)
+                        
+                    if plot_id_nbrandinit == i:
+                        print("Plotting Generated Quantile")
+                        
+                        plot_quantile(
+                                data_list=percentile,
+                                output_dir=args.output_dir,
+                                name_quantile='Generated',
+                                param=param,
+                                leadtime=leadtime,
+                                clim=clim_quantiles,
+                                id_quantile_to_plot = [0,1,6,9,12],
+                                denom = ["Q0","Q05", "Q1", "Q5", "Q10","Q25","Q50","Q75","Q90","Q95", "Q99", "Q995", "Q100", "Sdev"]
+                        )
 
-            median_quantiles = np.percentile(np.array(Qs),50,interpolation='nearest',axis=0)
-            median_generated_dir = args.output_dir+'/Generated'
-            os.makedirs(median_generated_dir, exist_ok=True)
-            np.save(f"{median_generated_dir}/Generated_{Generatednameout[k]}_{leadtime}_{param}.npy", np.array(Qs))
-            np.save(f"{median_generated_dir}/median_Generated_{Generatednameout[k]}_{leadtime}_{param}.npy",median_quantiles)
+                median_quantiles = np.percentile(np.array(Qs),50,interpolation='nearest',axis=0)
+                median_generated_dir = args.output_dir+'/Generated'
+                os.makedirs(median_generated_dir, exist_ok=True)
+                np.save(f"{median_generated_dir}/Generated_{Generatednameout[k]}_{leadtime}_{param}.npy", np.array(Qs))
+                np.save(f"{median_generated_dir}/median_Generated_{Generatednameout[k]}_{leadtime}_{param}.npy",median_quantiles)
 
-            
-            print("saving Quantiles averages")
-            print(qavg.head())
-            Quantiles_Xtremes_avg_dir = args.output_dir+'/Quantiles_Xtremes_avg'
-            os.makedirs(Quantiles_Xtremes_avg_dir, exist_ok=True)
-            qavg.to_pickle(Quantiles_Xtremes_avg_dir + "/" + "Quantiles_Xtremes_avg_Generated_" + param + "_" + Generatednameout[k]  +"_"+ str(reseau) + "+" + str(leadtime) + ".pkl")
+                
+                print("saving Quantiles averages")
+                print(qavg.head())
+                Quantiles_Xtremes_avg_dir = args.output_dir+'/Quantiles_Xtremes_avg'
+                os.makedirs(Quantiles_Xtremes_avg_dir, exist_ok=True)
+                qavg.to_pickle(Quantiles_Xtremes_avg_dir + "/" + "Quantiles_Xtremes_avg_Generated_" + param + "_" + Generatednameout[k]  +"_"+ str(reseau) + "+" + str(leadtime) + ".pkl")

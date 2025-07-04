@@ -38,29 +38,26 @@ if __name__=="__main__" :
     parser.add_argument("--ech", type=int, default=6)
     parser.add_argument('--param', type=str2intlist, default=['ff', 't2m'])
     parser.add_argument('--leadtimes', type=str2intlist, default=[6,12,18,24,30,36,42])
-    parser.add_argument("--base_dir", type=str, default='/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/')
+    parser.add_argument("--base_dir", type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/')
     args = parser.parse_args()
 
-    PATH_exp = {'Optim_MSE_250' : "/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/Optim_MSE/Quantiles_250/",
-                'Optim_MSE_500' : "/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/Optim_MSE/Quantiles_500/",
-                'Optim_MSE_1000' : "/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/Optim_MSE/Quantiles_1000/",
-                'cut=10_infl1.2' : "/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/Optim/Optim_Inversion/",
-                'Hybrid' : "/project/home/p200177/DE_371/experiments_WP1/Grand_Ensemble/Scores/Hybrid/"
+    PATH_exp = {'Sdedit_ED_4steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_4steps/quantiles_data/",
+    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_3steps/quantiles_data/"
     }
     base_dir = args.base_dir
-    output_dir = base_dir + 'final_plot_hybrid/'
+    output_dir = base_dir + 'quantiles_plots/'
     os.makedirs(output_dir, exist_ok=True)
     for param in args.param:
         for leadtime in args.leadtimes :
 
-            list_expe = ['Optim_MSE_1000', 'cut=10_infl1.2', 'Hybrid']
+            list_expe = ['Sdedit_ED_4steps','Sdedit_ED_3steps']
             list_data_xtremes = []
             for exp in list_expe:
-                list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_GAN_' + param + f'0_domGAN_{exp}_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
-            list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_AROME_' + param + f'0_domGAN_Small_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
+                list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_Generated_' + param + f'_{exp}_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
+            list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_AROME_' + param + f'_Small_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
 
             merge = pd.concat(list_data_xtremes)
-            value_vars = ["Diffcut=10_infl1.2" , "DiffSmall", "DiffOptim_MSE",'DiffHybrid']
+            value_vars = ["DiffSdedit_ED_4steps", "DiffSdedit_ED_3steps" , "DiffSmall"]
             merge = merge.loc[(merge['Quantiles'] != 0.5) & (merge['Quantiles'] != 99.5)]
 
             dd=pd.melt(merge,
@@ -71,7 +68,7 @@ if __name__=="__main__" :
 
             sns.boxplot(x='Quantiles', y='value', data=dd, hue='')
             if param=='ff':
-                plt.ylim(-9,9)
+                plt.ylim(-5,5)
             elif param=='t2m':
                 plt.ylim(-2,3)
             plt.suptitle(f'variable : {param} for leadtime +{leadtime}')

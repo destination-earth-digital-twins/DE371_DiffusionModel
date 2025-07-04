@@ -272,10 +272,6 @@ class SamplerGrandEnsemble(Ddpm_base):
                 self.logger.info(
                     f"Sampling images...")
 
-            # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
-            if self.config.n_var != self.config.n_var_in_dataset:
-                    zero_pad = torch.zeros(1, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
-            
             ensembles = []
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for conditioning_sets_idx, conditioning_sets in tqdm(enumerate(samples), total=len(samples), desc="Sampling ", unit="batch"):
@@ -284,22 +280,22 @@ class SamplerGrandEnsemble(Ddpm_base):
                     arome_ensemble = torch.stack([self.transforms_func(image) for image in conditioning_sets]).to(self.gpu_id)
                 else :
                     arome_ensemble = conditioning_sets.detach().clone().to(self.gpu_id)
-
+                # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
+                if self.config.n_var != self.config.n_var_in_dataset:
+                    zero_pad = torch.zeros(conditioning_sets.shape[0], self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+                
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
-                conditioning_sets = conditioning_sets.unsqueeze(0).permute(1, 0, 2, 3, 4)
                 if self.config.n_var != self.config.n_var_in_dataset:
                         ensemble_mean=arome_ensemble.mean(dim=0).to(self.gpu_id)
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
-                        ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), ensemble_mean=ensemble_mean)), dim=1).unsqueeze(0) # concatenate an empty rr channel
-                            for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                        ensemble = torch.cat(# concatenate an empty rr channel
+                            (
+                                zero_pad, self._sample_batch(nb_img=len(conditioning_sets), condition=conditioning_sets.to(self.gpu_id), ensemble_mean=ensemble_mean)
+                            ),dim=1
+                            ).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
-                        ensemble = torch.cat([
-                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id)).unsqueeze(0)
-                            for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                        ensemble = self._sample_batch(nb_img=len(conditioning_sets), condition=conditioning_sets.to(self.gpu_id)).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 ensembles.append(ensemble.numpy())
             if self.config.plot:# and is_main_gpu():
                 online_plot(
@@ -309,7 +305,8 @@ class SamplerGrandEnsemble(Ddpm_base):
                     figtitle=f'Sample comparison for {filename[:-4]}',
                     # clim_global=[(-5,5),(-5,5),(270,300)]
                 )
-            return np.array(ensembles).reshape(16*len(samples), self.config.n_var_in_dataset, x, y )
+            print('final shape',np.array(ensembles).shape)
+            return np.array(ensembles).reshape(len(conditioning_sets)*len(samples), self.config.n_var_in_dataset, x, y )
 
         else:
             raise ValueError(f"Sampling mode {self.config.sampling_mode} not supported.")
