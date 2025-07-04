@@ -92,8 +92,8 @@ class ISDataset(Dataset):
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
         
-        mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
-        var_cond = self.config.var_conditionning # Use the var as a condition ?
+        mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
+        var_cond = self.config.var_conditioning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
 
         # Get the ensemble df
@@ -143,39 +143,9 @@ class ISDataset(Dataset):
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         
         sample_id = re.search(r"\d+", file_name).group()
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 
->>>>>>> 0c842ffd477b9b556b67e9b66e2de4ccb9c2af5a
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
-=======
-=======
->>>>>>> c34caea (bug fix on the way to retrieve and broadcast the)
-<<<<<<< HEAD
-        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "condition_tensor_denorm" : condition_tensor_denorm,"member_id": member, "date": date, "leadtime": lt}
-=======
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": normalized_ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> c9f46e6 (Enables training wit the "predict_residue" option)
-<<<<<<< HEAD
->>>>>>> 0489d78 (Enables training wit the "predict_residue" option)
-=======
-=======
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble mean tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> e7ab104 (bug fix on the way to retrieve and broadcast the)
->>>>>>> c34caea (bug fix on the way to retrieve and broadcast the)
-=======
-        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> 56219a6 (Enables sampling with the "predict_residue" option)
-=======
-        return {"id_in_csv": idx, "img": sample, "img_denorm":sample_denorm, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
-=======
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
->>>>>>> e97a0b2 (small bug fix when the residue prediction is)
->>>>>>> 57bb288 (small bug fix when the residue prediction is)
+
 
     def get_conditioning_members(self, ensemble_df, idx,return_denorm=False):
         """
@@ -197,24 +167,11 @@ class ISDataset(Dataset):
         # Remove the target from the possible conditions used for training
         ensemble_df_without_target = ensemble_df[ensemble_df['Name'] != self.labels.iloc[idx, 0]]
 
-<<<<<<< HEAD
-        if not return_denorm:
-            # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
-            if self.config.bootstrap_conditions:
-                condition = torch.stack([
-                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
-                ])
-                return condition
-
-            condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-            condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-=======
         # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
         if self.config.bootstrap_conditions:
             condition = torch.stack([
                 self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
             ])
->>>>>>> 0c842ffd477b9b556b67e9b66e2de4ccb9c2af5a
             return condition
         else :
             # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples

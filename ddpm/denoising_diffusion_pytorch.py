@@ -735,15 +735,10 @@ class GaussianDiffusion(Module):
 
         x_start = None
 
-<<<<<<< HEAD
-        for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
-            self_cond = x_start if self.spatial_conditions else None
-=======
         num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
 
         for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
             self_cond = x_start if self.self_condition else None
->>>>>>> 0c842ffd477b9b556b67e9b66e2de4ccb9c2af5a
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
 

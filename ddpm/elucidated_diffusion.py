@@ -51,6 +51,7 @@ class ElucidatedDiffusion(nn.Module):
         S_tmax = 50,
         S_noise = 0.0,
         num_edition_timesteps=5,
+        n_leadtimes=14
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
