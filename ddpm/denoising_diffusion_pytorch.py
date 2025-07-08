@@ -448,6 +448,8 @@ class Unet(Module):
                     x = torch.cat((x_self_cond, x), dim = 1)       
         
         if self.config.patch_diffusion:
+            device = x.device
+            x_pos = x_pos.to(device)
             x = torch.cat((x,x_pos),dim=1)  
         x = self.init_conv(x)
         r = x.clone()
@@ -1113,16 +1115,6 @@ class SwinUNETR(nn.Module):
             res_block=True,
         )
         
-        self.encoder5 = UnetrBasicBlock(
-            spatial_dims=spatial_dims,
-            in_channels=8 * feature_size,
-            out_channels=8 * feature_size,
-            kernel_size=3,
-            stride=1,
-            norm_name=norm_name,
-            res_block=True,
-        )
-
         self.encoder10 = UnetrBasicBlock(
             spatial_dims=spatial_dims,
             in_channels=32 * feature_size,
@@ -1131,12 +1123,6 @@ class SwinUNETR(nn.Module):
             stride=1,
             norm_name=norm_name,
             res_block=True,
-        )
-        self.decoder6 = UpsampleBlock(
-            in_channels=32 * feature_size,
-            out_channels=16 * feature_size,
-            kernel_size=3,
-            norm_name=norm_name,
         )
 
         self.decoder5 = UpsampleBlock(
@@ -1244,16 +1230,12 @@ class SwinUNETR(nn.Module):
         if not torch.jit.is_scripting():
             self._check_input_size(x_in.shape[2:])
         hidden_states_out = self.swinViT(x_in, self.normalize)
-        print("longueur de hidden_states ", len(hidden_states_out) )
-
         enc0 = self.encoder1(x_in)
         enc1 = self.encoder2(hidden_states_out[0])
         enc2 = self.encoder3(hidden_states_out[1])
         enc3 = self.encoder4(hidden_states_out[2])
-        enc4 = self.encoder5(hidden_states_out[3])
-        dec5 = self.encoder10(hidden_states_out[5])
-        dec4 = self.decoder6(dec5,hidden_states_out[4])
-        dec3 = self.decoder5(dec4, enc4)
+        dec4 = self.encoder10(hidden_states_out[4])
+        dec3 = self.decoder5(dec4, hidden_states_out[3])
         dec2 = self.decoder4(dec3, enc3)
         dec1 = self.decoder3(dec2, enc2)
         dec0 = self.decoder2(dec1, enc1)
