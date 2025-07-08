@@ -157,7 +157,7 @@ class Ddpm_base:
             sampled_images = torch.add(sampled_images, ensemble_mean)
         
         if self.config.invert_norm == True:
-            detransform_func = self.transforms_func
+            detransform_func = self.transforms_func()
             denorm_images = torch.stack([detransform_func(image) for image in sampled_images])
         else:
             denorm_images = self.transforms_func(sampled_images)

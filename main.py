@@ -226,6 +226,38 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     return train_dataloader, val_dataloader
 
 
+def prepare_dataloader_GrandEnsemble(config, path, csv_file, num_workers=None):
+    """
+    Prepare the data loaders.
+    Args:
+        config (Namespace): Configuration parameters.
+    Returns:
+        DataLoader: Data loader.
+    """
+    # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
+    # different preprocessing strategies if we have to deal with rain rates ("rr")
+    
+    set = dataSet_Handler.GrandEnsembleDataset(config, path, csv_file)
+    
+    dataloader = DataLoader(
+        set,
+        batch_size=config.batch_size,
+        pin_memory=True,
+        persistent_workers=True if num_workers is None else False,
+        # non_blocking=True,
+        shuffle=not torch.cuda.device_count() >= 2,
+        num_workers=cpu_count() if num_workers is None else num_workers,
+        sampler=(
+            DistributedSampler(
+                set, rank=get_rank_num(), shuffle=False, drop_last=False
+            )
+            if torch.cuda.device_count() >= 2
+            else None
+        )
+    )
+    return dataloader
+
+
 def main_train(config):
     """
     Main function for training.
@@ -323,60 +355,15 @@ def main_sample_grand_ensemble(config):
     """
     # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    config.VI = [var_dict[var] for var in config.var_indexes]
-    transform = SpecialNormalize(config)
-    sampler = SamplerGrandEnsemble(model, config, inversion_transforms=transform.denorm)
+    sample_data = prepare_dataloader_GrandEnsemble(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+    inversion_tf = sample_data.dataset.inversion_transforms
+    dataloader = sample_data if config.sampling_mode!="simple" else None
+    sampler = SamplerGrandEnsemble(model, config, dataloader=dataloader, inversion_transforms=inversion_tf)
 
     if is_main_gpu():
-        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = 'fake_ensemble_date_leadtime.npy'")
-    
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
     file_format = "fake_grand_ensemble_{date}_{leadtime}_{draw_idx}.npy"
-    var_indices=[var_dict[var] for var in config.var_indexes]
-    for draw_idx in range(config.N_draws_grand_ensemble) : # we make N_draws choices of random 16 members
-        print(f"Drawing {draw_idx}th")
-        mb = initsmall(seed=0).astype(np.uint32)
-        print(mb)
-        mb_path = os.path.join(config.output_dir, config.run_name, 'mb_files')
-        if not os.path.exists(mb_path):
-            os.makedirs(mb_path, exist_ok=True)
-        np.save(mb_path+f'/mb_{draw_idx}.npy', np.array(mb))
-        for lt in config.leadtimes:
-            # Loading Grand Ensemble fro leadtime lt
-            dataloaded = torch.from_numpy(np.load(config.data_dir + f'_grand_sample_{lt+1}_875.npy', mmap_mode='r').astype(np.float32))
-            filename = file_format.format(date = '2021-10-01', leadtime = lt+1, draw_idx=draw_idx)
-            # Selecting and saving only the needed members
-            sample = dataloaded[mb][:,1:,:,:]
-            
-            path_GE = os.path.join(config.output_dir, config.run_name,'samples')
-            if not os.path.exists(path_GE):
-                os.makedirs(path_GE)
-            # np.save(path_GE+f'/true_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', dataloaded[mb])
-            m,c,h,w = sample.shape
-            
-            # Normalizing sample
-            norm_sample = torch.cat([transform(i).unsqueeze(0) for i in sample], dim=0)
-            # Creating sample for generation
-            condition = norm_sample.unsqueeze(0).expand_as(
-                torch.zeros((config.n_sampling_conditioning_sets, m, c, h, w))
-            )
-            # To speed up computation
-            # condition = condition.reshape((m, config.n_sampling_conditioning_sets, c, h, w))
-            condition = condition.permute(1, 0, 2, 3, 4)
-            print('condition.shape', condition.shape)
-            # Generating members
-            gen_sample = sampler.sample(samples=condition, filename=filename)
-
-            # Unbiasing samples
-            if config.unbias_sample :
-                gen_sample = gen_sample + np.expand_dims(dataloaded[mb].mean(axis=0),0) - np.expand_dims(gen_sample.mean(axis=0),0)
-        
-            # save_path = os.path.join(config.output_dir, config.run_name,'samples',filename)
-            np.save(path_GE+f'/fake_grand_ensemble_{lt+1}_draw_{draw_idx}.npy', gen_sample)
-    
-
-    barrier() # Wait for every GPU to finish their sampling
-    if is_main_gpu():
-        logger.info(f"Sampling done")
+    sampler.sample(filename_format=file_format)
 
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
