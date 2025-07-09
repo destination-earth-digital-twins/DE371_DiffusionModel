@@ -160,7 +160,8 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
-            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps
+            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
+            n_leadtimes=n_lt
             )
         
             

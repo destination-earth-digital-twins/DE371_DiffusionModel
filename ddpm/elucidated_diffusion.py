@@ -204,9 +204,9 @@ class ElucidatedDiffusion(nn.Module):
             sigma_hat = sigma + gamma * sigma # Algorithm 2 : line 5
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6
 
-            self_cond = condition if self.self_condition else None
-
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
+            cond_2d = condition if self.spatial_conditions else None
+            cond_emb = lt_cond if self.embedding_cond_dims is not None else None
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, cond_2d, cond_emb, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat # Algorithm 2 : line 7
 
             images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma

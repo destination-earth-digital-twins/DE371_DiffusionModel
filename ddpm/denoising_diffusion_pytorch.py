@@ -738,7 +738,7 @@ class GaussianDiffusion(Module):
         num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
 
         for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
 
@@ -790,7 +790,7 @@ class GaussianDiffusion(Module):
             time_cond = torch.full(
                 (batch,), time, device = device, dtype = torch.long
             )
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
             
             if time_next < 0:
@@ -818,7 +818,7 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None):
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
         r"""
         Generate samples using SDEdit diffusion.
         Args:

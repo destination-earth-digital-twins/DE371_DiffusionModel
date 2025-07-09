@@ -134,14 +134,13 @@ class Sampler(Ddpm_base):
                 if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                         ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
-
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))), dim=1).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
                         ensemble = torch.cat([
-                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id)).unsqueeze(0)
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id)).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
 
@@ -152,15 +151,24 @@ class Sampler(Ddpm_base):
                 np.save(save_path, ensemble.numpy())
 
                 if self.config.plot:# and is_main_gpu():
+
+                    arome_ensemble = conditioning_sets.detach().clone()
+
+                    if not self.config.predict_residue:
+                        ensemble_mean = torch.zeros_like(arome_ensemble)
+                    else :
+                        ensemble_mean = batch['ensemble_mean_tensor']
+                    arome_ensemble = torch.add(arome_ensemble, ensemble_mean)
+
                     if self.config.invert_norm == True:
                         detransform_func = self.transforms_func()
-                        arome_ensemble = torch.stack([detransform_func(image) for image in conditioning_sets])
-                    else :
-                        arome_ensemble = conditioning_sets.detach().clone()
+                        arome_ensemble = torch.stack([detransform_func(image) for image in arome_ensemble]).detach().clone()
 
+                        
+                    
                     online_plot(
-                        arome_ensemble.numpy()[0], # normalized
-                        ensemble.numpy()[:,1:,:,:], # normalized if not invert_norm
+                        arome_ensemble.numpy()[0],
+                        ensemble.numpy()[:,1:,:,:],
                         figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
                         figtitle=f'Sample comparison for {batch["date"][0]}_{batch["leadtime"][0]}',
                         clim_global=None
