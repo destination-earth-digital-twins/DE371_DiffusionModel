@@ -19,7 +19,7 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
-from ddpm.normalize import var_dict, SpecialNormalize
+from ddpm.normalize import  SpecialNormalize
 from utils.utils import filter_dates, filter_lead_times
 
 from torch.utils.data import Dataset, Sampler
@@ -206,17 +206,17 @@ class ISDataset(Dataset):
         if type(file_name) == list:
             file_name = file_name[0]
         sample_path = os.path.join(self.data_dir, file_name)# +'.npy')
-        # np.save('idc.npy',np.load(sample_path))
         # print('VI',self.config.VI)
         sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        # # place l'axe 2 en première position)
-        # sample = np.float32(np.load(sample_path ))[
+        # sample = np.float32(np.load(sample_path + ".npy"))[
         #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         # ]
+        sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
+            self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        ]
         sample = sample.transpose((1, 2, 0))
-
         sample = self.transform(sample)
 
 

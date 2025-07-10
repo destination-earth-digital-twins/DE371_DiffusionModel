@@ -103,7 +103,10 @@ class Sampler(Ddpm_base):
 
                         filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
+                        np.save('norm.npy',s.cpu().numpy())
                         s = self.inversion_transforms(s)
+                        np.save('denorm.npy',s.cpu().numpy())
+
                         np.save(save_path, s.cpu())
                         i += max(torch.cuda.device_count(), 1)
                     b += batch_size

@@ -5,8 +5,8 @@
 #SBATCH -G 4
 #SBATCH -p gpu
 #SBATCH --ntasks-per-node=4
-#SBATCH --time=144:00:00
-#SBATCH --qos=long
+#SBATCH --time=48:00:00
+#SBATCH --qos=default
 
 
 export TORCH_DISTRIBUTED_DEBUG=INFO 
@@ -37,4 +37,4 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/fi
     python3 -m torch.distributed.run \
     --standalone \
     --nproc_per_node=4 ./main.py \
-    --yaml_path="/home/users/u101957/DE371_DiffusionModel/config_perso/ed_4var/config_train_unconditioned_ED_8var.yml"
+    --yaml_path="/home/users/u101957/DE371_DiffusionModel/config_perso/ed_4var/config_train_conditioned_ED_8var_reprise.yml"

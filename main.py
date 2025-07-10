@@ -132,11 +132,12 @@ def load_train_objs(config):
             sampling_timesteps=config.ddim_timesteps,
         )
     else:
-        print('JE PASSE BIEN PAR ICIC')
         model = ElucidatedDiffusion(
             umodel,
+            var_weights = config.var_weights,
             image_size=config.image_size,
             channels = len(config.var_indexes),
+            weighted_loss = config.weighted_loss,
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
             sigma_min = config.sigma_min,      # min noise level
             sigma_max = config.sigma_max,       # max noise level

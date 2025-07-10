@@ -36,9 +36,11 @@ class ElucidatedDiffusion(nn.Module):
     def __init__(
         self,
         model,
+        var_weights,
         *,
+        weighted_loss,
         image_size,
-        channels = 3,
+        channels = 4,
         num_sample_steps = 100, # number of sampling steps
         sigma_min = 0.002,      # min noise level
         sigma_max = 0.80,       # max noise level
@@ -57,10 +59,8 @@ class ElucidatedDiffusion(nn.Module):
         self.model = model
         self.spatial_conditions = model.spatial_conditions
         self.embedding_cond_dims = n_leadtimes
-
-
-
-        # image dimensions
+        self.weighted_loss = weighted_loss
+        self.var_weights = var_weights
 
         self.channels = channels
         self.image_size = image_size
@@ -202,6 +202,82 @@ class ElucidatedDiffusion(nn.Module):
 
         #images = images.clamp(-1., 1.)
         return unnormalize_to_zero_to_one(images)
+    
+    # def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False):
+    #     num_sample_steps = default(num_sample_steps, self.num_sample_steps)
+
+    #     shape = (batch_size, self.channels, self.image_size, self.image_size)
+
+    #     # get the schedule, which is returned as (sigma, gamma) tuple, and pair up with the next sigma and gamma
+
+    #     sigmas = self.sample_schedule(num_sample_steps)
+
+    #     gammas = torch.where(
+    #         (sigmas >= self.S_tmin) & (sigmas <= self.S_tmax),
+    #         min(self.S_churn / num_sample_steps, sqrt(2) - 1),
+    #         0.
+    #     )
+    #     if not self.sdedit_flag:
+    #         sigmas_and_gammas = list(zip(sigmas[:-1], sigmas[1:], gammas[:-1]))
+            
+    #         # images is noise at the beginning
+    #         init_sigma = sigmas[0]
+    #         images = init_sigma * torch.randn(shape, device = self.device)
+
+        
+    #     else :
+    #         sigmas_and_gammas = list(
+    #         zip(
+    #         sigmas[num_sample_steps - self.num_edition_timesteps:-1],
+    #         sigmas[num_sample_steps - self.num_edition_timesteps+1:],
+    #         gammas[num_sample_steps - self.num_edition_timesteps:-1]
+    #         )
+    #         )
+
+    #         # Noising condition
+    #         condition = normalize_to_neg_one_to_one(condition)
+    #         init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
+    #         noise = torch.randn_like(condition, device = self.device)
+
+    #         images = init_sigma * noise  + condition
+
+        
+    #     # for self conditioning
+
+    #     x_start = None
+
+    #     # gradually denoise
+
+    #     for sigma, sigma_next, gamma in tqdm(sigmas_and_gammas, desc = 'sampling time step'):
+    #         sigma, sigma_next, gamma = map(lambda t: t.item(), (sigma, sigma_next, gamma))
+
+    #         eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling # Algorithm 2 : line 4
+
+    #         sigma_hat = sigma + gamma * sigma # Algorithm 2 : line 5
+    #         images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6
+
+    #         self_cond = condition if self.self_condition else None
+
+    #         model_output = self.preconditioned_network_forward(images_hat, sigma_hat, self_cond, clamp = clamp)
+    #         denoised_over_sigma = (images_hat - model_output) / sigma_hat # Algorithm 2 : line 7
+
+    #         images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
+
+    #         # second order correction, if not the last timestep
+
+    #         if sigma_next != 0:
+    #             cond_2d = condition if self.spatial_conditions else None
+    #             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
+
+    #             model_output_next = self.preconditioned_network_forward(images_next, sigma_next, cond_2d, cond_emb, clamp = clamp)
+    #             denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
+    #             images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
+
+    #         images = images_next
+    #         x_start = model_output_next if sigma_next != 0 else model_output
+
+    #     #images = images.clamp(-1., 1.)
+    #     return unnormalize_to_zero_to_one(images)
 
     # training
 
@@ -237,10 +313,26 @@ class ElucidatedDiffusion(nn.Module):
             cond_emb = kwargs.get('leadtime')
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
+        
+        if self.weighted_loss==True:
+            print('JE PAS')
+            
+            losses = F.mse_loss(denoised, img, reduction='none')  # (B, C, H, W)
+            losses = losses.mean(dim=(2, 3))                      # (B, C) → moyenne spatiale
+            weighted_losses = losses * self.var_weights.view(1, -1)  # (B, C) × (1, C)
+            final_loss = weighted_losses.sum(dim=1)               # (B,)
+            final_loss = final_loss * self.loss_weight(sigmas)   # (B,)
+            return final_loss.mean()
+        else:
+            print('JE PA1')
 
-        losses = F.mse_loss(denoised, img, reduction = 'none')
-        losses = reduce(losses, 'b ... -> b', 'mean')
+            losses = F.mse_loss(denoised, img, reduction = 'none')
+            losses = reduce(losses, 'b ... -> b', 'mean')
 
-        losses = losses * self.loss_weight(sigmas)
+            losses = losses * self.loss_weight(sigmas)
 
-        return losses.mean()
+            return losses.mean()
+
+            
+            
+
