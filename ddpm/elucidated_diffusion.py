@@ -67,7 +67,7 @@ class ElucidatedDiffusion(nn.Module):
         self.num_edition_timesteps = int(num_edition_timesteps)
         if num_edition_timesteps < num_sample_steps:
             self.sdedit_flag = True
-            print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < num_sample_steps : {num_sample_steps} ; SDEdit mode activated')
+            print(f'\n ############ Warning : num_edition_timesteps : {num_edition_timesteps} < num_sample_steps : {num_sample_steps} ; SDEdit mode activated')
 
 
         # image dimensions

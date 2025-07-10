@@ -176,18 +176,14 @@ class ISDataset(Dataset):
         else :
             # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
             if self.config.bootstrap_conditions:
-                norm_condition = torch.stack([
-                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)[0] for _ in range(self.n_conditioning_sets)
-                ])
                 condition = torch.stack([
                     self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)[1] for _ in range(self.n_conditioning_sets)
                 ])
-                return norm_condition, condition
+                return condition
 
-            norm_condition, condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
+            condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
             condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-            norm_condition = norm_condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-            return norm_condition, condition
+            return condition
     
     def df_to_torch(self, ens_df, n_cond):
         """
@@ -221,9 +217,9 @@ class ISDataset(Dataset):
         sample = np.float32(np.load(sample_path + ".npy"))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        norm_sample = sample.transpose((1, 2, 0))
-        norm_sample = self.transform(norm_sample)
-        return norm_sample
+        sample = sample.transpose((1, 2, 0))
+        sample = self.transform(sample)
+        return sample
 
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
