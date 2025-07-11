@@ -103,9 +103,7 @@ class Sampler(Ddpm_base):
 
                         filename = filename_format.format(sample_index=str(i))
                         save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
-                        np.save('norm.npy',s.cpu().numpy())
                         s = self.inversion_transforms(s)
-                        np.save('denorm.npy',s.cpu().numpy())
 
                         np.save(save_path, s.cpu())
                         i += max(torch.cuda.device_count(), 1)
@@ -158,3 +156,7 @@ class Sampler(Ddpm_base):
 
         self.logger.info(
             f"Sampling done. Images saved in {self.config.output_dir}/{self.config.run_name}/samples/")
+        
+        # Important: All ranks wait here for rank 0 to finish sampling: TO AVOID NCC ERROR TIME OUT 
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()

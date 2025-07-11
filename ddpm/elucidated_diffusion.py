@@ -314,8 +314,11 @@ class ElucidatedDiffusion(nn.Module):
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
         
+        if not isinstance(self.var_weights, torch.Tensor):
+            self.var_weights = torch.tensor(self.var_weights, device=self.device)
+        else:
+            self.var_weights = self.var_weights.to(self.device)
         if self.weighted_loss==True:
-            print('JE PAS')
             
             losses = F.mse_loss(denoised, img, reduction='none')  # (B, C, H, W)
             losses = losses.mean(dim=(2, 3))                      # (B, C) → moyenne spatiale
@@ -324,7 +327,6 @@ class ElucidatedDiffusion(nn.Module):
             final_loss = final_loss * self.loss_weight(sigmas)   # (B,)
             return final_loss.mean()
         else:
-            print('JE PA1')
 
             losses = F.mse_loss(denoised, img, reduction = 'none')
             losses = reduce(losses, 'b ... -> b', 'mean')
