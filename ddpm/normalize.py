@@ -79,8 +79,7 @@ class SpecialNormalize(object):
                 sample[self.var_dict_subset[var]] = self.data_transforms[var].direct(sample[self.var_dict_subset[var]])
 
         sample = (sample - self.offset) / self.scale
-        # np.save('idx2.npy',sample)
-
+        
         return sample
 
     def denorm(self, sample):

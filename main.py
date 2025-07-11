@@ -132,6 +132,7 @@ def load_train_objs(config):
             sampling_timesteps=config.ddim_timesteps,
         )
     else:
+        print('JE PASSE BIEN PAR ICIC')
         model = ElucidatedDiffusion(
             umodel,
             var_weights = config.var_weights,

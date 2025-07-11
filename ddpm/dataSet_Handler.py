@@ -216,7 +216,12 @@ class ISDataset(Dataset):
         sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
+        # # place l'axe 2 en première position)
+        # sample = np.float32(np.load(sample_path ))[
+        #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        # ]
         sample = sample.transpose((1, 2, 0))
+
         sample = self.transform(sample)
 
 
