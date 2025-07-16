@@ -33,9 +33,9 @@ set -x
 
 apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/final_diffusion/container.sif \
     python3 main_unbias.py \
-    --real_data_dir='/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/' \
-    --gen_data_dir='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_residus/sampling_sdedit_residus_ddpm/sampling_150steps_128/samples/' \
-    --output_dir='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_residus/sampling_sdedit_residus_ddpm/sampling_150steps_128/unbiased_samples/' \
+    --real_data_dir='path/to/original/data' \
+    --gen_data_dir='path/to/generated/data/' \
+    --output_dir='path/to/output/dir/' \
     --dates_file='Large_lt_val_labels_ens.csv' \
     --date_start='2020-07-01' \
     --date_stop='2021-07-01' \

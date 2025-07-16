@@ -766,7 +766,7 @@ class GaussianDiffusion(Module):
         batch, device, sampling_timesteps, eta, objective = shape[0], self.device, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
 
         if not self.sdedit_flag:
-            # Start from a random image
+            # Start from a random noise
             img = torch.randn(shape, device = device)
             total_timesteps=self.num_timesteps
         else :

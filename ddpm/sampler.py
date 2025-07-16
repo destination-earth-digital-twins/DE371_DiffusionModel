@@ -153,23 +153,13 @@ class Sampler(Ddpm_base):
                 if self.config.plot:# and is_main_gpu():
 
                     arome_ensemble = conditioning_sets.detach().clone()[0]
-
-                    
-                    print('ensemble.shape',ensemble.shape)
-                    print('arome_ensemble.shape',arome_ensemble.shape)
-
                     if self.config.predict_residue:
                         ensemble_mean = batch['ensemble_mean_tensor'].detach().cpu()
-                        # print('ensemble_mean.shape',ensemble_mean.shape)
-                        # ensemble = torch.sub(ensemble, torch.cat([torch.zeros(self.config.n_var_in_dataset - self.config.n_var, x, y ), ensemble_mean[0]], dim=0).unsqueeze(0).expand(ensemble.shape[0], -1, -1, -1))
                         arome_ensemble = torch.add(arome_ensemble[0], ensemble_mean)
                     if self.config.invert_norm == True:
                         detransform_func = self.transforms_func()
                         arome_ensemble = torch.stack([detransform_func(image) for image in arome_ensemble]).detach().clone()
-
-                    
                         
-                    
                     online_plot(
                         arome_ensemble.numpy(),
                         ensemble.numpy()[:,1:,:,:],
