@@ -122,6 +122,7 @@ def load_train_objs(config):
         n_conditions=config.n_conditions,
         var_cond=config.var_conditioning,
         mean_cond=config.mean_conditioning,
+        orog_cond=config.orography_conditioning,
         n_labels_embeded_cond = n_lt,
     )
     if config.elucidated_diffusion_sampler == False:

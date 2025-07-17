@@ -287,8 +287,8 @@ class ElucidatedDiffusion(nn.Module):
         #TODO change terminology from cond_2d to cond
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
 
-        assert h == image_size and w == image_size, f'height and width of image must be {image_size}'
-        assert c == channels, 'mismatch of image channels'
+        assert h == image_size and w == image_size, f'height and width of image must be {image_size} but they are (h={h},w={w})'
+        assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
 
         img = normalize_to_neg_one_to_one(img)
 
