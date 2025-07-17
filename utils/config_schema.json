@@ -98,6 +98,19 @@
       "default": false,
       "description": "Use the ensemble variance as a condition"
     },
+    "orography_conditioning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the orography as a condition"
+    },
+    "path_to_orography": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "description": "Path to orography file"
+    },
     "learn_residue": {
       "type": "boolean",
       "default": false,

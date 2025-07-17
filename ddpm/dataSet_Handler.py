@@ -67,11 +67,11 @@ class ISDataset(Dataset):
         
         self.labels = self.labels.reset_index(drop=True)
 
-        if self.config.add_orography:
+        if self.config.orography_conditioning:
             # Importing
-            self.orography = torch.from_numpy(np.load(self.config.path_to_orography))
+            self.orography = torch.from_numpy(np.float32(np.load(self.config.path_to_orography)))
             # Cropping
-            self.orography = self.orography[crop[0]:crop[1],crop[2]:crop[3]]
+            self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
             # Normalizing
             self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
 
@@ -143,11 +143,9 @@ class ISDataset(Dataset):
                 var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
-        if self.config.add_orography:
-            # Check if 'orog' is in variable list 
-            condition_tensor = torch.cat([condition_tensor, self.orography_normalized], dim=1)
-            # WARNOING : CHECK THAT IT IS DOING WHAT WE WANT
-
+        if self.config.orography_conditioning:
+            orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+            condition_tensor = torch.cat([condition_tensor, orography], dim=1)
 
         sample_id = re.search(r"\d+", file_name).group()
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}

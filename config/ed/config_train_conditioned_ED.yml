@@ -35,7 +35,7 @@
 "n_var": 3
 "var_indexes": [ "u", "v", "t2m" ]
 "crop": [ 0,256,0,256 ]
-"add_orography": false
+"orography_conditioning": false
 "path_to_orography" : "/project/home/p200177/DE_371/resources/AROME_orography/PEARO_EURW1S40_Orography.npy"
 "invert_norm": true
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
