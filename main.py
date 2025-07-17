@@ -85,7 +85,7 @@ def ddp_setup():
         return
     # Initialize the process group for DDP
     init_process_group(
-        "nccl" if dist.is_nccl_available() else "gloo",
+        "gloo", #"nccl" if dist.is_nccl_available() else "gloo",
         world_size=torch.cuda.device_count(),
     )
     torch.cuda.set_device(get_rank())

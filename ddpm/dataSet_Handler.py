@@ -314,8 +314,8 @@ class GrandEnsembleDataset(Dataset):
         mb_file_name = self.labels.iloc[idx, 2]
         sample = self.file_to_torch(ensemble_file_name, mb_file_name) # target
 
-        mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
-        var_cond = self.config.var_conditionning # Use the var as a condition ?
+        mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
+        var_cond = self.config.var_conditioning # Use the var as a condition ?
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(sample)

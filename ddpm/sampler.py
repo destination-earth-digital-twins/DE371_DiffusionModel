@@ -241,8 +241,7 @@ class SamplerGrandEnsemble(Sampler):
 
             # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
             if self.config.n_var != self.config.n_var_in_dataset:
-                    zero_pad = torch.zeros(self.config.n_sampling_conditioning_sets, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
-                    zero_pad = zero_pad.permute(1, 0, 2, 3, 4)
+                zero_pad = torch.zeros(self.config.n_sampling_conditioning_sets, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
 
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
@@ -262,6 +261,7 @@ class SamplerGrandEnsemble(Sampler):
                     arome_ensemble = conditioning_sets.detach().clone().to(self.gpu_id)
 
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                print('conditioning_sets.shape', conditioning_sets.shape)
                 if self.config.n_var != self.config.n_var_in_dataset:
                     ensemble = []
                     for set in conditioning_sets:
@@ -283,6 +283,7 @@ class SamplerGrandEnsemble(Sampler):
                 
                 
                 print('ensemble shape',ensemble.shape)
+                print('arome_ensemble shape',arome_ensemble.shape)
                 lt = batch['lt'][0]
                 draw_idx = batch['draw_idx'][0]
                 date = batch['date'][0]
@@ -292,7 +293,7 @@ class SamplerGrandEnsemble(Sampler):
 
                 if self.config.plot:# and is_main_gpu():
                     online_plot(
-                        arome_ensemble.cpu().numpy(), # normalized
+                        arome_ensemble[0].cpu().numpy(), # normalized
                         ensemble.numpy()[:,1:,:,:], # normalized if not invert_norm
                         figname=os.path.join(self.config.output_dir, self.config.run_name, "samples", filename[:-4]+'.png'),
                         figtitle=f'Sample comparison for {filename[:-4]}',
