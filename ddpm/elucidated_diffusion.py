@@ -183,11 +183,11 @@ class ElucidatedDiffusion(nn.Module):
             )
 
             # Noising condition
-            condition = normalize_to_neg_one_to_one(condition)
+            condition_sdedit = normalize_to_neg_one_to_one(condition)
             init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
-            noise = torch.randn_like(condition, device = self.device)
+            noise = torch.randn_like(condition_sdedit, device = self.device)
 
-            images = init_sigma * noise  + condition
+            images = init_sigma * noise  + condition_sdedit
 
         
         # for self conditioning
