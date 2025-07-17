@@ -9,7 +9,7 @@
 # Sampling parameters
 "ddim_timesteps": 10
 "plot": true
-"sampling_mode": "conditioned"
+"sampling_mode": "conditioned_input"
 "n_sample": 4
 "random_noise": true
 "S_churn": 40
@@ -40,7 +40,6 @@
 "scale_file": Max_4_var.npy
 "image_size": 256
 "guiding_col": "ensemble_id"
-"sampling_mode": "conditioned"
 "n_conditions": 5 # ICI
 
 # Model parameters
