@@ -59,7 +59,7 @@
       "type": "string",
       "enum": [
         "simple",
-        "conditioned",
+        "conditioned_input",
         "conditioned_sdedit",
         "guided"
       ],
@@ -99,12 +99,22 @@
       "default": null,
       "description": "Column to use for guided sampling. Required when using guided sampling mode."
     },
-    "mean_conditionning": {
+    "n_leadtimes": {
+      "type": "integer",
+      "default": 45,
+      "description": "Total number of leadtimes per ensemble in the dataset"
+    },
+    "leatimes_conditioning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use the ensemble leadtime as a condition"
+    },
+    "mean_conditioning": {
       "type": "boolean",
       "default": false,
       "description": "Use the ensemble mean as a condition"
     },
-    "var_conditionning": {
+    "var_conditioning": {
       "type": "boolean",
       "default": false,
       "description": "Use the ensemble variance as a condition"
@@ -118,6 +128,11 @@
       "type": "boolean",
       "default": false,
       "description": "Predict the residue of the members (members - ensemble mean) instead of the members"
+    },
+    "num_edition_timesteps":{
+      "type": "integer",
+      "default": 1000,
+      "description": "Number of steps for SDEdit Method"
     },
     "mean_var_dir": {
       "type": [

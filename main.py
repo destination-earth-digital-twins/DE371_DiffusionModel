@@ -114,14 +114,16 @@ def load_train_objs(config):
     )
     
     # Create a U-Net model and a diffusion model based on configuration
+    n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
     umodel = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
         channels=len(config.var_indexes),
-        self_condition=use_cond,
+        spatial_conditions=use_cond,
         n_conditions=config.n_conditions,
-        var_cond=config.var_conditionning,
-        mean_cond=config.mean_conditionning,
+        var_cond=config.var_conditioning,
+        mean_cond=config.mean_conditioning,
+        n_labels_embeded_cond = n_lt,
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
@@ -159,7 +161,8 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
-            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps
+            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
+            n_leadtimes=n_lt
             )
         
             

@@ -2,8 +2,7 @@
 #SBATCH -J DE371_diffusion_sampling
 #SBATCH -A p200177
 #SBATCH -N 1
-#SBATCH -G 4
-#SBATCH -p gpu
+#SBATCH -p cpu
 #SBATCH --ntasks-per-node=4
 #SBATCH --time=48:00:00
 #SBATCH --qos=default
@@ -33,7 +32,10 @@ set -x
 # fi
 
 apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/final_diffusion/container.sif \
-    python3 -m torch.distributed.run \
-    --standalone \
-    --nproc_per_node=4 ./main.py \
-    --yaml_path="path/to/sample/config.yml"
+    python3 main_unbias.py \
+    --real_data_dir='path/to/original/data' \
+    --gen_data_dir='path/to/generated/data/' \
+    --output_dir='path/to/output/dir/' \
+    --dates_file='Large_lt_val_labels_ens.csv' \
+    --date_start='2020-07-01' \
+    --date_stop='2021-07-01' \

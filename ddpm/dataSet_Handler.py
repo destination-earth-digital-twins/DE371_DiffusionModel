@@ -147,6 +147,7 @@ class ISDataset(Dataset):
 
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
 
+
     def get_conditioning_members(self, ensemble_df, idx):
         """
             Loads the conditioning members for the training and the sampling, stacks them
@@ -173,10 +174,17 @@ class ISDataset(Dataset):
                 self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
             ])
             return condition
+        else :
+            # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
+            if self.config.bootstrap_conditions:
+                condition = torch.stack([
+                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)[1] for _ in range(self.n_conditioning_sets)
+                ])
+                return condition
 
-        condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
-        return condition
+            condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
+            condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            return condition
     
     def df_to_torch(self, ens_df, n_cond):
         """
@@ -194,6 +202,7 @@ class ISDataset(Dataset):
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
+        
         
     def file_to_torch(self, file_name):
         """

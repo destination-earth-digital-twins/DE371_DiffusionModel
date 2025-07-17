@@ -281,10 +281,11 @@ class Unet(Module):
         out_dim = None,
         dim_mults = (1, 2, 4, 8),
         channels = 3,
-        self_condition = False,
+        spatial_conditions = False,
         n_conditions = 1,
         var_cond = False,
         mean_cond = False,
+        n_labels_embeded_cond = None,
         learned_variance = False,
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
@@ -301,9 +302,9 @@ class Unet(Module):
         # determine dimensions
 
         self.channels = channels
-        self.self_condition = self_condition
+        self.spatial_conditions = spatial_conditions
 
-        input_channels = channels * ((n_conditions + 1) if self_condition else 1)
+        input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
         if var_cond:
             input_channels += channels
         if mean_cond:
@@ -316,9 +317,7 @@ class Unet(Module):
         in_out = list(zip(dims[:-1], dims[1:]))
 
         # time embeddings
-
         time_dim = dim * 4
-
         self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
 
         if self.random_or_learned_sinusoidal_cond:
@@ -335,6 +334,16 @@ class Unet(Module):
             nn.Linear(time_dim, time_dim)
         )
 
+        ################## Embedded condition
+        if n_labels_embeded_cond is not None:
+            self.emb_mlp = nn.Sequential(
+                SinusoidalPosEmb(dim, theta = n_labels_embeded_cond),
+                nn.Linear(fourier_dim, time_dim),
+                nn.GELU(),
+                nn.Linear(time_dim, time_dim)
+            )
+            # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
+    
         # attention
 
         if not full_attn:
@@ -397,10 +406,10 @@ class Unet(Module):
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None):
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
 
-        if self.self_condition:
+        if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
 
@@ -408,6 +417,11 @@ class Unet(Module):
         r = x.clone()
 
         t = self.time_mlp(time)
+
+        ################## Embedded condition
+        if embedded_cond is not None:
+            cond_embedding = self.emb_mlp(embedded_cond)
+            t = t + cond_embedding 
 
         h = []
 
@@ -510,7 +524,7 @@ class GaussianDiffusion(Module):
         self.model = model
 
         self.channels = self.model.channels
-        self.self_condition = self.model.self_condition
+        self.spatial_conditions = self.model.spatial_conditions
 
         if isinstance(image_size, int):
             image_size = (image_size, image_size)
@@ -544,6 +558,7 @@ class GaussianDiffusion(Module):
         self.num_edition_timesteps = int(num_edition_timesteps)
         if num_edition_timesteps < timesteps:
             self.sdedit_flag = True
+            print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < timesteps : {timesteps} ; SDEdit mode activated')
 
         # sampling related parameters
 
@@ -723,7 +738,7 @@ class GaussianDiffusion(Module):
         num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
 
         for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
 
@@ -751,7 +766,7 @@ class GaussianDiffusion(Module):
         batch, device, sampling_timesteps, eta, objective = shape[0], self.device, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
 
         if not self.sdedit_flag:
-            # Start from a random image
+            # Start from a random noise
             img = torch.randn(shape, device = device)
             total_timesteps=self.num_timesteps
         else :
@@ -775,7 +790,7 @@ class GaussianDiffusion(Module):
             time_cond = torch.full(
                 (batch,), time, device = device, dtype = torch.long
             )
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
             
             if time_next < 0:
@@ -803,7 +818,7 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None):
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
         r"""
         Generate samples using SDEdit diffusion.
         Args:
@@ -840,7 +855,7 @@ class GaussianDiffusion(Module):
         x_start = None
 
         for i in tqdm(reversed(range(0, t)), desc = 'interpolation sample time step', total = t):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, i, self_cond)
 
         return img
@@ -886,7 +901,7 @@ class GaussianDiffusion(Module):
         # this technique will slow down training by 25%, but seems to lower FID significantly
 
         x_self_cond = None
-        if self.self_condition and random() < 0.5:
+        if self.spatial_conditions and random() < 0.5:
             with torch.no_grad():
                 x_self_cond = self.model_predictions(x, t).pred_x_start
                 x_self_cond.detach_()
