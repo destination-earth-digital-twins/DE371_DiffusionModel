@@ -99,8 +99,8 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
-        mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
-        var_cond = self.config.var_conditionning # Use the var as a condition ?
+        mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
+        var_cond = self.config.var_conditioning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
 
         # Get the ensemble df
