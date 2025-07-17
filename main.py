@@ -110,7 +110,7 @@ def load_train_objs(config):
     umodel = Unet(
         dim=64,
         dim_mults=(1, 2, 4, 8),
-        channels=len(config.var_indexes) + (1 if config.orography_conditioning else 0),
+        channels=len(config.var_indexes),
         self_condition=use_cond,
         n_conditions=config.n_conditions,
         var_cond=config.var_conditionning,
