@@ -22,8 +22,6 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
-from utils.utils import batch_output_sample_files
-import numpy as np
 
 warnings.filterwarnings(
     "ignore",
@@ -104,8 +102,16 @@ def load_train_objs(config):
         config.guiding_col is not None
         and config.mode == "Train"
         or config.mode == "Sample"
-        and "conditioned" in config.sampling_mode
+        and "conditioned_input" in config.sampling_mode
     )
+
+    use_cond_sdedit = (
+        config.guiding_col is not None
+        and config.mode == "Train"
+        or config.mode == "Sample"
+        and "conditioned_sdedit" in config.sampling_mode
+    )
+    
     # Create a U-Net model and a diffusion model based on configuration
     n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
     umodel = Unet(
@@ -121,17 +127,24 @@ def load_train_objs(config):
     )
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
-            cls = ConditionedGaussianDiffusion
+            model = ConditionedGaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+            )
         else:
-            cls = GaussianDiffusion
-        model = cls(
-            umodel,
-            image_size=config.image_size,
-            timesteps=1000,
-            beta_schedule=config.beta_schedule,
-            auto_normalize=config.auto_normalize,
-            sampling_timesteps=config.ddim_timesteps,
-        )
+            model = GaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
+            )
     else:
         model = ElucidatedDiffusion(
             umodel,
@@ -148,8 +161,11 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
-            n_leadtimes = n_lt
-        )
+            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
+            n_leadtimes=n_lt
+            )
+        
+            
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas
     )
@@ -290,7 +306,7 @@ def main_sample(config):
 
     if is_main_gpu():
         logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
-    if config.sampling_mode == "conditioned":
+    if "conditioned" in config.sampling_mode:
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
         file_format = "fake_sample_{sample_index}.npy" 
