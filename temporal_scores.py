@@ -5,12 +5,111 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 import torch 
 import argparse
-import utils.utils as utils
 import os 
 import pandas as pd
 import scipy
 from math import ceil
+from copy import deepcopy
 
+def normalize(data, normalization_type, Means=None, Mins=None, Maxs=None, apply_log_transform=True):
+    """
+    Normalizes the data and if necessary does the log-transform.
+
+        Args:
+            data (torch.Tensor): The normalized data.
+            normalization_type (str): Type of normalisation used ('meanmax', 'minmax' or '').
+            Means (torch.Tensor, optional): Means used for normalisation (if applicable).
+            Mins (torch.Tensor, optional): Minima used for normalisation (if applicable).
+            Maxs (torch.Tensor, optional): Maxima used for normalisation (if applicable).
+            apply_log_transform (bool): If True, also reverses the log transformation.
+
+        Returns:
+            torch.Tensor: The denormalized data.
+    """
+    
+    normalized_data = deepcopy(data)
+
+    if apply_log_transform:
+        normalized_data[:,0,:,:]=torch.log(1+normalized_data[:,0,:,:])   
+
+    if normalization_type == "meanmax":
+        if Means is None or Maxs is None:
+            raise ValueError("Means et Maxs must be supplied to denormalise with 'meanmax'.")
+        normalized_data = torch.tensor(0.95*(normalized_data - Means) / (Maxs), dtype = torch.float32)
+    elif normalization_type == "minmax":
+        if Mins is None or Maxs is None:
+            raise ValueError("Mins et Maxs must be supplied to denormalise with 'minmax'.")
+        normalized_data = torch.tensor(-1. + 2*(normalized_data - Mins) / (Maxs-Mins), dtype = torch.float32)
+    elif normalization_type == "":
+        normalized_data = data 
+    else:
+        
+        raise ValueError(f"Type de normalisation inconnu: {normalization_type}")
+      
+
+    return normalized_data
+
+def load_batch_sequence_from_date(
+        dataframe, 
+        date, 
+        data_dir, 
+        concatenate_variable_and_time=False, 
+        dt=3, 
+        Shape=(3,256,256), 
+        var_indices=[1,2,3],
+        normalization="meanmax",
+        Means=None,
+        Mins=None,
+        Maxs=None,
+        apply_log_transform=False
+    ):
+    r''' 
+
+    '''
+    batch_sequence=[]
+    for member_id in range(16) :
+        df0 = dataframe[(dataframe['Date']==date) & (dataframe['Member']==member_id)]
+        Nb = len(df0) # nb total leadtime
+        if dt == 6:
+            sample = np.zeros((8,) + tuple(Shape))
+        else :
+            sample = np.zeros((Nb//dt,) + tuple(Shape))
+
+
+        for i,s in enumerate(df0['Name']):
+            if i%dt == 0:
+                sn = np.load(f'{data_dir}{s}.npy')[var_indices,:,:].astype(np.float32)
+                # normalization
+                sn_norm = normalize(
+                                data=sn,
+                                normalization_type=normalization,
+                                Means=Means,
+                                Mins=Mins,
+                                Maxs=Maxs,
+                                apply_log_transform=apply_log_transform
+                        )
+                sample[i//dt] = sn_norm
+        if concatenate_variable_and_time :
+            lt, var, x, y = np.shape(sample)
+            sample = sample.reshape((lt*var,x,y))
+
+        batch_sequence.append(sample)
+
+    return torch.tensor(np.array(batch_sequence), dtype=torch.float32)
+
+def str2intlist(li):
+    if type(li)==list:
+        li2 = [int(p) for p in li]
+        return li2
+    
+    elif type(li)==str:
+        li2 = li[1:-1].split(',')
+        li3 = [int(p) for p in li2]
+        return li3
+
+    else : 
+        raise ValueError("li argument must be a string or a list, not '{}'".format(type(li)))
+    
 if __name__=="__main__" :
     parser = argparse.ArgumentParser()
     
@@ -19,32 +118,32 @@ if __name__=="__main__" :
     # Real Data Directory - PATH to samples of the dataset
     parser.add_argument('--real_data_dir', type = str,  default='/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/')
     # Output Directory - PATH where the output of the inversion will be saved
-    parser.add_argument('--output_dir',type = str, default ='/project/scratch/p200177/DE_371/victorsanchez/results/perturbation/coherence_temporelle_gan_classique/')
-    parser.add_argument('--gen_sample_dir',type = str, default ="/project/home/p200177/DE_371/experiments_WP1/inversion_process_analysis/final_inversion_on_test_set/perceptual_exp45/perturbation/112_stochastic_['1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '0', '0', '0', '0']_False_-1_16_/samples/")
+    parser.add_argument('--output_dir',type = str, default ='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_ED/sampling_3steps/temporal_scores/')
+    parser.add_argument('--gen_sample_dir',type = str, default ="/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_ED/sampling_3steps/unbiased_samples/")
     parser.add_argument("--Shape", type=tuple, default=(3,256,256), help='size of the samples')
     # Dataset information
     parser.add_argument("--normalization", type=str, default="", choices=["minmax", "meanmax", ""])
     parser.add_argument('--max_file', type=str, default='MaxNew_4_var.npy') # use 'MaxNew_4_var.npy' if AROME data # max_rr_log.npy
     parser.add_argument('--mean_file', type=str, default='Mean_4_var.npy') # not used if minmax normalization
     parser.add_argument('--min_file', type=str, default='min_rr_log.npy')  # not used if meanmax normalization
-    parser.add_argument("--var_indices", type=utils.str2intlist, default=[1,2,3])
-    parser.add_argument("--var_names", type=utils.str2intlist, default=['u','v','t2m'])
+    parser.add_argument("--var_indices", type=str2intlist, default=[1,2,3])
+    parser.add_argument("--var_names", type=str2intlist, default=['u','v','t2m'])
     parser.add_argument('--device', type=str, default='cuda')
 
     ############################ SEQUENCE PARAMETERS #################    
     parser.add_argument('--multi_timestep_mode', action='store_true')
-    parser.add_argument('--nb_timesteps', type=int, default=44)
-    parser.add_argument('--timestep_period', type=int, default=1)
+    parser.add_argument('--nb_timesteps', type=int, default=14)
+    parser.add_argument('--timestep_period', type=int, default=3)
     parser.add_argument('--stack_sample_along_time_and_variable', action='store_true')
 
     ############################ INVERSION PARAMETERS ################
     parser.add_argument("--invstep", type=int, default=1000, help="optimize iterations")
 
     ########################## CONTROL of Data to invert ######################
-    parser.add_argument("--dates_file", type=str, default = 'Large_lt_test_labels.csv')
-    parser.add_argument("--date_start", type=str, default = "2021-07-01")
-    parser.add_argument("--date_stop", type=str, default = "2021-07-02")
-    parser.add_argument("--leadtimes", type=utils.str2intlist,
+    parser.add_argument("--dates_file", type=str, default = 'Large_lt_val_labels_ens.csv')
+    parser.add_argument("--date_start", type=str, default = "2020-07-01")
+    parser.add_argument("--date_stop", type=str, default = "2020-07-02")
+    parser.add_argument("--leadtimes", type=str2intlist,
                         default=[3,6,9,12,15,18,21,24,27,30,33,36,39,42])
     # [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44]
     # [3,6,9,12,15,18,21,24,27,30,33,36,39,42]
@@ -116,9 +215,9 @@ if __name__=="__main__" :
     AROME_temporal_difference = np.zeros((3, params.nb_timesteps-2, nb_sample_total))
     AROME_absolute_temporal_difference = np.zeros((3, params.nb_timesteps-2, nb_sample_total))
     
-    nb_child_member = 7
-    if 112//16 < nb_child_member:
-        nb_child_member = 112//16
+    nb_child_member = 4
+    if 64//16 < nb_child_member:
+        nb_child_member = 64//16
     nb_sample_total_gen = len(list_dates)*16*nb_child_member
     gen_diurnal_cycle = np.zeros((len(pixel_coordinate_dict), 2, params.nb_timesteps-2, nb_sample_total_gen))
     gen_pearsons_first_to_each_leadtime_img = np.zeros((3, params.nb_timesteps-2, nb_sample_total_gen))
@@ -132,7 +231,7 @@ if __name__=="__main__" :
         print(date_)
         # Importing True - Sequence for the whole day
 
-        Ens_r = utils.load_batch_sequence_from_date(
+        Ens_r = load_batch_sequence_from_date(
                     df_extract,
                     date_,
                     params.real_data_dir,
@@ -152,12 +251,13 @@ if __name__=="__main__" :
         date_=str(date_)[:10]
         for lt in params.leadtimes :
             try :
-                path_to_sample = params.gen_sample_dir + f"genFsemble_{date_}_{lt}_{params.invstep}_16.npy"    
-                Ens_gen.append(np.load(path_to_sample))
+                
+                path_to_sample = params.gen_sample_dir + f"4var_fake_ensemble_{date_}_{lt}.npy" 
+                # path_to_sample = params.gen_sample_dir + f"genFsemble_{date_}_{lt}_{params.invstep}_16.npy"    
+                Ens_gen.append(np.load(path_to_sample)[:,1:,:,:])
             except :
-                print(f"File 'genFsemble_{date_}_{lt}_{params.invstep}_16.npy' Not Found")
+                print(f"File \'4var_fake_ensemble_{date_}_{lt}.npy\'  Not Found")
         
-        # Ens_gen = utils.rescale(Ens_gen, Means, Maxs, 1/0.95)
         Ens_gen = torch.tensor(np.array(Ens_gen), dtype=torch.float32).transpose(1,0)
         print('Ens_r shape :', Ens_r.shape)
         print('Ens_gen shape :', Ens_gen.shape)

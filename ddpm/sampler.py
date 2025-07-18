@@ -134,13 +134,13 @@ class Sampler(Ddpm_base):
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 if self.temporal_consistency :
-                    filename = "sampling_noise_{date}_3.pt" .format(date = d)
+                    filename = "sampling_noise_{date}_1.pt" .format(date = d)
                     sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
                     os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise"), exist_ok=True)
                     if os.path.isfile(sampling_noise_path):
                         self.sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
                     else :
-                        if lt+1 == 3:
+                        if lt+1 == 1:
                             self.sampling_noise = torch.randn((self.config.n_var, x, y), device = self.gpu_id)
                             torch.save(self.sampling_noise,sampling_noise_path)
                             self.logger.info(f"Sampling noise saved in {sampling_noise_path} for leadtime : {lt}")
