@@ -241,7 +241,10 @@ class SamplerGrandEnsemble(Sampler):
 
             # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
             if self.config.n_var != self.config.n_var_in_dataset:
-                zero_pad = torch.zeros(self.config.n_sampling_conditioning_sets, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+                # mode 1
+                # zero_pad = torch.zeros(16, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+                # mode 2
+                zero_pad = torch.zeros(1, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
 
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
@@ -260,19 +263,30 @@ class SamplerGrandEnsemble(Sampler):
                 else :
                     arome_ensemble = conditioning_sets.detach().clone().to(self.gpu_id)
 
-                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                # mode 1 : batching for generation 
+                # conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                # mode 2 : iterating over 16*self.config.n_sampling_conditioning_sets members
+                conditioning_sets = conditioning_sets.view(16*self.config.n_sampling_conditioning_sets, self.config.n_var, x, y)
                 print('conditioning_sets.shape', conditioning_sets.shape)
                 if self.config.n_var != self.config.n_var_in_dataset:
                     ensemble = []
                     for set in conditioning_sets:
                         print('set shape', set.shape)
-                        subsample = self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))
+                        # mode 1
+                        # subsample = self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))
+                        
+                        # mode 2
+                        subsample = self._sample_batch(nb_img=len(set.unsqueeze(0)), condition=set.unsqueeze(0).to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))
+                        
                         print('subsample shape', subsample.shape)
                         print('zero_pad shape', zero_pad.shape)
                         subsample = torch.cat((zero_pad, subsample), dim=1)
                         print('subsample shape after cat', subsample.shape)
                         ensemble.append(subsample.unsqueeze(0))
-                    ensemble = torch.cat(ensemble, dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y )
+                    # mode 1
+                    # ensemble = torch.cat(ensemble, dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y )
+                    # mode 2
+                    ensemble = torch.tensor(ensemble).cpu()
                 else:
                     # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                     ensemble = []
