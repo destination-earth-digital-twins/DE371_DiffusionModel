@@ -41,11 +41,11 @@ if __name__=="__main__" :
     parser.add_argument("--base_dir", type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/')
     args = parser.parse_args()
 
-    PATH_exp = {'Sdedit_ED_4steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_4steps/quantiles_data/",
-    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_3steps/quantiles_data/"
+    PATH_exp = {'Sdedit_ED_4steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_4steps/quantile_data/",
+    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_3steps/quantile_data/"
     }
     base_dir = args.base_dir
-    output_dir = base_dir + 'quantiles_plots/'
+    output_dir = base_dir + 'quantiles_plots_/'
     os.makedirs(output_dir, exist_ok=True)
     for param in args.param:
         for leadtime in args.leadtimes :

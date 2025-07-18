@@ -265,28 +265,27 @@ class SamplerGrandEnsemble(Sampler):
 
                 # mode 1 : batching for generation 
                 # conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-                # mode 2 : iterating over 16*self.config.n_sampling_conditioning_sets members
+                # mode 2 : same as mode 1 but without permuting
+                # mode 3 : iterating over 16*self.config.n_sampling_conditioning_sets members
                 conditioning_sets = conditioning_sets.view(16*self.config.n_sampling_conditioning_sets, self.config.n_var, x, y)
                 print('conditioning_sets.shape', conditioning_sets.shape)
                 if self.config.n_var != self.config.n_var_in_dataset:
-                    ensemble = []
-                    for set in conditioning_sets:
+                    ensemble = torch.zeros((16*self.config.n_sampling_conditioning_sets, self.config.n_var_in_dataset, x, y)).cpu()
+                    for set_id, set in enumerate(conditioning_sets):
                         print('set shape', set.shape)
-                        # mode 1
+                        # mode 1 & 2
                         # subsample = self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))
                         
-                        # mode 2
+                        # mode 3
                         subsample = self._sample_batch(nb_img=len(set.unsqueeze(0)), condition=set.unsqueeze(0).to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))
                         
                         print('subsample shape', subsample.shape)
                         print('zero_pad shape', zero_pad.shape)
                         subsample = torch.cat((zero_pad, subsample), dim=1)
                         print('subsample shape after cat', subsample.shape)
-                        ensemble.append(subsample.unsqueeze(0))
-                    # mode 1
+                        ensemble[set_id]=subsample.cpu()
+                    # mode 1 & 2
                     # ensemble = torch.cat(ensemble, dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y )
-                    # mode 2
-                    ensemble = torch.tensor(ensemble).cpu()
                 else:
                     # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets
                     ensemble = []
