@@ -28,6 +28,8 @@ class Sampler(Ddpm_base):
         """
         super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
+        # Temporal consistency
+        self.temporal_consistency=config.temporal_consistency
 
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
@@ -128,24 +130,38 @@ class Sampler(Ddpm_base):
                     conditioning_sets = batch["img"]
                 else :
                     raise NotImplementedError
+                
+                lt = batch['leadtime'][0]
+                d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
+                if self.temporal_consistency :
+                    filename = "sampling_noise_{date}_3.pt" .format(date = d)
+                    sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
+                    os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise"), exist_ok=True)
+                    if os.path.isfile(sampling_noise_path):
+                        self.sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
+                    else :
+                        if lt+1 == 3:
+                            self.sampling_noise = torch.randn((self.config.n_var, x, y), device = self.gpu_id)
+                            torch.save(self.sampling_noise,sampling_noise_path)
+                            self.logger.info(f"Sampling noise saved in {sampling_noise_path} for leadtime : {lt}")
+                        else :
+                            raise IndexError(f'At {d}_{lt} should have been created before.')
 
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 if self.config.n_var != self.config.n_var_in_dataset:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                         ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), sampling_noise=self.sampling_noise)), dim=1).unsqueeze(0) # concatenate an empty rr channel
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                 else:
                         # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
                         ensemble = torch.cat([
-                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id)).unsqueeze(0)
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), sampling_noise=self.sampling_noise).unsqueeze(0)
                             for set in conditioning_sets
                         ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
 
-                lt = batch['leadtime'][0]
-                d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())

@@ -3,7 +3,7 @@ from random import random
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
-
+import os
 from tqdm import tqdm
 from einops import rearrange, repeat, reduce
 
@@ -51,7 +51,8 @@ class ElucidatedDiffusion(nn.Module):
         S_tmax = 50,
         S_noise = 0.0,
         num_edition_timesteps=5,
-        n_leadtimes=14
+        n_leadtimes=14,
+        temporal_consistency=False,
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
@@ -60,7 +61,9 @@ class ElucidatedDiffusion(nn.Module):
         self.embedding_cond_dims = n_leadtimes
 
         self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
-        
+
+        self.temporal_consistency = temporal_consistency
+
         # SDEdit flag setting
         self.num_edition_timesteps=num_edition_timesteps
         self.sdedit_flag = False
@@ -151,7 +154,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, sampling_noise=None):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
 
         shape = (batch_size, self.channels, self.image_size, self.image_size)
@@ -185,7 +188,12 @@ class ElucidatedDiffusion(nn.Module):
             # Noising condition
             condition_sdedit = normalize_to_neg_one_to_one(condition)
             init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
-            noise = torch.randn_like(condition_sdedit, device = self.device)
+            if not self.temporal_consistency:
+                noise = torch.randn_like(condition_sdedit, device = self.device)
+            else :
+                noise = sampling_noise
+                if sampling_noise is None:
+                    raise ValueError('Temporal consistency mode but sampling_noise is None!')
 
             images = init_sigma * noise  + condition_sdedit
 
