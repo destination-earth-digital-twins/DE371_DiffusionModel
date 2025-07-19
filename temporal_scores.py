@@ -118,8 +118,8 @@ if __name__=="__main__" :
     # Real Data Directory - PATH to samples of the dataset
     parser.add_argument('--real_data_dir', type = str,  default='/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/')
     # Output Directory - PATH where the output of the inversion will be saved
-    parser.add_argument('--output_dir',type = str, default ='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_ED/sampling_3steps/temporal_scores/')
-    parser.add_argument('--gen_sample_dir',type = str, default ="/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit_ED/sampling_3steps/unbiased_samples/")
+    parser.add_argument('--output_dir',type = str, default ='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_temporal_experiments_AROME/sdedit_ED/sampling_3steps/temporal_scores_dt1/')
+    parser.add_argument('--gen_sample_dir',type = str, default ="/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_temporal_experiments_AROME/sdedit_ED/sampling_3steps/samples_dt1/")
     parser.add_argument("--Shape", type=tuple, default=(3,256,256), help='size of the samples')
     # Dataset information
     parser.add_argument("--normalization", type=str, default="", choices=["minmax", "meanmax", ""])
@@ -132,8 +132,8 @@ if __name__=="__main__" :
 
     ############################ SEQUENCE PARAMETERS #################    
     parser.add_argument('--multi_timestep_mode', action='store_true')
-    parser.add_argument('--nb_timesteps', type=int, default=14)
-    parser.add_argument('--timestep_period', type=int, default=3)
+    parser.add_argument('--nb_timesteps', type=int, default=44)
+    parser.add_argument('--timestep_period', type=int, default=1)
     parser.add_argument('--stack_sample_along_time_and_variable', action='store_true')
 
     ############################ INVERSION PARAMETERS ################
@@ -144,7 +144,7 @@ if __name__=="__main__" :
     parser.add_argument("--date_start", type=str, default = "2020-07-01")
     parser.add_argument("--date_stop", type=str, default = "2020-07-02")
     parser.add_argument("--leadtimes", type=str2intlist,
-                        default=[3,6,9,12,15,18,21,24,27,30,33,36,39,42])
+                        default=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44])
     # [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44]
     # [3,6,9,12,15,18,21,24,27,30,33,36,39,42]
     # [6,12,18,24,30,36,42,45]

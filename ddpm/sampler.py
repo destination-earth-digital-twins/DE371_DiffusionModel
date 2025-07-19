@@ -30,6 +30,7 @@ class Sampler(Ddpm_base):
         self.loss_func = loss_dict["L1Loss"]
         # Temporal consistency
         self.temporal_consistency=config.temporal_consistency
+        self.sampling_noise=None
 
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
