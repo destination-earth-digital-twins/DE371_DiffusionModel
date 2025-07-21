@@ -52,7 +52,8 @@ class ElucidatedDiffusion(nn.Module):
         S_noise = 0.0,
         num_edition_timesteps=5,
         n_leadtimes=14,
-        temporal_consistency=False,
+        fixed_forward_noise=False,
+        fixed_sampling_noise=False
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
@@ -62,7 +63,8 @@ class ElucidatedDiffusion(nn.Module):
 
         self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
 
-        self.temporal_consistency = temporal_consistency
+        self.fixed_forward_noise = fixed_forward_noise
+        self.fixed_sampling_noise = fixed_sampling_noise
 
         # SDEdit flag setting
         self.num_edition_timesteps=num_edition_timesteps
@@ -154,7 +156,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, sampling_noise=None):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, forward_noise=None, sampling_noise=None):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
 
         shape = (batch_size, self.channels, self.image_size, self.image_size)
@@ -188,12 +190,12 @@ class ElucidatedDiffusion(nn.Module):
             # Noising condition
             condition_sdedit = normalize_to_neg_one_to_one(condition)
             init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
-            if not self.temporal_consistency:
+            if not self.fixed_forward_noise:
                 noise = torch.randn_like(condition_sdedit, device = self.device)
             else :
-                noise = sampling_noise
-                if sampling_noise is None:
-                    raise ValueError('Temporal consistency mode but sampling_noise is None!')
+                noise = forward_noise
+                if forward_noise is None:
+                    raise ValueError('Fixed forward noise mode but forward_noise is None!')
 
             images = init_sigma * noise  + condition_sdedit
 
@@ -207,7 +209,14 @@ class ElucidatedDiffusion(nn.Module):
         for sigma, sigma_next, gamma in tqdm(sigmas_and_gammas, desc = 'sampling time step'):
             sigma, sigma_next, gamma = map(lambda t: t.item(), (sigma, sigma_next, gamma))
 
-            eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling # Algorithm 2 : line 4
+            if not self.fixed_sampling_noise:
+                eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling # Algorithm 2 : line 4
+            else : 
+                print('Using sampling noise', 'sampling_noise.shape', sampling_noise.shape, 'shape',shape)
+                eps = self.S_noise * sampling_noise
+                if sampling_noise is None:
+                    raise ValueError('Fixed sampling noise mode but sampling_noise is None!')
+
 
             sigma_hat = sigma + gamma * sigma # Algorithm 2 : line 5
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6

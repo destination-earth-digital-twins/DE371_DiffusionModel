@@ -163,7 +163,8 @@ def load_train_objs(config):
             S_noise = config.S_noise,
             num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
             n_leadtimes=n_lt,
-            temporal_consistency=config.temporal_consistency
+            fixed_forward_noise=config.fixed_forward_noise,
+            fixed_sampling_noise=config.fixed_sampling_noise
             )
         
             
