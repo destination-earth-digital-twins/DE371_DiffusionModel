@@ -336,6 +336,7 @@ class GrandEnsembleDataset(Dataset):
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
 
         if self.config.sampling_mode == 'conditioned_sdedit':
+            # Checkout dimension before and after this step to maje sure the members are reproduced correctly ! 
             sample = sample.expand_as(torch.zeros(self.n_conditioning_sets, 16, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         
         date = str(pd.to_datetime(self.labels.iloc[idx,3]).strftime('%Y-%m-%d'))
