@@ -163,57 +163,7 @@ class Ddpm_base:
         else:
             denorm_images = self.transforms_func(sampled_images)
         return denorm_images
-# def plot_grid(self, file_name, np_img):
-#     """
-#     Plot a grid of images with variable-specific colormaps and optional contours.
-#     Args:
-#         file_name (str): Name of the file to save the plot.
-#         np_img (numpy.ndarray): Array of images to plot.
-#     """
-#     nb_image = len(np_img)
 
-#     # Dictionnaire des colormaps personnalisées par variable
-#     var_to_cmap = {
-#         "rr": cmapRR,
-#         "t2m": "bwr",
-#         "x": "viridis",
-#         "var_4": "plasma",  # Exemple, à adapter
-#         # Ajoutez d'autres variables ici si besoin
-#     }
-
-#     fig, axes = plt.subplots(
-#         nrows=min(6, nb_image),
-#         ncols=len(self.config.var_indexes),
-#         figsize=(10, 10),
-#     )
-
-#     for i in range(min(6, nb_image)):
-#         for j, var in enumerate(self.config.var_indexes):
-#             cmap = var_to_cmap.get(var, "gray")  # Valeur par défaut = "gray"
-#             image = np_img[i, j]
-
-#             if len(self.config.var_indexes) > 1 and min(6, nb_image) > 1:
-#                 ax = axes[i, j]
-#             else:
-#                 ax = axes[i]
-
-#             im = ax.imshow(image, cmap=cmap, origin="lower")
-#             ax.axis("off")
-#             fig.colorbar(im, ax=ax)
-
-#             # Ajout de contours pour var_4
-#             if var == "var_4":
-#                 ax.contour(image, colors='black', linewidths=0.5)
-
-#     # Création du chemin de sauvegarde
-#     save_path = os.path.join(
-#         self.config.output_dir,
-#         self.config.run_name,
-#         "samples",
-#         file_name,
-#     )
-#     plt.savefig(save_path, bbox_inches="tight")
-#     plt.close()
     def plot_grid(self, file_name, np_img):
         """
         Plot a grid of images.
@@ -253,15 +203,7 @@ class Ddpm_base:
                 im = ax.imshow(image, cmap=cmap, origin="lower")
                 ax.axis("off")
                 fig.colorbar(im, ax=ax)
-                # if len(self.config.var_indexes) > 1 and min(6, nb_image) > 1:
-                #     im = axes[i, j].imshow(image, cmap=cmap, origin="lower")
-                #     axes[i, j].axis("off")
-                #     fig.colorbar(im, ax=axes[i, j])
-                # else:
-                #     im = axes[i].imshow(image, cmap=cmap, origin="lower")
-                #     axes[i].axis("off")
-                #     fig.colorbar(im, ax=axes[i])
-        # Save the plot to the specified file path
+
                 if var == "z500":
                     ax.contour(image, colors='black', linewidths=0.5)
         plt.savefig(

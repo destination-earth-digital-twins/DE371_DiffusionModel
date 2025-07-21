@@ -8,17 +8,7 @@ from utils.distributed import is_main_gpu, get_rank
 
 ################ reference dictionary to know how to index variables in base numpy arrays
 ################ do not modify unless you know what you are doing
-# var_dict ={"u":0, "v":1,"t2m":2,"rr":4,"t850":5,"tpw850":6,"z500":7 }
-# var_dict = {
-#     "rr": 0,
-#     "u": 1,
-#     "v": 2,
-#     "t2m": 3,
-#     "orog": 4,
-#     "z500": 5,
-#     "t850": 6,
-#     "tpw850": 7,
-# }
+
 
 
 class SpecialNormalize(object):
