@@ -334,38 +334,35 @@ class ElucidatedDiffusion(nn.Module):
                 noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
                 self_cond = None
 
-            # Conditioned diffusion :
-            if self.self_condition:
-                with torch.no_grad():
-                    self_cond = kwargs.get('condition_tensor')
-                    self_cond.detach_()
-                    
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
-            
-            denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
-            img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
-            
-            losses = F.mse_loss(denoised,img,reduction='none')
-            losses = reduce(losses,'b ... -> b','mean')
-            losses = losses * self.loss_weight(sigmas)
-            return losses.mean()
+                # Conditioned diffusion :
+                if self.self_condition:
+                    with torch.no_grad():
+                        self_cond = kwargs.get('condition_tensor')
+                        self_cond.detach_()
+                        
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                
+                denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
+                img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
+                
+                losses = F.mse_loss(denoised,img,reduction='none')
+                losses = reduce(losses,'b ... -> b','mean')
+                losses = losses * self.loss_weight(sigmas)
+                return losses.mean()
         
-        elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
-            if rank == 0:
-                print("l'image avec l'orographie a pour shape ,", img.shape)
-            
-            img_filled = img.clone().to(img.device)
-            for batch in range(self.config.batch_size):
-                #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
-                img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
-                img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
-                img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-            noise = torch.randn_like(img)
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-    
-            self_cond = None
+            elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+                img_filled = img.clone().to(img.device)
+                for batch in range(self.config.batch_size):
+                    #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+                    img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+                    img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                    img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
+                sigmas = self.noise_distribution(batch_size)
+                padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+                noise = torch.randn_like(img)
+                noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+        
+                self_cond = None
 
                 # Conditioned diffusion :
                 if self.self_condition:
@@ -405,4 +402,3 @@ class ElucidatedDiffusion(nn.Module):
 
                 losses = losses * self.loss_weight(sigmas)
                 return losses.mean()
- 
