@@ -369,6 +369,7 @@ class ElucidatedDiffusion(nn.Module):
                     with torch.no_grad():
                         self_cond = kwargs.get('condition_tensor')
                         self_cond.detach_()
+                        print("ici")
                 denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
                 losses = F.mse_loss(denoised,img,reduction='none')
                 losses = reduce(losses,'b ... -> b','mean')

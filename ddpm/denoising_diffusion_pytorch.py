@@ -440,8 +440,10 @@ class Unet(Module):
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None, x_pos=None, patch_size=None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None, patch_size=None):
+        
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
+        
         if self.self_condition:
                 x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
                 if self.config.n_conditions == 0: #TODO : modif this to be able to patch with it
@@ -450,10 +452,17 @@ class Unet(Module):
                     #so the concat doesnt work
                     x = torch.cat((x_self_cond, x), dim = 1)       
         
+        if embedded_cond is not None:
+            cond_embedding=self.emb_mlp(embedded_cond)
+            t = t + cond_embedding
+            
+            
         if self.config.patch_diffusion:
             device = x.device
             x_pos = x_pos.to(device)
-            x = torch.cat((x,x_pos),dim=1)  
+            x = torch.cat((x,x_pos),dim=1)
+            
+              
         x = self.init_conv(x)
         r = x.clone()
 

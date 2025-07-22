@@ -78,6 +78,8 @@ class Trainer(Ddpm_base):
         """
         batch = {key: batch[key] for key in key_get}
         batch["condition_tensor"] = batch["condition_tensor"].squeeze(1)
+        if rank ==0:
+            print("batch condition tensor", batch["condition_tensor"].shape)
         for key in batch.keys():
             if key in convert_keys:
                 # Convert specific keys to tensors and move to GPU
@@ -137,9 +139,7 @@ class Trainer(Ddpm_base):
         x_pos = (x_pos / (resolution[1] - 1) - 0.5) * 2.
         y_pos = (y_pos / (resolution[0] - 1) - 0.5) * 2.
         images_pos = torch.cat((x_pos, y_pos), dim=1)
-        # if rank==0:
-        #     print("shape de padded", padded.shape)
-        #     print("shape de image_pos", images_pos.shape)
+
         return padded, images_pos
             
     
@@ -188,7 +188,8 @@ class Trainer(Ddpm_base):
                 loss= self.model(**batch)
         else:
             self.optimizer.zero_grad()
-
+            if rank ==0:
+                print("dans _run batvh", batch["condition_tensor"].shape)
             if self.config.use_AMP:  
                 with torch.autocast(device_type='cuda'):
                     torch.cuda.synchronize()            
