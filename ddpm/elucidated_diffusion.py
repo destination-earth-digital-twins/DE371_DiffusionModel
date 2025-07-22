@@ -147,7 +147,7 @@ class ElucidatedDiffusion(nn.Module):
             self_cond
         )
         out = self.c_skip(padded_sigma) * noised_images +  self.c_out(padded_sigma) * net_out
-
+        print("self cond,", self_cond)
         if clamp:
             out = out.clamp(-1., 1.)
         return out
@@ -310,6 +310,9 @@ class ElucidatedDiffusion(nn.Module):
             return losses.mean()
         
         elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+            if rank == 0:
+                print("l'image avec l'orographie a pour shape ,", img.shape)
+            
             img_filled = img.clone().to(img.device)
             for batch in range(self.config.batch_size):
                 #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 

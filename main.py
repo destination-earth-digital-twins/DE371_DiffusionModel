@@ -119,7 +119,8 @@ def load_train_objs(config):
             out_channels=len(config.var_indexes),
             img_size=(512,512),
             self_condition = False,
-                        
+            orog_cond = config.orography_conditioning,
+            config = config,
         )
     else :
         umodel = Unet(
@@ -131,6 +132,7 @@ def load_train_objs(config):
             n_conditions=config.n_conditions,
             var_cond=config.var_conditionning,
             mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
         )
 
     if config.elucidated_diffusion_sampler == False:
