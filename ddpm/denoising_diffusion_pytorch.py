@@ -346,7 +346,6 @@ class Unet(Module):
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
         dims = [init_dim, *map(lambda m: dim * m, dim_mults)]
-        print("dims vaut", dims)
         in_out = list(zip(dims[:-1], dims[1:]))
 
         # time embeddings
@@ -457,12 +456,6 @@ class Unet(Module):
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
-
-     
-        if embedded_cond is not None:
-            cond_embedding=self.emb_mlp(embedded_cond)
-            t = t + cond_embedding
-            
             
         if self.config.patch_diffusion:
             device = x.device

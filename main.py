@@ -23,13 +23,10 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
-<<<<<<< HEAD
 from utils.utils import batch_output_sample_files
 import numpy as np
 from pickle import dump
 from ddpm.karras_unet import KarrasUnet 
-=======
->>>>>>> main
 
 # from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
@@ -125,9 +122,9 @@ def load_train_objs(config):
     )
     
     # Create a U-Net model and a diffusion model based on configuration
-<<<<<<< HEAD
     dim_mults = tuple(2 ** i for i in range(config.nb_layers))
-    
+    n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
+
     if config.model_used == "swinunetr": 
         umodel = SwinUNETR(
             in_channels=len(config.var_indexes),
@@ -143,27 +140,14 @@ def load_train_objs(config):
             config=config,
             dim_mults=dim_mults,
             channels=len(config.var_indexes),
-            self_condition=use_cond,
+            spatial_conditions=use_cond,
             n_conditions=config.n_conditions,
             var_cond=config.var_conditionning,
             mean_cond=config.mean_conditionning,
             orog_cond=config.orography_conditioning,
+            n_labels_embeded_cond = n_lt,
         )
 
-=======
-    n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
-    umodel = Unet(
-        dim=64,
-        dim_mults=(1, 2, 4, 8),
-        channels=len(config.var_indexes),
-        spatial_conditions=use_cond,
-        n_conditions=config.n_conditions,
-        var_cond=config.var_conditioning,
-        mean_cond=config.mean_conditioning,
-        orog_cond=config.orography_conditioning,
-        n_labels_embeded_cond = n_lt,
-    )
->>>>>>> main
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
             model = ConditionedGaussianDiffusion(
@@ -200,34 +184,21 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
-<<<<<<< HEAD
             config = config,
-        )
-    
-
-=======
             num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
             n_leadtimes=n_lt
             )
         
             
->>>>>>> main
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
+    model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
     )
-<<<<<<< HEAD
     if config.compile_model:
         model.compile(fullgraph=False)
     
     total_params = sum(p.numel() for p in model.parameters())
     if rank==0:
-        
         print("number of parameters in the model : ", total_params)
-=======
-    
-    if config.compile_model:
-        model.compile()
->>>>>>> main
     return model, optimizer
 
 

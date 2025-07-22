@@ -163,7 +163,6 @@ class ElucidatedDiffusion(nn.Module):
             patch_size=patch_size,
         )
         out = self.c_skip(padded_sigma) * noised_images +  self.c_out(padded_sigma) * net_out
-        print("self cond,", self_cond)
         if clamp:
             out = out.clamp(-1., 1.)
         return out
@@ -360,7 +359,9 @@ class ElucidatedDiffusion(nn.Module):
             return losses.mean()
         
         else :
+            
             batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+            
             assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'
             assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
             assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
