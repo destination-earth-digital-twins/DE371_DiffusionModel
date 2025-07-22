@@ -57,16 +57,27 @@ class ElucidatedDiffusion(nn.Module):
         S_churn = 80,          # parameters for stochastic sampling - depends on dataset, Table 5 in apper
         S_tmin = 0.05,
         S_tmax = 50,
-        S_noise = 0.0
-
+        S_noise = 0.0,
+        num_edition_timesteps=5,
+        n_leadtimes=14
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
         self.model = model
-        self.self_condition = model.self_condition
-        self.image_pos = image_pos
-        self.patch_size= patch_size
+        self.spatial_conditions = model.spatial_conditions
+        self.embedding_cond_dims = n_leadtimes
 
+        self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
+        
+        # SDEdit flag setting
+        self.num_edition_timesteps=num_edition_timesteps
+        self.sdedit_flag = False
+        self.num_edition_timesteps = int(num_edition_timesteps)
+        if num_edition_timesteps < num_sample_steps:
+            self.sdedit_flag = True
+            print(f'\n ############ Warning : num_edition_timesteps : {num_edition_timesteps} < num_sample_steps : {num_sample_steps} ; SDEdit mode activated')  
+        self.patch_size= patch_size
+        self.image_pos = image_pos
         # image dimensions
 
         self.channels = channels
@@ -136,7 +147,7 @@ class ElucidatedDiffusion(nn.Module):
     # preconditioned network output
     # equation (7) in the paper
 
-    def preconditioned_network_forward(self, noised_images, sigma, image_pos, patch_size = None, self_cond = None, clamp = False):
+    def preconditioned_network_forward(self, noised_images, sigma, image_pos, patch_size = None, cond_2d = None, embedded_cond = None, clamp = False):
         batch, device = noised_images.shape[0], noised_images.device
 
         if isinstance(sigma, float):
@@ -146,7 +157,8 @@ class ElucidatedDiffusion(nn.Module):
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
-            self_cond,
+            cond_2d,
+            embedded_cond=embedded_cond,
             x_pos = image_pos,
             patch_size=patch_size,
         )
@@ -175,7 +187,7 @@ class ElucidatedDiffusion(nn.Module):
         return sigmas
 
     @torch.no_grad()
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, clamp = False, image_pos=None):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, image_pos=None):
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
         
         shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
@@ -189,15 +201,31 @@ class ElucidatedDiffusion(nn.Module):
             min(self.S_churn / num_sample_steps, sqrt(2) - 1),
             0.
         )
+        if not self.sdedit_flag:
+            sigmas_and_gammas = list(zip(sigmas[:-1], sigmas[1:], gammas[:-1]))
+            
+            # images is noise at the beginning
+            init_sigma = sigmas[0]
+            images = init_sigma * torch.randn(shape, device = self.device)
 
-        sigmas_and_gammas = list(zip(sigmas[:-1], sigmas[1:], gammas[:-1]))
-
-        # images is noise at the beginning
-
-        init_sigma = sigmas[0]
         
-        images = init_sigma * torch.randn(shape, device = self.device)
+        else :
+            sigmas_and_gammas = list(
+            zip(
+            sigmas[num_sample_steps - self.num_edition_timesteps:-1],
+            sigmas[num_sample_steps - self.num_edition_timesteps+1:],
+            gammas[num_sample_steps - self.num_edition_timesteps:-1]
+            )
+            )
 
+            # Noising condition
+            condition_sdedit = normalize_to_neg_one_to_one(condition)
+            init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
+            noise = torch.randn_like(condition_sdedit, device = self.device)
+
+            images = init_sigma * noise  + condition_sdedit
+
+        
         # for self conditioning
 
         x_start = None
@@ -207,14 +235,15 @@ class ElucidatedDiffusion(nn.Module):
         for sigma, sigma_next, gamma in tqdm(sigmas_and_gammas, desc = 'sampling time step'):
             sigma, sigma_next, gamma = map(lambda t: t.item(), (sigma, sigma_next, gamma))
 
-            eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling
+            eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling # Algorithm 2 : line 4
 
-            sigma_hat = sigma + gamma * sigma
-            images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps
-            self_cond = condition if self.self_condition else None
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos,  self_cond, clamp = clamp)
-            # plotter_inconditionnal.plotter3D_3var(model_output,'model_ouput.png',"")
-            denoised_over_sigma = (images_hat - model_output) / sigma_hat
+            sigma_hat = sigma + gamma * sigma # Algorithm 2 : line 5
+            images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6
+
+            cond_2d = condition if self.spatial_conditions else None
+            cond_emb = lt_cond if self.embedding_cond_dims is not None else None
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos, cond_2d, cond_emb, clamp = clamp)
+            denoised_over_sigma = (images_hat - model_output) / sigma_hat # Algorithm 2 : line 7
 
             images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
 
@@ -222,8 +251,9 @@ class ElucidatedDiffusion(nn.Module):
 
             
             if sigma_next != 0:
-                self_cond = condition if self.self_condition else None
-                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, image_pos, self_cond, clamp = clamp)
+                cond_2d = condition if self.spatial_conditions else None
+                cond_emb = lt_cond if self.embedding_cond_dims is not None else None
+                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, image_pos, cond_2d, cond_emb, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
                 images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
@@ -243,8 +273,19 @@ class ElucidatedDiffusion(nn.Module):
 
         sigmas = self.sample_schedule(num_sample_steps)
 
+        if not self.sdedit_flag:
+            images  = sigmas[0] * torch.randn(shape, device = device)
+        
+        else :
+            # Noising condition
+            condition = normalize_to_neg_one_to_one(condition)
+            init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
+            noise = torch.randn_like(condition, device = self.device)
+
+            images = init_sigma * noise  + condition
+
         shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
-        images  = sigmas[0] * torch.randn(shape, device = device)
+        
 
         sigma_fn = lambda t: t.neg().exp()
         t_fn = lambda sigma: sigma.log().neg()
@@ -278,7 +319,7 @@ class ElucidatedDiffusion(nn.Module):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
     def forward(self, img, image_pos = None, patch_size = None, *args, **kwargs):
-        #TODO change terminology from self_cond to cond 
+        #TODO change terminology from cond_2d to cond 
         
         mask = (torch.abs(img) < 1000) #need modification when adding variables
         
@@ -300,7 +341,7 @@ class ElucidatedDiffusion(nn.Module):
             self_cond = None
 
             # Conditioned diffusion :
-            if self.self_condition:
+            if self.spatial_conditions:
                 with torch.no_grad():
                     self_cond = kwargs.get('condition_tensor')
                     #self_cond.detach_()
@@ -320,8 +361,8 @@ class ElucidatedDiffusion(nn.Module):
         
         else :
             batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
-            assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size}'
-            assert c == channels, 'mismatch of image channels'
+            assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'
+            assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
             assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
             #TODO : stock the mask in memory (self.mask) to use the condition with different variables
             
@@ -336,7 +377,7 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond = None
 
                 # Conditioned diffusion :
-                if self.self_condition:
+                if self.spatial_conditions:
                     with torch.no_grad():
                         self_cond = kwargs.get('condition_tensor')
                         self_cond.detach_()
@@ -366,7 +407,7 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond = None
 
                 # Conditioned diffusion :
-                if self.self_condition:
+                if self.spatial_conditions:
                     with torch.no_grad():
                         self_cond = kwargs.get('condition_tensor')
                         self_cond.detach_()
@@ -388,7 +429,7 @@ class ElucidatedDiffusion(nn.Module):
                 self_cond = None
                 
                 # Conditioned diffusion :
-                if self.self_condition:
+                if self.spatial_conditions:
                     with torch.no_grad():
                         self_cond = kwargs.get('condition_tensor')
                         #self_cond.detach_()
@@ -398,8 +439,16 @@ class ElucidatedDiffusion(nn.Module):
                 #     with torch.no_grad():
                 #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
                 #         self_cond.detach_()
+                # Conditioned diffusion :
+                cond_2d = None
+                if self.spatial_conditions:
+                    cond_2d = kwargs.get('condition_tensor')
+                
+                cond_emb = None
+                if self.embedding_cond_dims is not None:
+                    cond_emb = kwargs.get('leadtime')
 
-                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
 
                 losses = F.mse_loss(denoised, img, reduction = 'none')
                 losses = reduce(losses, 'b ... -> b', 'mean')

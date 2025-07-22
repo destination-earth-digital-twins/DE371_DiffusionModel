@@ -305,11 +305,12 @@ class Unet(Module):
         channels = 3,
         x_pos = None, #Added to use patch diffusion
         patch_size=None, #Added to use patch diffusion
-        self_condition = False,
+        spatial_conditions = False,
         n_conditions = 1,
         orog_cond = False,
         var_cond = False,
         mean_cond = False,
+        n_labels_embeded_cond = None,
         learned_variance = False,
         learned_sinusoidal_cond = False,
         random_fourier_features = False,
@@ -328,10 +329,11 @@ class Unet(Module):
         self.patch_size=patch_size
         self.config = config
         self.channels = channels
-        self.self_condition = self_condition
-        channels = channels + 2 if self.config.patch_diffusion else channels
-        input_channels = channels * ((n_conditions + 1) if self_condition else 1)
+        self.spatial_conditions = spatial_conditions
+        input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
         
+        channels = channels + 2 if self.config.patch_diffusion else channels
+
         if var_cond:
             input_channels += channels
         if mean_cond:
@@ -348,9 +350,7 @@ class Unet(Module):
         in_out = list(zip(dims[:-1], dims[1:]))
 
         # time embeddings
-
         time_dim = dim * 4
-
         self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
 
         if self.random_or_learned_sinusoidal_cond:
@@ -366,8 +366,17 @@ class Unet(Module):
             nn.GELU(),
             nn.Linear(time_dim, time_dim)
         )
-               ################## Embedded condition
-        
+
+        ################## Embedded condition
+        if n_labels_embeded_cond is not None:
+            self.emb_mlp = nn.Sequential(
+                SinusoidalPosEmb(dim, theta = n_labels_embeded_cond),
+                nn.Linear(fourier_dim, time_dim),
+                nn.GELU(),
+                nn.Linear(time_dim, time_dim)
+            )
+            # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
+    
         # attention
 
         if not full_attn:
@@ -444,8 +453,8 @@ class Unet(Module):
     def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None, patch_size=None):
         
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
-        
-        if self.self_condition:
+
+        if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
 
@@ -465,6 +474,11 @@ class Unet(Module):
         r = x.clone()
 
         t = self.time_mlp(time)
+
+        ################## Embedded condition
+        if embedded_cond is not None:
+            cond_embedding = self.emb_mlp(embedded_cond)
+            t = t + cond_embedding 
 
         h = []
 
@@ -568,7 +582,8 @@ class GaussianDiffusion(Module):
         offset_noise_strength = 0.,  # https://www.crosslabs.org/blog/diffusion-with-offset-noise
         min_snr_loss_weight = False, # https://arxiv.org/abs/2303.09556
         min_snr_gamma = 5,
-        immiscible = False
+        immiscible = False,
+        num_edition_timesteps=1000 # Num step for SDEdit setting
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -577,7 +592,7 @@ class GaussianDiffusion(Module):
         self.model = model
 
         self.channels = self.model.channels
-        self.self_condition = self.model.self_condition
+        self.spatial_conditions = self.model.spatial_conditions
 
         if isinstance(image_size, int):
             image_size = (image_size, image_size)
@@ -605,6 +620,13 @@ class GaussianDiffusion(Module):
 
         timesteps, = betas.shape
         self.num_timesteps = int(timesteps)
+
+        # SDEdit flag setting
+        self.sdedit_flag = False
+        self.num_edition_timesteps = int(num_edition_timesteps)
+        if num_edition_timesteps < timesteps:
+            self.sdedit_flag = True
+            print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < timesteps : {timesteps} ; SDEdit mode activated')
 
         # sampling related parameters
 
@@ -757,16 +779,34 @@ class GaussianDiffusion(Module):
         return pred_img, x_start
 
     @torch.inference_mode()
-    def p_sample_loop(self, shape, return_all_timesteps = False):
+    def p_sample_loop(self, shape, return_all_timesteps = False, condition=None):
+        r"""
+        Sample from SDEdit diffusion using a loop over timesteps.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
         batch, device = shape[0], self.device
 
-        img = torch.randn(shape, device = device)
+        if not self.sdedit_flag:
+            # Start from random image
+            img = torch.randn(shape, device = device)
+        else :
+            # Start from noised condition
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
+
         imgs = [img]
 
         x_start = None
 
-        for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
-            self_cond = x_start if self.self_condition else None
+        num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
+
+        for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, t, self_cond)
             imgs.append(img)
 
@@ -776,23 +816,51 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def ddim_sample(self, shape, return_all_timesteps = False):
-        batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+    def ddim_sample(
+        self,
+        shape,
+        return_all_timesteps = False,
+        condition=None
+        ):
+        r"""
+        Sample from conditioned diffusion using ddim sampling.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information  (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        batch, device, sampling_timesteps, eta, objective = shape[0], self.device, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+
+        if not self.sdedit_flag:
+            # Start from a random noise
+            img = torch.randn(shape, device = device)
+            total_timesteps=self.num_timesteps
+        else :
+            # Start from a noised version of the condition
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
+            total_timesteps=self.num_edition_timesteps
 
         times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:])) # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
 
-        img = torch.randn(shape, device = device)
         imgs = [img]
 
         x_start = None
 
-        for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step'):
-            time_cond = torch.full((batch,), time, device = device, dtype = torch.long)
-            self_cond = x_start if self.self_condition else None
+        for time, time_next in tqdm(
+            time_pairs,
+            desc = 'sampling loop time step'
+        ):
+            time_cond = torch.full(
+                (batch,), time, device = device, dtype = torch.long
+            )
+            self_cond = x_start if self.spatial_conditions else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
-
+            
             if time_next < 0:
                 img = x_start
                 imgs.append(img)
@@ -818,10 +886,27 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False):
-        (h, w), channels = self.image_size, self.channels
-        sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn((batch_size, channels, h, w), return_all_timesteps = return_all_timesteps)
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
+        r"""
+        Generate samples using SDEdit diffusion.
+        Args:
+            batch_size (int): Number of samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        image_size, channels = self.image_size, self.channels
+        sample_fn = (
+            self.p_sample_loop
+            if not self.is_ddim_sampling
+            else self.ddim_sample
+        )
+        return sample_fn(
+            (batch_size, channels, *image_size),
+            return_all_timesteps=return_all_timesteps,
+            condition=condition,
+        )
 
     @torch.inference_mode()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -838,7 +923,7 @@ class GaussianDiffusion(Module):
         x_start = None
 
         for i in tqdm(reversed(range(0, t)), desc = 'interpolation sample time step', total = t):
-            self_cond = x_start if self.self_condition else None
+            self_cond = x_start if self.spatial_conditions else None
             img, x_start = self.p_sample(img, i, self_cond)
 
         return img
@@ -884,7 +969,7 @@ class GaussianDiffusion(Module):
         # this technique will slow down training by 25%, but seems to lower FID significantly
 
         x_self_cond = None
-        if self.self_condition and random() < 0.5:
+        if self.spatial_conditions and random() < 0.5:
             with torch.no_grad():
                 x_self_cond = self.model_predictions(x, t).pred_x_start
                 x_self_cond.detach_()

@@ -47,7 +47,8 @@ class Trainer(Ddpm_base):
         self.optimizer = optimizer
         self.best_loss = float("inf")
         self.guided_diffusion = self.config.guiding_col is not None
-        #model = torch.compile(model,mode="reduce-overhead")
+        self.leatimes_conditioning = self.config.leatimes_conditioning
+
         if self.config.scheduler == "ReduceLROnPlateau":
             self.scheduler = ReduceLROnPlateau(
                 optimizer, mode="min", factor=0.1, patience=5, verbose=True
@@ -188,8 +189,7 @@ class Trainer(Ddpm_base):
                 loss= self.model(**batch)
         else:
             self.optimizer.zero_grad()
-            if rank ==0:
-                print("dans _run batvh", batch["condition_tensor"].shape)
+
             if self.config.use_AMP:  
                 with torch.autocast(device_type='cuda'):
                     torch.cuda.synchronize()            
@@ -235,6 +235,8 @@ class Trainer(Ddpm_base):
             current_iter +=1
             needs_keys = ["img"] + (
                 ["condition_tensor"] if self.guided_diffusion else []
+            ) + (
+                ["leadtime"] if self.leatimes_conditioning else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
             if self.config.patch_diffusion:
@@ -279,7 +281,7 @@ class Trainer(Ddpm_base):
                 )
                 condition = condition["condition_tensor"][: self.config.n_sample]
             self.model.eval()    
-            self.sample_train(str(epoch), self.config.n_sample, condition)
+            self.sample_train(str(epoch), self.config.n_sample, condition, torch.zeros(self.config.n_sample, self.config.n_var, self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]).to(self.gpu_id))
             self.model.train()
         # validation loss computation (optional, default :  yes)
         total_val_loss = torch.tensor(0.0,dtype=torch.float32)
@@ -418,7 +420,7 @@ class Trainer(Ddpm_base):
             loop = range(self.epochs_run, self.config.epochs)
 
         for epoch in loop:
-            avg_train_loss, avg_val_loss = self._run_epoch(epoch,scaler)
+            avg_train_loss, avg_val_loss = self._run_epoch(epoch, scaler)
             if is_main_gpu():
                 loop.set_postfix_str(
                     f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
@@ -480,7 +482,7 @@ class Trainer(Ddpm_base):
                 f"saved at {os.path.join(self.config.output_dir,f'{self.config.run_name}', 'best.pt')}"
             )
 
-    def sample_train(self, ep=None, nb_img=4, condition=None):
+    def sample_train(self, ep=None, nb_img=4, condition=None, ensemble_mean=None):
         """
         Generate and save sample images during training.
         Args:
@@ -513,7 +515,7 @@ class Trainer(Ddpm_base):
             patch_size = (h,w)
             patch_tensor = torch.tensor(patch_size, dtype=torch.float32)
             
-        samples = super()._sample_batch(nb_img=nb_img, condition=condition,image_pos=image_pos)
+        samples = super()._sample_batch(nb_img=nb_img, condition=condition,image_pos=image_pos, ensemble_mean=ensemble_mean)
         for i, img in enumerate(samples):
             filename = (
                 f"_sample_{ep}_{i}.npy"

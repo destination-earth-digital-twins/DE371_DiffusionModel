@@ -68,6 +68,7 @@ class ISDataset(Dataset):
         )
         
         self.labels = self.labels.reset_index(drop=True)
+
         if self.config.orography_conditioning:
             # Importing
             self.orography = torch.from_numpy(np.float32(np.load(self.config.path_to_orography)))
@@ -75,7 +76,7 @@ class ISDataset(Dataset):
             self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
             # Normalizing
             self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
-                
+
     def inversion_transforms(self):
         """
         Returns function to revert normalisation and special transforms for generated samples.
@@ -101,8 +102,9 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
-        mean_cond = self.config.mean_conditionning # Use the mean as a condition ?
-        var_cond = self.config.var_conditionning # Use the var as a condition ?
+        
+        mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
+        var_cond = self.config.var_conditioning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
 
         # Get the ensemble df
@@ -111,18 +113,36 @@ class ISDataset(Dataset):
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
-
+  
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
-        member = row["Member"]
+        if self.config.guiding_col is not None:
+            member = row[self.config.guiding_col]
+        else:
+            member = row["Member"]
 
-        # Using the mean and/or the var of the ensemble as additionnal conditions
-        if mean_cond or var_cond:
+        # Optional configs based on the ensemble mean and variance
+        if self.config.predict_residue and not self.config.learn_residue:
+            raise Exception(
+                f"The model must learn from the residue of the conditioning members to predict the residue"
+            )
+        ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
+        if mean_cond or var_cond or self.config.learn_residue:
             mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
+            # Learn and predict the residue of the members (members - ensemble mean) instead of the members
+            if self.config.learn_residue:
+                ensemble_mean_tensor = mean_var_file[0]
+                batched_ensemble_mean_tensor = ensemble_mean_tensor.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1).repeat(1, self.config.n_conditions, 1, 1)
+                condition_tensor = torch.sub(condition_tensor, batched_ensemble_mean_tensor)
+                if self.config.predict_residue:
+                    sample = torch.sub(sample, ensemble_mean_tensor)
+                
+
+            # Using the mean and/or the var of the ensemble as additionnal conditions
             if mean_cond:
                 mean = mean_var_file[0].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, mean], dim=1)
@@ -134,9 +154,13 @@ class ISDataset(Dataset):
             orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
             condition_tensor = torch.cat([condition_tensor, orography], dim=1)
 
-
+        if self.config.sampling_mode == 'conditioned_sdedit':
+            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+        
         sample_id = re.search(r"\d+", file_name).group()
-        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "member_id": member, "date": date, "leadtime": lt}
+
+        return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+
 
 
     def get_conditioning_members(self, ensemble_df, idx):
@@ -164,7 +188,6 @@ class ISDataset(Dataset):
                 self.df_to_torch(ensemble_df_without_target, self.config.n_conditions) for _ in range(self.n_conditioning_sets)
             ])
             return condition
-
         else :
             # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
             if self.config.bootstrap_conditions:
@@ -194,8 +217,9 @@ class ISDataset(Dataset):
             [self.file_to_torch(name) for name in selected_members] + [torch.empty((0, self.height_dim, self.width_dim))], dim=0 # torch.empty in case of n_condition = 0
         )
         return condition_tensor
-    
-    def file_to_torch(self, file_name, return_denorm=False):
+        
+        
+    def file_to_torch(self, file_name):
         """
         Convert a file to a torch tensor.
         Args:

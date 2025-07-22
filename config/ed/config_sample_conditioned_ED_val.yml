@@ -4,13 +4,14 @@
 "output_dir": "/home/users/u102751/code/data_to_test/samples/run_name"
 "batch_size": 16
 "any_time": 1
-
+"use_AMP": false
+"compile_model": false
 # Sampling parameters
 # "n_sampling_conditioning_sets": 4
-"n_sampling_conditioning_sets": 1
+"n_sampling_conditioning_sets": 4
 "ddim_timesteps": 15 #sampler timesteps, more generally. TODO rename to make it not specific to DDIM
 "plot": true
-"sampling_mode": "conditioned"
+"sampling_mode": "conditioned_input"
 "random_noise": true
 "S_churn": 40
 "S_tmin": 0.05
@@ -18,8 +19,11 @@
 "S_noise": 1.000
 "rho": 9
 "n_conditions": 5
-# "mean_conditionning": true
-# "var_conditionning": true
+# "mean_conditioning": true
+# "var_conditioning": true
+"leatimes_conditioning": true
+# "learn_residue": true
+# "predict_residue": true
 "reproductibility_seed": 0
 # "bootstrap_conditions": false
 
@@ -35,6 +39,8 @@
 # leadtimes: [ 2, 5]
 leadtimes: [ 2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44 ]
 "crop": [ 0,256,0,256 ]
+"orography_conditioning": false
+"path_to_orography" : "/project/home/p200177/DE_371/resources/AROME_orography/PEARO_EURW1S40_Orography.npy"
 "invert_norm": true
 "mean_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Mean_4_var.npy" # is not compatible with dataset_config_file
 "max_file": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France/IS_1_1.0_0_0_0_0_0_256_large_lt_done/Max_4_var.npy" # is not compatible with dataset_config_file

@@ -23,10 +23,13 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+<<<<<<< HEAD
 from utils.utils import batch_output_sample_files
 import numpy as np
 from pickle import dump
 from ddpm.karras_unet import KarrasUnet 
+=======
+>>>>>>> main
 
 # from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
@@ -111,9 +114,18 @@ def load_train_objs(config):
         config.guiding_col is not None
         and config.mode == "Train"
         or config.mode == "Sample"
-        and "conditioned" in config.sampling_mode
+        and "conditioned_input" in config.sampling_mode
     )
+
+    use_cond_sdedit = (
+        config.guiding_col is not None
+        and config.mode == "Train"
+        or config.mode == "Sample"
+        and "conditioned_sdedit" in config.sampling_mode
+    )
+    
     # Create a U-Net model and a diffusion model based on configuration
+<<<<<<< HEAD
     dim_mults = tuple(2 ** i for i in range(config.nb_layers))
     
     if config.model_used == "swinunetr": 
@@ -138,19 +150,40 @@ def load_train_objs(config):
             orog_cond=config.orography_conditioning,
         )
 
+=======
+    n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
+    umodel = Unet(
+        dim=64,
+        dim_mults=(1, 2, 4, 8),
+        channels=len(config.var_indexes),
+        spatial_conditions=use_cond,
+        n_conditions=config.n_conditions,
+        var_cond=config.var_conditioning,
+        mean_cond=config.mean_conditioning,
+        orog_cond=config.orography_conditioning,
+        n_labels_embeded_cond = n_lt,
+    )
+>>>>>>> main
     if config.elucidated_diffusion_sampler == False:
         if use_cond:
-            cls = ConditionedGaussianDiffusion
+            model = ConditionedGaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+            )
         else:
-            cls = GaussianDiffusion
-        model = cls(
-            umodel,
-            image_size=config.image_size,
-            timesteps=1000,
-            beta_schedule=config.beta_schedule,
-            auto_normalize=config.auto_normalize,
-            sampling_timesteps=config.ddim_timesteps,
-        )
+            model = GaussianDiffusion(
+                umodel,
+                image_size=config.image_size,
+                timesteps=1000,
+                beta_schedule=config.beta_schedule,
+                auto_normalize=config.auto_normalize,
+                sampling_timesteps=config.ddim_timesteps,
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
+            )
     else:
         model = ElucidatedDiffusion(
             umodel,
@@ -167,13 +200,22 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
+<<<<<<< HEAD
             config = config,
         )
     
 
+=======
+            num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
+            n_leadtimes=n_lt
+            )
+        
+            
+>>>>>>> main
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
     )
+<<<<<<< HEAD
     if config.compile_model:
         model.compile(fullgraph=False)
     
@@ -181,6 +223,11 @@ def load_train_objs(config):
     if rank==0:
         
         print("number of parameters in the model : ", total_params)
+=======
+    
+    if config.compile_model:
+        model.compile()
+>>>>>>> main
     return model, optimizer
 
 
@@ -316,7 +363,7 @@ def main_sample(config):
 
     if is_main_gpu():
         logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
-    if config.sampling_mode == "conditioned":
+    if "conditioned" in config.sampling_mode:
         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
     else:
         file_format = "fake_sample_{sample_index}.npy" 
