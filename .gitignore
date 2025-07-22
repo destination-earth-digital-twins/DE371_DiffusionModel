@@ -36,3 +36,4 @@ slurm/apptainer_stuff/requirements_diffusion_2.txt
 profile.svg
 utils/make_mean_var_files.py
 config_perso/
+slurm/
