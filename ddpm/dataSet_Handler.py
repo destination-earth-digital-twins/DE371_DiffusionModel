@@ -68,7 +68,14 @@ class ISDataset(Dataset):
         )
         
         self.labels = self.labels.reset_index(drop=True)
-
+        if self.config.orography_conditioning:
+            # Importing
+            self.orography = torch.from_numpy(np.float32(np.load(self.config.path_to_orography)))
+            # Cropping
+            self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
+            # Normalizing
+            self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
+                
     def inversion_transforms(self):
         """
         Returns function to revert normalisation and special transforms for generated samples.
@@ -122,6 +129,10 @@ class ISDataset(Dataset):
             if var_cond:
                 var = mean_var_file[1].unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
                 condition_tensor = torch.cat([condition_tensor, var], dim=1)
+
+        if self.config.orography_conditioning:
+            orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+            condition_tensor = torch.cat([condition_tensor, orography], dim=1)
 
 
         sample_id = re.search(r"\d+", file_name).group()

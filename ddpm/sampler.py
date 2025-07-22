@@ -19,13 +19,15 @@ class Sampler(Ddpm_base):
         dataloader=None,
         inversion_transforms=None,
     ) -> None:
-        """
-        Initialize the Sampler class.
-        Args:
-            model (torch.nn.Module): The neural network model for sampling.
-            config: Configuration settings for sampling.
-            dataloader: The data loader for input data (optional).
-        """
+        
+        
+        # Initialize the Sampler class.
+        # Args:
+        #     model (torch.nn.Module): The neural network model for sampling.
+        #     config: Configuration settings for sampling.
+        #     dataloader: The data loader for input data (optional).
+        
+        
         super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
 
@@ -72,11 +74,11 @@ class Sampler(Ddpm_base):
     @torch.no_grad()
     def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
         """
-        Generate and save sample images during training.
-        Args:
-            filename_format (str): Format of the filename to save the images.
-        Returns:
-            None
+        # Generate and save sample images during training.
+        # Args:
+        #     filename_format (str): Format of the filename to save the images.
+        # Returns:
+        #     None
         """
 
         i = self.gpu_id if type(self.gpu_id) is int else 0
@@ -86,28 +88,33 @@ class Sampler(Ddpm_base):
 
         if self.config.sampling_mode == "simple":
             # To be removed
-
+            print("self.config.n_samples = ", self.config.n_samples)
             if is_main_gpu():
                 self.logger.info(
                     #f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
-                    f"Sampling {self.config.n_sample} images...")
-            with tqdm(total=self.config.n_sample // self.config.batch_size, desc="Sampling ", unit="batch",
+                    f"Sampling {self.config.n_samples} images...")
+            with tqdm(total=self.config.n_samples, desc="Sampling ", unit="batch",
                       disable= not is_main_gpu()) as pbar:
                 b = 0
-                while b < self.config.n_sample:
-                    batch_size = min(self.config.n_sample - b, self.config.batch_size) ##mettre un chrono time.time 
+                i = 0
+                while b < self.config.n_samples:
+                    batch_size = min(self.config.n_samples - b, self.config.batch_size) ##mettre un chrono time.time
                     samples = super()._sample_batch(nb_img=batch_size)
-                    for s in samples:
-                        # Append the empty rr channel if only u v t2m
-                        if len(s) == 3:
-                            s = np.append(np.zeros(shape=(1, 256, 256)), s, axis=0)
-
-                        filename = filename_format.format(sample_index=str(i))
-                        save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
-                        np.save(save_path, s)
-                        i += max(torch.cuda.device_count(), 1)
-                    b += batch_size
+                    
+                    if self.config.n_var != self.config.n_var_in_dataset:
+                        print("ok ici")
+                        zero_pad = torch.zeros(batch_size, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+                        print("zero_pad", zero_pad.shape)
+                        ensemble = torch.cat((zero_pad, samples), dim=1).cpu().numpy() # concatenate an empty rr channel
+                        
+                    filename = filename_format.format(sample_index=str(i))
+                    save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
+                    np.save(save_path, ensemble)
+                    i += 1
+                    b += 1
                     pbar.update(1)
+                    print("shape de samples :", ensemble.shape)
+                    print(f"itération {i}/{self.config.n_samples}")
         elif "conditioned" in self.config.sampling_mode:
             if is_main_gpu():
                 self.logger.info(
@@ -115,12 +122,13 @@ class Sampler(Ddpm_base):
 
             # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
             if self.config.n_var != self.config.n_var_in_dataset:
-                    zero_pad = torch.zeros(16, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
+                    zero_pad = torch.zeros(4, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
 
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
                 # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
                 conditioning_sets = batch['condition_tensor']
+                print("conditioning_sets",conditioning_sets)
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
 
@@ -142,7 +150,7 @@ class Sampler(Ddpm_base):
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
                 np.save(save_path, ensemble.numpy())
-                
+                    
 
 
 

@@ -307,6 +307,7 @@ class Unet(Module):
         patch_size=None, #Added to use patch diffusion
         self_condition = False,
         n_conditions = 1,
+        orog_cond = False,
         var_cond = False,
         mean_cond = False,
         learned_variance = False,
@@ -335,8 +336,10 @@ class Unet(Module):
             input_channels += channels
         if mean_cond:
             input_channels += channels
+        if orog_cond:
+            input_channels += 1
 
-
+        print("les inputs channels :", input_channels)
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
@@ -908,6 +911,156 @@ class GaussianDiffusion(Module):
         return self.p_losses(img, t, *args, **kwargs)
 
 
+@dataclass_json
+@dataclass(slots=True)
+class SwinUNETRSettings:
+    depths: Tuple[int, ...] = (4, 3, 2, 2)
+    num_heads: Tuple[int, ...] = (3, 6, 12, 24)
+    feature_size: int = 24
+    norm_name: tuple | str = "instance"
+    drop_rate: float = 0.0
+    attn_drop_rate: float = 0.0
+    dropout_path_rate: float = 0.0
+    normalize: bool = True
+    use_checkpoint: bool = False
+    downsample = "merging"
+    use_v2 = False
+
+
+class UpsampleBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        norm_name: tuple | str,
+    ):
+        super().__init__()
+        self.upsampler = nn.Sequential(
+            nn.UpsamplingBilinear2d(scale_factor=2),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+        self.conv_block = UnetResBlock(
+            2,
+            out_channels * 2,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=1,
+            norm_name=norm_name,
+        )
+
+    def forward(self, inp: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        out = self.upsampler(inp) 
+        
+        # concat along the channels/features dimension
+        out = torch.cat((out, skip), dim=1)
+        out = self.conv_block(out)
+        return out
+
+
+# class SwinUNETR(ModelABC, MonaiSwinUNETR):
+#     """
+#     Wrapper around the SwinUNETR from MONAI.
+#     Instanciated in 2D for now, with a custom decoder.
+#     """
+
+#     onnx_supported = False
+#     settings_kls = SwinUNETRSettings
+#     supported_num_spatial_dims = (2,)
+#     features_last = False
+#     model_type = ModelType.VISION_TRANSFORMER
+#     num_spatial_dims: int = 2
+#     register: bool = True
+
+#     def __init__(
+#         self,
+#         in_channels: int,
+#         out_channels: int,
+#         self_condition = False,
+#         n_conditions =1,
+#         input_shape: Union[None, Tuple[int, int]] = None,
+#         settings: SwinUNETRSettings = SwinUNETRSettings(),
+#         *args,
+#         **kwargs,
+#     ):
+#         super().__init__(
+#             in_channels=in_channels,
+#             out_channels=out_channels,
+#             spatial_dims=2,
+#             img_size=(128, 128),  # TODO: fix this and pass the grid shape
+#             **settings.to_dict(),
+#         )
+
+#         self.in_channels = in_channels *((n_conditions+1) if self_condition else 1)
+#         self.out_channels = out_channels
+#         self.input_shape = input_shape
+#         self._settings = settings
+#         self.self_condition = self_condition
+#         # We replace the decoders by UpsamplingBilinear2d + Conv2d
+#         # because ConvTranspose2d introduced checkerboard artifacts
+
+#         feature_size = settings.feature_size
+#         self.decoder5 = UpsampleBlock(
+#             in_channels=16 * feature_size,
+#             out_channels=8 * feature_size,
+#             kernel_size=3,
+#             norm_name=settings.norm_name,
+#         )
+
+#         self.decoder4 = UpsampleBlock(
+#             in_channels=feature_size * 8,
+#             out_channels=feature_size * 4,
+#             kernel_size=3,
+#             norm_name=settings.norm_name,
+#         )
+
+#         self.decoder3 = UpsampleBlock(
+#             in_channels=feature_size * 4,
+#             out_channels=feature_size * 2,
+#             kernel_size=3,
+#             norm_name=settings.norm_name,
+#         )
+#         self.decoder2 = UpsampleBlock(
+#             in_channels=feature_size * 2,
+#             out_channels=feature_size,
+#             kernel_size=3,
+#             norm_name=settings.norm_name,
+#         )
+
+#         self.decoder1 = UpsampleBlock(
+#             in_channels=feature_size,
+#             out_channels=feature_size,
+#             kernel_size=3,
+#             norm_name=settings.norm_name,
+#         )
+
+#         self.check_required_attributes()
+
+#     @property
+#     def settings(self) -> SwinUNETRSettings:
+#         return self._settings
+
+#     def forward(self, x_in,*args,**kwargs):
+#         if not torch.jit.is_scripting():
+#             self._check_input_size(x_in.shape[2:])
+#         hidden_states_out = self.swinViT(x_in, self.normalize)
+#         enc0 = self.encoder1(x_in)
+#         enc1 = self.encoder2(hidden_states_out[0])
+#         enc2 = self.encoder3(hidden_states_out[1])
+#         enc3 = self.encoder4(hidden_states_out[2])
+#         dec4 = self.encoder10(hidden_states_out[4])
+#         dec3 = self.decoder5(dec4, hidden_states_out[3])
+#         dec2 = self.decoder4(dec3, enc3)
+#         dec1 = self.decoder3(dec2, enc2)
+#         dec0 = self.decoder2(dec1, enc1)
+#         out = self.decoder1(dec0, enc0)
+#         logits = self.out(out)
+#         return logits
+
+
+
 # Copyright (c) MONAI Consortium
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -918,7 +1071,6 @@ class GaussianDiffusion(Module):
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 
 import itertools
 from collections.abc import Sequence
@@ -954,6 +1106,7 @@ __all__ = [
 
 
 
+
 class SwinUNETR(nn.Module):
     """
     Swin UNETR based on: "Hatamizadeh et al.,
@@ -977,11 +1130,13 @@ class SwinUNETR(nn.Module):
         img_size: Sequence[int] | int,
         in_channels: int,
         out_channels: int,
-        depths: Sequence[int] = (2, 2, 2, 2, 2),
-        num_heads: Sequence[int] = (3, 6, 12, 24, 48),
-        feature_size: int = 24,
+        config,
         self_condition = False,
-        n_conditions=1,
+        n_conditions =1,
+        orog_cond = False,
+        # depths: Sequence[int] = (2, 2, 2, 2),
+        # num_heads: Sequence[int] = (3, 6, 12, 24),
+        feature_size: int = 24,
         norm_name: tuple | str = "instance",
         drop_rate: float = 0.0,
         attn_drop_rate: float = 0.0,
@@ -992,44 +1147,59 @@ class SwinUNETR(nn.Module):
         downsample="merging",
         use_v2=False,
     ) -> None:
-        """
-        Args:
-            img_size: spatial dimension of input image.
-                This argument is only used for checking that the input image size is divisible by the patch size.
-                The tensor passed to forward() can have a dynamic shape as long as its spatial dimensions are divisible by 2**5.
-                It will be removed in an upcoming version.
-            in_channels: dimension of input channels.
-            out_channels: dimension of output channels.
-            feature_size: dimension of network feature size.
-            depths: number of layers in each stage.
-            num_heads: number of attention heads.
-            norm_name: feature normalization type and arguments.
-            drop_rate: dropout rate.
-            attn_drop_rate: attention dropout rate.
-            dropout_path_rate: drop path rate.
-            normalize: normalize output intermediate features in each stage.
-            use_checkpoint: use gradient checkpointing for reduced memory usage.
-            spatial_dims: number of spatial dims.
-            downsample: module used for downsampling, available options are `"mergingv2"`, `"merging"` and a
-                user-specified `nn.Module` following the API defined in :py:class:`monai.networks.nets.PatchMerging`.
-                The default is currently `"merging"` (the original version defined in v0.9.0).
-            use_v2: using swinunetr_v2, which adds a residual convolution block at the beggining of each swin stage.
+        # 
+        # Args:
+        #     img_size: spatial dimension of input image.
+        #         This argument is only used for checking that the input image size is divisible by the patch size.
+        #         The tensor passed to forward() can have a dynamic shape as long as its spatial dimensions are divisible by 2**5.
+        #         It will be removed in an upcoming version.
+        #     in_channels: dimension of input channels.
+        #     out_channels: dimension of output channels.
+        #     feature_size: dimension of network feature size.
+        #     depths: number of layers in each stage.
+        #     num_heads: number of attention heads.
+        #     norm_name: feature normalization type and arguments.
+        #     drop_rate: dropout rate.
+        #     attn_drop_rate: attention dropout rate.
+        #     dropout_path_rate: drop path rate.
+        #     normalize: normalize output intermediate features in each stage.
+        #     use_checkpoint: use gradient checkpointing for reduced memory usage.
+        #     spatial_dims: number of spatial dims.
+        #     downsample: module used for downsampling, available options are `"mergingv2"`, `"merging"` and a
+        #         user-specified `nn.Module` following the API defined in :py:class:`monai.networks.nets.PatchMerging`.
+        #         The default is currently `"merging"` (the original version defined in v0.9.0).
+        #     use_v2: using swinunetr_v2, which adds a residual convolution block at the beggining of each swin stage.
 
-        Examples::
+        # Examples::
 
-            # for 3D single channel input with size (96,96,96), 4-channel output and feature size of 48.
-            >>> net = SwinUNETR(img_size=(96,96,96), in_channels=1, out_channels=4, feature_size=48)
+        #     # for 3D single channel input with size (96,96,96), 4-channel output and feature size of 48.
+        #     >>> net = SwinUNETR(img_size=(96,96,96), in_channels=1, out_channels=4, feature_size=48)
 
-            # for 3D 4-channel input with size (128,128,128), 3-channel output and (2,4,2,2) layers in each stage.
-            >>> net = SwinUNETR(img_size=(128,128,128), in_channels=4, out_channels=3, depths=(2,4,2,2))
+        #     # for 3D 4-channel input with size (128,128,128), 3-channel output and (2,4,2,2) layers in each stage.
+        #     >>> net = SwinUNETR(img_size=(128,128,128), in_channels=4, out_channels=3, depths=(2,4,2,2))
 
-            # for 2D single channel input with size (96,96), 2-channel output and gradient checkpointing.
-            >>> net = SwinUNETR(img_size=(96,96), in_channels=3, out_channels=2, use_checkpoint=True, spatial_dims=2)
+        #     # for 2D single channel input with size (96,96), 2-channel output and gradient checkpointing.
+        #     >>> net = SwinUNETR(img_size=(96,96), in_channels=3, out_channels=2, use_checkpoint=True, spatial_dims=2)
 
-        """
-
+        # 
+        depths = config.transformers_depths
+        num_heads = config.transformers_num_heads
+        num_stages = config.transformers_num_stages   
+             
+        assert len(depths) == num_stages,f"len(depths) must be equal to num_stages = {num_stages} and is {len(depths)}"
+        assert len(num_heads) == num_stages,f"len(num_heads) must be equal to num_stages = {num_stages} and is {len(num_heads)}"
+        if rank==0:
+            print("depths ", depths)
+            
         super().__init__()
-
+        self.in_channels = in_channels *((n_conditions+1) if self_condition else 1)
+        if orog_cond:
+            self.in_channels += 1 
+        if rank==0: 
+            print("number of in channels:", self.in_channels)
+            
+        self.out_channels = out_channels
+        self.self_condition = self_condition
         img_size = ensure_tuple_rep(img_size, spatial_dims)
         patch_sizes = ensure_tuple_rep(self.patch_size, spatial_dims)
         window_size = ensure_tuple_rep(7, spatial_dims)
@@ -1052,10 +1222,7 @@ class SwinUNETR(nn.Module):
             raise ValueError("feature_size should be divisible by 12.")
 
         self.normalize = normalize
-        self.in_channels = in_channels *((n_conditions+1) if self_condition else 1)
-        self.out_channels = out_channels
 
-        self.self_condition = self_condition
         self.swinViT = SwinTransformer(
             in_chans=in_channels,
             embed_dim=feature_size,
@@ -1074,8 +1241,11 @@ class SwinUNETR(nn.Module):
             downsample=look_up_option(downsample, MERGING_MODE) if isinstance(downsample, str) else downsample,
             use_v2=use_v2,
         )
-
-        self.encoder1 = UnetrBasicBlock(
+        num_layers = num_stages
+        
+        self.downs=nn.ModuleList([])
+        
+        self.encoder1 =UnetrBasicBlock(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
             out_channels=feature_size,
@@ -1084,81 +1254,53 @@ class SwinUNETR(nn.Module):
             norm_name=norm_name,
             res_block=True,
         )
-
-        self.encoder2 = UnetrBasicBlock(
-            spatial_dims=spatial_dims,
-            in_channels=feature_size,
-            out_channels=feature_size,
-            kernel_size=3,
-            stride=1,
-            norm_name=norm_name,
-            res_block=True,
-        )
-
-        self.encoder3 = UnetrBasicBlock(
-            spatial_dims=spatial_dims,
-            in_channels=2 * feature_size,
-            out_channels=2 * feature_size,
-            kernel_size=3,
-            stride=1,
-            norm_name=norm_name,
-            res_block=True,
-        )
-
-        self.encoder4 = UnetrBasicBlock(
-            spatial_dims=spatial_dims,
-            in_channels=4 * feature_size,
-            out_channels=4 * feature_size,
-            kernel_size=3,
-            stride=1,
-            norm_name=norm_name,
-            res_block=True,
-        )
+        self.downs.append(self.encoder1)
+        for i in range(num_layers-1):
+            i+=2
+                            
+            self.downs.append(UnetrBasicBlock(
+                spatial_dims=spatial_dims,
+                in_channels=feature_size * 2**(i-2),
+                out_channels=feature_size * 2 ** (i-2),
+                kernel_size=3,
+                stride=1,
+                norm_name=norm_name,
+                res_block=True,
+            )) 
+   
         
-        self.encoder10 = UnetrBasicBlock(
+        self.mid_encoder = UnetrBasicBlock(
             spatial_dims=spatial_dims,
-            in_channels=32 * feature_size,
-            out_channels=32 * feature_size,
+            in_channels= (2**num_layers) * feature_size,
+            out_channels= (2**num_layers) * feature_size,
             kernel_size=3,
             stride=1,
             norm_name=norm_name,
             res_block=True,
         )
 
-        self.decoder5 = UpsampleBlock(
-            in_channels=16 * feature_size,
-            out_channels=8 * feature_size,
-            kernel_size=3,
-            norm_name=norm_name,
-        )
+        self.ups = nn.ModuleList([])
+        
+        i = num_layers+1
+        
+        while i>1:
+            i -= 1
 
-        self.decoder4 = UpsampleBlock(
-            in_channels=feature_size * 8,
-            out_channels=feature_size * 4,
-            kernel_size=3,
-            norm_name=norm_name,
-        )
-
-        self.decoder3 = UpsampleBlock(
-            in_channels=feature_size * 4,
-            out_channels=feature_size * 2,
-            kernel_size=3,
-            norm_name=norm_name,
-        )
-        self.decoder2 = UpsampleBlock(
-            in_channels=feature_size * 2,
-            out_channels=feature_size,
-            kernel_size=3,
-            norm_name=norm_name,
-        )
-
-        self.decoder1 = UpsampleBlock(
+            self.ups.append(UpsampleBlock(
+                in_channels=2**i * feature_size,
+                out_channels=2**(i-1) * feature_size,
+                kernel_size=3,
+                norm_name=norm_name,
+            ))
+        
+        self.last_decoder = UpsampleBlock(
             in_channels=feature_size,
             out_channels=feature_size,
             kernel_size=3,
             norm_name=norm_name,
         )
-
+        self.ups.append(self.last_decoder)
+        
         self.out = UnetOutBlock(spatial_dims=spatial_dims, in_channels=feature_size, out_channels=out_channels)
 
 
@@ -1211,7 +1353,17 @@ class SwinUNETR(nn.Module):
             self.swinViT.layers4[0].downsample.norm.bias.copy_(
                 weights["state_dict"]["module.layers4.0.downsample.norm.bias"]
             )
-
+            for bname, block in self.swinViT.layers5[0].blocks.named_children():
+                block.load_from(weights, n_block=bname, layer="layers5")
+            self.swinViT.layers5[0].downsample.reduction.weight.copy_(
+                weights["state_dict"]["module.layers5.0.downsample.reduction.weight"]
+            )
+            self.swinViT.layers5[0].downsample.norm.weight.copy_(
+                weights["state_dict"]["module.layers5.0.downsample.norm.weight"]
+            )
+            self.swinViT.layers5[0].downsample.norm.bias.copy_(
+                weights["state_dict"]["module.layers5.0.downsample.norm.bias"]
+            )
     @torch.jit.unused
     def _check_input_size(self, spatial_shape):
         img_size = np.array(spatial_shape)
@@ -1225,57 +1377,47 @@ class SwinUNETR(nn.Module):
 
 
 
-    def forward(self, x_in,*args,**kwargs):
-        
+    def forward(self, x_in, *args, **kwargs):
         if not torch.jit.is_scripting():
             self._check_input_size(x_in.shape[2:])
         hidden_states_out = self.swinViT(x_in, self.normalize)
+        
+        encoders = []
+
         enc0 = self.encoder1(x_in)
-        enc1 = self.encoder2(hidden_states_out[0])
-        enc2 = self.encoder3(hidden_states_out[1])
-        enc3 = self.encoder4(hidden_states_out[2])
-        dec4 = self.encoder10(hidden_states_out[4])
-        dec3 = self.decoder5(dec4, hidden_states_out[3])
-        dec2 = self.decoder4(dec3, enc3)
-        dec1 = self.decoder3(dec2, enc2)
-        dec0 = self.decoder2(dec1, enc1)
-        out = self.decoder1(dec0, enc0)
-        logits = self.out(out)
+        
+        encoders.append(enc0)
+        
+        for i,encoder in enumerate(self.downs):
+            if i==0:
+                continue
+            
+            enc = encoder(hidden_states_out[i-1])
+            encoders.append(enc)
+        
+        
+        mid_dec = self.mid_encoder(hidden_states_out[-1])
+        
+        decoders = []
+        
+        for i,decoder in enumerate(self.ups):
+            if i==0:
+                dec = decoder(mid_dec,hidden_states_out[-2])
+                decoders.append(dec)
+            elif i == len(encoders):
+                continue
+            else : 
+
+                dec = decoder(decoders[i-1], encoders[-i])
+                decoders.append(dec)
+
+        last_dec = self.last_decoder(decoders[-1],encoders[0])
+        logits = self.out(last_dec)
         return logits
 
 
 
-class UpsampleBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        norm_name: tuple | str,
-    ):
-        super().__init__()
-        self.upsampler = nn.Sequential(
-            nn.UpsamplingBilinear2d(scale_factor=2),
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-        self.conv_block = UnetResBlock(
-            2,
-            out_channels * 2,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            norm_name=norm_name,
-        )
 
-    def forward(self, inp: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
-        out = self.upsampler(inp) 
-        
-        # concat along the channels/features dimension
-        out = torch.cat((out, skip), dim=1)
-        out = self.conv_block(out)
-        return out
 
 def window_partition(x, window_size):
     """window partition operation based on: "Liu et al.,
@@ -1283,7 +1425,7 @@ def window_partition(x, window_size):
     <https://arxiv.org/abs/2103.14030>"
     https://github.com/microsoft/Swin-Transformer
 
-     Args:
+    Args:
         x: input tensor.
         window_size: local window size.
     """
@@ -1316,7 +1458,7 @@ def window_reverse(windows, window_size, dims):
     <https://arxiv.org/abs/2103.14030>"
     https://github.com/microsoft/Swin-Transformer
 
-     Args:
+    Args:
         windows: windows tensor.
         window_size: local window size.
         dims: dimension values.
@@ -1348,7 +1490,7 @@ def get_window_size(x_size, window_size, shift_size=None):
     <https://arxiv.org/abs/2103.14030>"
     https://github.com/microsoft/Swin-Transformer
 
-     Args:
+    Args:
         x_size: input size.
         window_size: local window size.
         shift_size: window shifting size.
@@ -1367,7 +1509,6 @@ def get_window_size(x_size, window_size, shift_size=None):
         return tuple(use_window_size)
     else:
         return tuple(use_window_size), tuple(use_shift_size)
-
 
 class WindowAttention(nn.Module):
     """
@@ -1929,17 +2070,14 @@ class SwinTransformer(nn.Module):
         self.pos_drop = nn.Dropout(p=drop_rate)
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         self.use_v2 = use_v2
-        self.layers1 = nn.ModuleList()
-        self.layers2 = nn.ModuleList()
-        self.layers3 = nn.ModuleList()
-        self.layers4 = nn.ModuleList()
-        if self.use_v2:
-            self.layers1c = nn.ModuleList()
-            self.layers2c = nn.ModuleList()
-            self.layers3c = nn.ModuleList()
-            self.layers4c = nn.ModuleList()
+        
+        self.layers = nn.ModuleList([])
+            
+        self.layersc = nn.ModuleList([])    
+
         down_sample_mod = look_up_option(downsample, MERGING_MODE) if isinstance(downsample, str) else downsample
         for i_layer in range(self.num_layers):
+
             layer = BasicLayer(
                 dim=int(embed_dim * 2**i_layer),
                 depth=depths[i_layer],
@@ -1954,14 +2092,8 @@ class SwinTransformer(nn.Module):
                 downsample=down_sample_mod,
                 use_checkpoint=use_checkpoint,
             )
-            if i_layer == 0:
-                self.layers1.append(layer)
-            elif i_layer == 1:
-                self.layers2.append(layer)
-            elif i_layer == 2:
-                self.layers3.append(layer)
-            elif i_layer == 3:
-                self.layers4.append(layer)
+            self.layers.append(layer)
+            
             if self.use_v2:
                 layerc = UnetrBasicBlock(
                     spatial_dims=3,
@@ -1972,15 +2104,8 @@ class SwinTransformer(nn.Module):
                     norm_name="instance",
                     res_block=True,
                 )
-                if i_layer == 0:
-                    self.layers1c.append(layerc)
-                elif i_layer == 1:
-                    self.layers2c.append(layerc)
-                elif i_layer == 2:
-                    self.layers3c.append(layerc)
-                elif i_layer == 3:
-                    self.layers4c.append(layerc)
 
+                self.layersc.append(layerc)
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
 
     def proj_out(self, x, normalize=False):
@@ -1999,28 +2124,29 @@ class SwinTransformer(nn.Module):
         return x
 
     def forward(self, x, normalize=True):
+        
+        hidden_states = []
+        hidden_states_out = []
+        
         x0 = self.patch_embed(x)
         x0 = self.pos_drop(x0)
         x0_out = self.proj_out(x0, normalize)
-        if self.use_v2:
-            x0 = self.layers1c[0](x0.contiguous())
-        x1 = self.layers1[0](x0.contiguous())
-        x1_out = self.proj_out(x1, normalize)
-        if self.use_v2:
-            x1 = self.layers2c[0](x1.contiguous())
-        x2 = self.layers2[0](x1.contiguous())
-        x2_out = self.proj_out(x2, normalize)
-        if self.use_v2:
-            x2 = self.layers3c[0](x2.contiguous())
-        x3 = self.layers3[0](x2.contiguous())
-        x3_out = self.proj_out(x3, normalize)
-        if self.use_v2:
-            x3 = self.layers4c[0](x3.contiguous())
-        x4 = self.layers4[0](x3.contiguous())
-        x4_out = self.proj_out(x4, normalize)
-        return [x0_out, x1_out, x2_out, x3_out, x4_out]
-
-
+        hidden_states.append(x0)
+        hidden_states_out.append(x0_out)
+        
+        for i in range(self.num_layers):
+            
+            xi =  self.layers[i](hidden_states[-1].contiguous())
+            if self.use_v2:
+                xi = self.layersc[i](hidden_states[-1].contiguous())
+                
+            xi_out = self.proj_out(xi, normalize)
+            
+            hidden_states.append(xi)
+            hidden_states_out.append(xi_out)
+            
+        return hidden_states_out
+        
 def filter_swinunetr(key, value):
     """
     A filter function used to filter the pretrained weights from [1], then the weights can be loaded into MONAI SwinUNETR Model.

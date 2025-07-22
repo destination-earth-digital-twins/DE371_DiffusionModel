@@ -122,14 +122,8 @@ def load_train_objs(config):
             out_channels=len(config.var_indexes),
             img_size=config.image_size,
             self_condition = False,
-        )
-    
-    elif config.model_used == "karras_unet":
-        umodel = KarrasUnet(
+            orog_cond = config.orography_conditioning,
             config = config,
-            image_size = config.image_size,
-            channels = len(config.var_indexes),
-            self_condition = False,
         )
     else :
         umodel = Unet(
@@ -141,6 +135,7 @@ def load_train_objs(config):
             n_conditions=config.n_conditions,
             var_cond=config.var_conditionning,
             mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
         )
 
     if config.elucidated_diffusion_sampler == False:

@@ -19,13 +19,13 @@ class Ddpm_base:
         val_dataloader=False,
         inversion_transforms=None,
     ) -> None:
-        """
-        Initialize the Trainer.
-        Args:
-            model (torch.nn.Module): The neural network model.
-            config: Configuration settings.
-            dataloader: DataLoader for training data.
-        """
+        
+        # Initialize the Trainer.
+        # Args:
+        #     model (torch.nn.Module): The neural network model.
+        #     config: Configuration settings.
+        #     dataloader: DataLoader for training data.
+        
         self.optimizer = None
         self.scheduler = None
         self.config = config
@@ -143,6 +143,7 @@ class Ddpm_base:
             nb_img (int): Number of images to sample.
             condition: Optional condition for conditional sampling.
             image_pos : Optional image position encoding when using patch diffusion
+            image_pos : Optional image position encoding when using patch diffusion
         Returns:
             numpy.ndarray: Array of sampled images.
         """
@@ -152,8 +153,7 @@ class Ddpm_base:
             #sampled_images = self.model.sample_using_dpmpp(batch_size=nb_img)
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
-            print("dans la fonction _sample_batch, le modèle arrive jusqu'avant le model.sample(batchsize)")
-            sampled_images = self.model.sample(batch_size=nb_img, condition=condition,image_pos=image_pos)
+            sampled_images = self.model.sample(batch_size=nb_img, condition=condition, image_pos=image_pos)
         if self.config.invert_norm == True:
             detransform_func = self.transforms_func()
             denorm_images = torch.stack([detransform_func(image) for image in sampled_images])
