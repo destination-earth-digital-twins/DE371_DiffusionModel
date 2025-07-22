@@ -165,9 +165,17 @@ class ISDataset(Dataset):
             ])
             return condition
 
-        condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
-        condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, torch.mul(self.config.n_var,self.config.n_conditions), self.height_dim, self.width_dim))
-        return condition
+        else :
+            # Enables the bootstrap_conditions sampling : the same set of condtionning members is used to generate the n_sampling_conditioning_sets samples
+            if self.config.bootstrap_conditions:
+                condition = torch.stack([
+                    self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)[1] for _ in range(self.n_conditioning_sets)
+                ])
+                return condition
+
+            condition = self.df_to_torch(ensemble_df_without_target, self.config.n_conditions)
+            condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            return condition
     
     
     def df_to_torch(self, ens_df, n_cond):

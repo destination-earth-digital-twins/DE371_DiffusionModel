@@ -324,6 +324,7 @@ class ElucidatedDiffusion(nn.Module):
             assert c == channels, 'mismatch of image channels'
             assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
             #TODO : stock the mask in memory (self.mask) to use the condition with different variables
+            
             if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
                 img_filled = img.masked_fill(~mask,0.5) 
                 img = normalize_to_neg_one_to_one(img_filled) 
@@ -374,6 +375,8 @@ class ElucidatedDiffusion(nn.Module):
                 losses = F.mse_loss(denoised,img,reduction='none')
                 losses = reduce(losses,'b ... -> b','mean')
                 losses = losses * self.loss_weight(sigmas)
+                
+
                 return losses.mean()
             else :
                 img = normalize_to_neg_one_to_one(img)
