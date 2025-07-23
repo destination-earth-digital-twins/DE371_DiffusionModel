@@ -40,7 +40,7 @@ from accelerate import Accelerator
 from denoising_diffusion_pytorch.attend import Attend
 
 from denoising_diffusion_pytorch.version import __version__
-
+from utils.plotter_inconditionnal import plotter3D_3var
 import os
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -462,7 +462,6 @@ class Unet(Module):
             x_pos = x_pos.to(device)
             x = torch.cat((x,x_pos),dim=1)
             
-              
         x = self.init_conv(x)
         r = x.clone()
 
@@ -1231,42 +1230,42 @@ class SwinUNETR(nn.Module):
         spatial_dims: int = 2,
         downsample="merging",
         use_v2=False,
-    ) -> None:
-        # 
-        # Args:
-        #     img_size: spatial dimension of input image.
-        #         This argument is only used for checking that the input image size is divisible by the patch size.
-        #         The tensor passed to forward() can have a dynamic shape as long as its spatial dimensions are divisible by 2**5.
-        #         It will be removed in an upcoming version.
-        #     in_channels: dimension of input channels.
-        #     out_channels: dimension of output channels.
-        #     feature_size: dimension of network feature size.
-        #     depths: number of layers in each stage.
-        #     num_heads: number of attention heads.
-        #     norm_name: feature normalization type and arguments.
-        #     drop_rate: dropout rate.
-        #     attn_drop_rate: attention dropout rate.
-        #     dropout_path_rate: drop path rate.
-        #     normalize: normalize output intermediate features in each stage.
-        #     use_checkpoint: use gradient checkpointing for reduced memory usage.
-        #     spatial_dims: number of spatial dims.
-        #     downsample: module used for downsampling, available options are `"mergingv2"`, `"merging"` and a
-        #         user-specified `nn.Module` following the API defined in :py:class:`monai.networks.nets.PatchMerging`.
-        #         The default is currently `"merging"` (the original version defined in v0.9.0).
-        #     use_v2: using swinunetr_v2, which adds a residual convolution block at the beggining of each swin stage.
+    ):
+        """
+        Args:
+            img_size: spatial dimension of input image.
+                This argument is only used for checking that the input image size is divisible by the patch size.
+                The tensor passed to forward() can have a dynamic shape as long as its spatial dimensions are divisible by 2**5.
+                It will be removed in an upcoming version.
+            in_channels: dimension of input channels.
+            out_channels: dimension of output channels.
+            feature_size: dimension of network feature size.
+            depths: number of layers in each stage.
+            num_heads: number of attention heads.
+            norm_name: feature normalization type and arguments.
+            drop_rate: dropout rate.
+            attn_drop_rate: attention dropout rate.
+            dropout_path_rate: drop path rate.
+            normalize: normalize output intermediate features in each stage.
+            use_checkpoint: use gradient checkpointing for reduced memory usage.
+            spatial_dims: number of spatial dims.
+            downsample: module used for downsampling, available options are `"mergingv2"`, `"merging"` and a
+                user-specified `nn.Module` following the API defined in :py:class:`monai.networks.nets.PatchMerging`.
+                The default is currently `"merging"` (the original version defined in v0.9.0).
+            use_v2: using swinunetr_v2, which adds a residual convolution block at the beggining of each swin stage.
 
-        # Examples::
+        Examples::
 
-        #     # for 3D single channel input with size (96,96,96), 4-channel output and feature size of 48.
-        #     >>> net = SwinUNETR(img_size=(96,96,96), in_channels=1, out_channels=4, feature_size=48)
+            # for 3D single channel input with size (96,96,96), 4-channel output and feature size of 48.
+            >>> net = SwinUNETR(img_size=(96,96,96), in_channels=1, out_channels=4, feature_size=48)
 
-        #     # for 3D 4-channel input with size (128,128,128), 3-channel output and (2,4,2,2) layers in each stage.
-        #     >>> net = SwinUNETR(img_size=(128,128,128), in_channels=4, out_channels=3, depths=(2,4,2,2))
+            # for 3D 4-channel input with size (128,128,128), 3-channel output and (2,4,2,2) layers in each stage.
+            >>> net = SwinUNETR(img_size=(128,128,128), in_channels=4, out_channels=3, depths=(2,4,2,2))
 
-        #     # for 2D single channel input with size (96,96), 2-channel output and gradient checkpointing.
-        #     >>> net = SwinUNETR(img_size=(96,96), in_channels=3, out_channels=2, use_checkpoint=True, spatial_dims=2)
+            # for 2D single channel input with size (96,96), 2-channel output and gradient checkpointing.
+            >>> net = SwinUNETR(img_size=(96,96), in_channels=3, out_channels=2, use_checkpoint=True, spatial_dims=2)
 
-        # 
+        """
         depths = config.transformers_depths
         num_heads = config.transformers_num_heads
         num_stages = config.transformers_num_stages   

@@ -18,13 +18,15 @@ class Ddpm_base:
         dataloader=None,
         val_dataloader=False,
         inversion_transforms=None,
-    ) -> None:
+    ):
         
-        # Initialize the Trainer.
-        # Args:
-        #     model (torch.nn.Module): The neural network model.
-        #     config: Configuration settings.
-        #     dataloader: DataLoader for training data.
+        """ 
+        Initialize the Trainer.
+        Args:
+            model (torch.nn.Module): The neural network model.
+            config: Configuration settings.
+            dataloader: DataLoader for training data.
+        """
         
         self.optimizer = None
         self.scheduler = None
@@ -331,7 +333,7 @@ class ModelABC(ABC):
 
 class AutoPaddingModel(ABC):
     @abstractmethod
-    def validate_input_shape(self, input_shape: Size) -> Tuple[bool | Size]:
+    def validate_input_shape(self, input_shape: Size):# -> Tuple[bool | Size]:
         """ Given an input shape, verifies whether the inputs fit with the 
             calling model's specifications. 
 
@@ -346,7 +348,7 @@ class AutoPaddingModel(ABC):
                                 shape that fits the model, otherwise it will be None.
         """
         
-    def _maybe_padding(self, data_tensor: torch.Tensor)-> Tuple[torch.Tensor, Optional[torch.Size]]:
+    def _maybe_padding(self, data_tensor: torch.Tensor): #-> Tuple[torch.Tensor, Optional[torch.Size]]:
         """ Performs an optional padding to ensure that the data tensor can be fed 
             to the underlying model. Padding will happen if if 
             autopadding was enabled via the settings.
@@ -368,7 +370,7 @@ class AutoPaddingModel(ABC):
             return pad_batch(batch=data_tensor, new_shape=new_shape, pad_value=0), old_shape
         return data_tensor, None
     
-    def _maybe_unpadding(self, data_tensor: torch.Tensor, old_shape: torch.Size)-> torch.Tensor:
+    def _maybe_unpadding(self, data_tensor: torch.Tensor, old_shape: torch.Size):#-> torch.Tensor:
         """Potentially removes the padding previously added to the given tensor. This action 
            is only carried out if autopadding was enabled via the settings.
 

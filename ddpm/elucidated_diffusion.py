@@ -147,7 +147,7 @@ class ElucidatedDiffusion(nn.Module):
     # preconditioned network output
     # equation (7) in the paper
 
-    def preconditioned_network_forward(self, noised_images, sigma, image_pos, patch_size = None, cond_2d = None, embedded_cond = None, clamp = False):
+    def preconditioned_network_forward(self, noised_images, sigma, image_pos = None, patch_size = None, cond_2d = None, embedded_cond = None, clamp = False):
         batch, device = noised_images.shape[0], noised_images.device
 
         if isinstance(sigma, float):
@@ -157,7 +157,7 @@ class ElucidatedDiffusion(nn.Module):
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
-            cond_2d,
+            x_self_cond = cond_2d,
             embedded_cond=embedded_cond,
             x_pos = image_pos,
             patch_size=patch_size,
@@ -241,7 +241,7 @@ class ElucidatedDiffusion(nn.Module):
 
             cond_2d = condition if self.spatial_conditions else None
             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
-            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos, cond_2d, cond_emb, clamp = clamp)
+            model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos, cond_2d = cond_2d, embedded_cond= cond_emb, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat # Algorithm 2 : line 7
 
             images_next = images_hat + (sigma_next - sigma_hat) * denoised_over_sigma
@@ -252,7 +252,7 @@ class ElucidatedDiffusion(nn.Module):
             if sigma_next != 0:
                 cond_2d = condition if self.spatial_conditions else None
                 cond_emb = lt_cond if self.embedding_cond_dims is not None else None
-                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, image_pos, cond_2d, cond_emb, clamp = clamp)
+                model_output_next = self.preconditioned_network_forward(images_next, sigma_next, image_pos, cond_2d = cond_2d, embedded_cond= cond_emb, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next
                 images_next = images_hat + 0.5 * (sigma_next - sigma_hat) * (denoised_over_sigma + denoised_prime_over_sigma)
 
@@ -339,12 +339,14 @@ class ElucidatedDiffusion(nn.Module):
             noised_images[:,:3,:,:] = img[:,:3,:,:] + padded_sigmas * noise[:,:3,:,:]  # alphas are 1. in the paper
             self_cond = None
 
-            # Conditioned diffusion :
+            cond_2d = None
             if self.spatial_conditions:
-                with torch.no_grad():
-                    self_cond = kwargs.get('condition_tensor')
-                    #self_cond.detach_()
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, patch_coords, patch_size, self_cond)
+                cond_2d = kwargs.get('condition_tensor')
+            
+            cond_emb = None
+            if self.embedding_cond_dims is not None:
+                    cond_emb = kwargs.get('leadtime')
+            denoised = self.preconditioned_network_forward(noised_images, sigmas, patch_coords, patch_size, cond_2d = cond_2d, embedded_cond= cond_emb)
             
             denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
             img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
@@ -377,13 +379,15 @@ class ElucidatedDiffusion(nn.Module):
                 noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
                 self_cond = None
 
-                # Conditioned diffusion :
+                cond_2d = None
                 if self.spatial_conditions:
-                    with torch.no_grad():
-                        self_cond = kwargs.get('condition_tensor')
-                        self_cond.detach_()
+                    cond_2d = kwargs.get('condition_tensor')
+                
+                cond_emb = None
+                if self.embedding_cond_dims is not None:
+                    cond_emb = kwargs.get('leadtime')
                         
-                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
                 
                 denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
                 img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
@@ -407,17 +411,17 @@ class ElucidatedDiffusion(nn.Module):
         
                 self_cond = None
 
-                # Conditioned diffusion :
+                cond_2d = None
                 if self.spatial_conditions:
-                    with torch.no_grad():
-                        self_cond = kwargs.get('condition_tensor')
-                        self_cond.detach_()
-                        print("ici")
-                denoised = self.preconditioned_network_forward(noised_images, sigmas, self_cond)
+                    cond_2d = kwargs.get('condition_tensor')
+
+                cond_emb = None
+                if self.embedding_cond_dims is not None:
+                    cond_emb = kwargs.get('leadtime')
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
                 losses = F.mse_loss(denoised,img,reduction='none')
                 losses = reduce(losses,'b ... -> b','mean')
                 losses = losses * self.loss_weight(sigmas)
-                
 
                 return losses.mean()
             else :
@@ -449,7 +453,7 @@ class ElucidatedDiffusion(nn.Module):
                 if self.embedding_cond_dims is not None:
                     cond_emb = kwargs.get('leadtime')
 
-                denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
+                denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
 
                 losses = F.mse_loss(denoised, img, reduction = 'none')
                 losses = reduce(losses, 'b ... -> b', 'mean')

@@ -187,9 +187,7 @@ class Trainer(Ddpm_base):
                 loss= self.model(**batch)
         else:
             self.optimizer.zero_grad()
-            if rank==0:
-                    print("batch keys ", batch.keys())
-                    print("condition tensor : orographie ", batch["condition_tensor"].shape)
+
             if self.config.use_AMP:  
                 
                 with torch.autocast(device_type='cuda'):
@@ -202,9 +200,6 @@ class Trainer(Ddpm_base):
                 scaler.update()
                 
             else : 
-                if rank==0:
-                    print("batch keys ", batch.keys())
-                    print("condition tensor : orographie ", batch["condition_tensor"].shape)
                 loss = self.model(**batch)
                 loss.backward()
                 self.optimizer.step()
