@@ -313,11 +313,13 @@ class ElucidatedDiffusion(nn.Module):
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
         
-        if not isinstance(self.var_weights, torch.Tensor):
-            self.var_weights = torch.tensor(self.var_weights, device=self.device)
-        else:
-            self.var_weights = self.var_weights.to(self.device)
-        if self.weighted_loss==True:
+
+        if getattr(self, "weighted_loss", False):            
+            if not isinstance(self.var_weights, torch.Tensor):
+
+                self.var_weights = torch.tensor(self.var_weights, device=self.device)
+            else:
+                self.var_weights = self.var_weights.to(self.device)
             
             print('Weighted loss launched')
             

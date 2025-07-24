@@ -48,6 +48,7 @@ class ISDataset(Dataset):
 
         self.CI = config.crop
         self.config.VI = [self.var_dict[var] for var in config.var_indexes]
+  
         self.ensembles = None
         self.var_dict_subset = {var: new_idx for new_idx, var_idx in enumerate(self.config.VI)
         for var, full_idx in self.var_dict.items()
@@ -73,10 +74,7 @@ class ISDataset(Dataset):
         )
         
         self.labels = self.labels.reset_index(drop=True)
-<<<<<<< HEAD
-    @property
-=======
-
+        
         if self.config.orography_conditioning:
             # Importing
             self.orography = torch.from_numpy(np.float32(np.load(self.config.path_to_orography)))
@@ -84,8 +82,9 @@ class ISDataset(Dataset):
             self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
             # Normalizing
             self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
+        
+    @property
 
->>>>>>> origin/main
     def inversion_transforms(self):
         """
         Returns function to revert normalisation and special transforms for generated samples.
@@ -108,7 +107,7 @@ class ISDataset(Dataset):
         Returns:
             dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
         """
-        file_name = self.labels.loc[idx, "Name"]
+        file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
         
         mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
@@ -121,7 +120,7 @@ class ISDataset(Dataset):
 
         # Build the tensors for the sampling and the training
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
-  
+        
         # Get the date, lt, and member id of the current member
         row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
@@ -130,7 +129,6 @@ class ISDataset(Dataset):
             member = row[self.config.guiding_col]
         else:
             member = row["Member"]
-
         # Optional configs based on the ensemble mean and variance
         if self.config.predict_residue and not self.config.learn_residue:
             raise Exception(
@@ -138,7 +136,7 @@ class ISDataset(Dataset):
             )
         ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
         if mean_cond or var_cond or self.config.learn_residue:
-            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) )))
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             # Learn and predict the residue of the members (members - ensemble mean) instead of the members
@@ -236,26 +234,14 @@ class ISDataset(Dataset):
         """
         if type(file_name) == list:
             file_name = file_name[0]
-        sample_path = os.path.join(self.data_dir, file_name)# +'.npy')
-        # print('VI',self.config.VI)
+        sample_path = os.path.join(self.data_dir, file_name)
         sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
             self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
         ]
-        # sample = np.float32(np.load(sample_path + ".npy"))[
-        #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        # ]
-        sample = np.float32(np.transpose(np.load(sample_path), (2,0,1)))[
-            self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        ]
-        # # place l'axe 2 en première position)
-        # sample = np.float32(np.load(sample_path ))[
-        #     self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        # ]
+
         sample = sample.transpose((1, 2, 0))
 
         sample = self.transform(sample)
-
-
         return sample
 
 class CustomDistributedSampler(Sampler):
