@@ -36,9 +36,11 @@ class ElucidatedDiffusion(nn.Module):
     def __init__(
         self,
         model,
+        var_weights,
         *,
+        weighted_loss,
         image_size,
-        channels = 3,
+        channels = 4,
         num_sample_steps = 100, # number of sampling steps
         sigma_min = 0.002,      # min noise level
         sigma_max = 0.80,       # max noise level
@@ -226,7 +228,7 @@ class ElucidatedDiffusion(nn.Module):
 
         #images = images.clamp(-1., 1.)
         return unnormalize_to_zero_to_one(images)
-
+    
     @torch.no_grad()
     def sample_using_dpmpp(self, batch_size = 16, num_sample_steps = None):
         """
@@ -275,7 +277,7 @@ class ElucidatedDiffusion(nn.Module):
         images = images.clamp(-1., 1.)
         return unnormalize_to_zero_to_one(images)
 
-    # training
+
 
     def loss_weight(self, sigma):
         return (sigma ** 2 + self.sigma_data ** 2) * (sigma * self.sigma_data) ** -2
@@ -310,10 +312,30 @@ class ElucidatedDiffusion(nn.Module):
             cond_emb = kwargs.get('leadtime')
 
         denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d, cond_emb)
+        
+        if not isinstance(self.var_weights, torch.Tensor):
+            self.var_weights = torch.tensor(self.var_weights, device=self.device)
+        else:
+            self.var_weights = self.var_weights.to(self.device)
+        if self.weighted_loss==True:
+            
+            print('Weighted loss launched')
+            
+            losses = F.mse_loss(denoised, img, reduction='none')  # (B, C, H, W)
+            losses = losses.mean(dim=(2, 3))                      # (B, C) → moyenne spatiale
+            weighted_losses = losses * self.var_weights.view(1, -1)  # (B, C) × (1, C)
+            final_loss = weighted_losses.sum(dim=1)               # (B,)
+            final_loss = final_loss * self.loss_weight(sigmas)   # (B,)
+            return final_loss.mean()
+        else:
+            print("Normal loss launched ")
+            losses = F.mse_loss(denoised, img, reduction = 'none')
+            losses = reduce(losses, 'b ... -> b', 'mean')
 
-        losses = F.mse_loss(denoised, img, reduction = 'none')
-        losses = reduce(losses, 'b ... -> b', 'mean')
+            losses = losses * self.loss_weight(sigmas)
 
-        losses = losses * self.loss_weight(sigmas)
+            return losses.mean()
 
-        return losses.mean()
+            
+            
+

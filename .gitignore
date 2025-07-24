@@ -30,5 +30,4 @@ utils/make_mean_var_files.py
 config_perso/
 config/ed_sampling/
 slurm/apptainer_stuff/**.sh
-
-
+slurm/

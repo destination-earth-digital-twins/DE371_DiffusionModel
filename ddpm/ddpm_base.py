@@ -6,9 +6,11 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 from torchvision.transforms import transforms
+import matplotlib.colors as colors
 
 from utils.distributed import get_rank, is_main_gpu, get_rank_num
 
+cmapRR = colors.ListedColormap(["white","mediumpurple","blue","dodgerblue","darkseagreen","seagreen","greenyellow","yellow", "navajowhite","sandybrown","darkorange","red","darkred","black"], name='from_list', N=None)
 
 class Ddpm_base:
     def __init__(
@@ -151,9 +153,9 @@ class Ddpm_base:
         else:
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond)
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
-        if not self.config.predict_residue:
-            ensemble_mean = torch.zeros_like(ensemble_mean)
-        sampled_images = torch.add(sampled_images, ensemble_mean)
+        # if not self.config.predict_residue:
+        #     ensemble_mean = torch.zeros_like(ensemble_mean)
+        # sampled_images = torch.add(sampled_images, ensemble_mean)
         
         if self.config.invert_norm == True:
             detransform_func = self.transforms_func()
@@ -170,26 +172,40 @@ class Ddpm_base:
             np_img (numpy.ndarray): Array of images to plot.
         """
         nb_image = len(np_img)
+        var_to_cmap = {
+        "rr": cmapRR,
+        "t2m": "bwr",
+        "u": "viridis",
+        "v": "viridis",
+        "t850": "bwr",
+        "tpw850": "bwr",
+        "z500": "viridis",
+    }
         fig, axes = plt.subplots(
             nrows=min(6, nb_image),
             ncols=len(self.config.var_indexes),
             figsize=(10, 10),
         )
         for i in range(min(6, nb_image)):
-            for j in range(len(self.config.var_indexes)):
-                cmap = (
-                    "viridis" if self.config.var_indexes[j] != "t2m" else "bwr"
-                )
+            for j,var in enumerate(self.config.var_indexes):
+                cmap = var_to_cmap.get(var, "gray")  # Valeur par défaut = "gray"
+
+                # cmap = (
+                #     "viridis" if self.config.var_indexes[j] != "t2m" else "bwr"
+                # )
                 image = np_img[i, j]
+                
+            
                 if len(self.config.var_indexes) > 1 and min(6, nb_image) > 1:
-                    im = axes[i, j].imshow(image, cmap=cmap, origin="lower")
-                    axes[i, j].axis("off")
-                    fig.colorbar(im, ax=axes[i, j])
+                    ax = axes[i, j]
                 else:
-                    im = axes[i].imshow(image, cmap=cmap, origin="lower")
-                    axes[i].axis("off")
-                    fig.colorbar(im, ax=axes[i])
-        # Save the plot to the specified file path
+                    ax = axes[i]
+                im = ax.imshow(image, cmap=cmap, origin="lower")
+                ax.axis("off")
+                fig.colorbar(im, ax=ax)
+
+                if var == "z500":
+                    ax.contour(image, colors='black', linewidths=0.5)
         plt.savefig(
             os.path.join(f"{self.config.output_dir}" , f"{self.config.run_name}", "samples", file_name),
             bbox_inches="tight",

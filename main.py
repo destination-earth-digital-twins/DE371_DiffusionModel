@@ -148,8 +148,10 @@ def load_train_objs(config):
     else:
         model = ElucidatedDiffusion(
             umodel,
+            var_weights = config.var_weights,
             image_size=config.image_size,
             channels = len(config.var_indexes),
+            weighted_loss = config.weighted_loss,
             num_sample_steps = config.ddim_timesteps, # number of sampling steps
             sigma_min = config.sigma_min,      # min noise level
             sigma_max = config.sigma_max,       # max noise level
@@ -186,11 +188,12 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     """
     # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
     # different preprocessing strategies if we have to deal with rain rates ("rr")
-    
     train_set = dataSet_Handler.ISDataset(config, path, csv_file)
     if validation:
         val_set = dataSet_Handler.ISDataset(config, path, csv_val_file)
     
+    
+
     train_dataloader = DataLoader(
         train_set,
         batch_size=config.batch_size,
@@ -290,18 +293,11 @@ def main_train(config):
             f"The best model was not created or is not found in {config.run_name}."
         )
 
-
 def main_sample(config):
-    """
-    Main function for testing.
-    Args:
-        config (Namespace): Configuration parameters.
-    """
-    # Load the model and start the sampling process
     model, _ = load_train_objs(config)
-    sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+    sample_data, _ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
     inversion_tf = sample_data.dataset.inversion_transforms
-    data = sample_data if config.sampling_mode!="simple" else None
+    data = sample_data if config.sampling_mode != "simple" else None
     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
 
     if is_main_gpu():
@@ -312,11 +308,37 @@ def main_sample(config):
         file_format = "fake_sample_{sample_index}.npy" 
     sampler.sample(filename_format=file_format)
 
-    samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+    samples_dir = os.path.join(config.output_dir, config.run_name, "samples")
+    barrier()
 
-    barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
-        logger.info(f"Sampling done")
+        logger.info("Sampling done")
+# def main_sample(config):
+#     """
+#     Main function for testing.
+#     Args:
+#         config (Namespace): Configuration parameters.
+#     """
+#     # Load the model and start the sampling process
+#     model, _ = load_train_objs(config)
+#     sample_data,_ = prepare_dataloader(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+#     inversion_tf = sample_data.dataset.inversion_transforms
+#     data = sample_data if config.sampling_mode!="simple" else None
+#     sampler = Sampler(model, config, dataloader=data, inversion_transforms=inversion_tf)
+
+#     if is_main_gpu():
+#         logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+#     if config.sampling_mode == "conditioned":
+#         file_format = "4var_fake_ensemble_{date}_{leadtime}.npy"
+#     else:
+#         file_format = "fake_sample_{sample_index}.npy" 
+#     sampler.sample(filename_format=file_format)
+
+#     samples_dir = os.path.join(config.output_dir, config.run_name,'samples')
+
+#     barrier() # Wait for every GPU to finish their sampling
+#     if is_main_gpu():
+#         logger.info(f"Sampling done")
         
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
