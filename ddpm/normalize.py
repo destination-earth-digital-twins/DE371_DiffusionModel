@@ -65,7 +65,6 @@ class SpecialNormalize(object):
 
         for var in self.data_transforms:
             if self.data_transforms[var] is not None:
-                # print('je usis var data ftransform',var,self.var_dict_subset,sample.shape)
                 sample[self.var_dict_subset[var]] = self.data_transforms[var].direct(sample[self.var_dict_subset[var]])
 
         sample = (sample - self.offset) / self.scale
