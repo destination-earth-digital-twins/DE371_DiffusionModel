@@ -422,7 +422,6 @@ class ElucidatedDiffusion(nn.Module):
                 losses = F.mse_loss(denoised,img,reduction='none')
                 losses = reduce(losses,'b ... -> b','mean')
                 losses = losses * self.loss_weight(sigmas)
-
                 return losses.mean()
             else :
                 img = normalize_to_neg_one_to_one(img)

@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Tuple, Union
 
 from dataclasses_json import dataclass_json
-from monai.networks.blocks.dynunet_block import UnetResBlock
 from monai.networks.nets.swin_unetr import SwinUNETR as MonaiSwinUNETR
 from torch import nn
 from .ddpm_base import ModelABC, ModelType
@@ -40,8 +39,13 @@ from accelerate import Accelerator
 from denoising_diffusion_pytorch.attend import Attend
 
 from denoising_diffusion_pytorch.version import __version__
+
 from utils.plotter_inconditionnal import plotter3D_3var
 import os
+
+from utils.transformers_utils import get_conv_layer
+from monai.networks.layers.utils import get_act_layer, get_norm_layer
+
 rank = int(os.environ.get("LOCAL_RANK",0))
 
 # constants
@@ -375,7 +379,7 @@ class Unet(Module):
                 nn.Linear(time_dim, time_dim)
             )
             # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
-    
+
         # attention
 
         if not full_attn:
@@ -461,12 +465,16 @@ class Unet(Module):
             device = x.device
             x_pos = x_pos.to(device)
             x = torch.cat((x,x_pos),dim=1)
-            
+        
         x = self.init_conv(x)
         r = x.clone()
 
         t = self.time_mlp(time)
 
+        if rank ==0:
+            print("qu'est ce que embedded_cond',", embedded_cond)
+            print("le time ", time, time.shape)
+            print("apres le mlp", t, t.shape)
         ################## Embedded condition
         if embedded_cond is not None:
             cond_embedding = self.emb_mlp(embedded_cond)
@@ -1010,16 +1018,146 @@ class SwinUNETRSettings:
     downsample = "merging"
     use_v2 = False
 
+class block(Module):
+    def __init__(
+        self, 
+        in_channels, 
+        out_channels, 
+        norm_name, 
+        act_name,
+        spatial_dims = 2, 
+        dropout =0., 
+        stride = 1
+    ):
+        
+        super().__init__()
+        self.proj = nn.Conv2d(in_channels, out_channels, kernel_size = 3, padding =1, stride = stride)
+        self.norm = get_norm_layer(name = norm_name, spatial_dims = spatial_dims, channels = out_channels)
+        self.act = get_act_layer(name = act_name)
+        self.dropout = nn.Dropout(dropout)
+        
+    def forward(self, x, scale_shift = None):
+        
+        x = self.proj(x)
+        x = self.norm(x)
+        
+        if exists(scale_shift):
+            scale, shift = scale_shift
+            x = x * (scale + 1) + shift
+        
+        x = self.act(x)
+        return self.dropout(x)
+    
+class UnetResBlock(nn.Module):
+    def __init__(
+        self, 
+        in_channels, 
+        out_channels, 
+        norm_name, 
+        *, 
+        spatial_dims=2,
+        act_name: Union[Tuple, str] = ("leakyrelu",{"inplace":True, "negative_slope":0.01}),
+        time_emb_dim = None, 
+        dropout =0., 
+        stride = 1
+    ):
+        super().__init__()
+        
+        self.mlp = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(time_emb_dim, out_channels *2)
+        ) if exists(time_emb_dim) else None
+        
+        self.block1 = block(
+            in_channels = in_channels,
+            out_channels=out_channels,
+            norm_name=norm_name,
+            act_name = act_name,
+            spatial_dims = spatial_dims,
+            dropout=0.,
+            stride = stride,                
+        )
+
+        self.block2 = block(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            norm_name=norm_name,
+            act_name = act_name,
+            spatial_dims = spatial_dims,
+            dropout=0.,     
+            stride = stride,           
+        )
+
+        # if rank == 0:
+        #     print("self.block1", self.block1)
+        #     print("self.block2", self.block2)
+        
+        self.downsample = in_channels != out_channels
+        
+        stride_np = np.atleast_1d(stride)
+        
+        if not np.all(stride_np == 1):
+            
+            self.downsample = True
+            
+        if self.downsample:
+            self.conv3 = get_conv_layer(
+                spatial_dims,
+                in_channels,
+                out_channels,
+                kernel_size=1,
+                act = None,
+                norm=None,
+                dropout=0.,
+                stride = stride,
+                conv_only=False,
+            )
+            
+            self.norm3 = get_norm_layer(name=norm_name, spatial_dims=spatial_dims, channels = out_channels)
+        
+        self.lrelu = get_act_layer(name=act_name)
+     
+    def forward(self, x, time_emb=None):
+        
+        residual = x
+        scale_shift = None
+        
+        if exists(self.mlp) and exists(time_emb):
+            time_emb = self.mlp(time_emb)
+            time_emb = rearrange(time_emb, 'b c -> b c 1 1')
+            scale_shift = time_emb.chunk(2, dim = 1)
+        
+        h = self.block1(x, scale_shift = scale_shift)
+        
+        h = self.block2(h)
+        
+        if hasattr(self, "conv3"):
+            residual = self.conv3(residual)
+        if hasattr(self, "norm3"):
+            residual = self.norm3(residual)
+
+        out = h + residual
+        
+        out = self.lrelu(out)
+        
+        return out
+
 
 class UpsampleBlock(nn.Module):
     def __init__(
         self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        norm_name: tuple | str,
+        in_channels, 
+        out_channels, 
+        norm_name, 
+        *, 
+        act_name: Union[Tuple, str] = ("leakyrelu",{"inplace":True, "negative_slope":0.01}),
+        spatial_dims = 2,
+        time_emb_dim = None, 
+        dropout =0., 
+        stride = 1
     ):
         super().__init__()
+        
         self.upsampler = nn.Sequential(
             nn.UpsamplingBilinear2d(scale_factor=2),
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
@@ -1027,134 +1165,24 @@ class UpsampleBlock(nn.Module):
             nn.ReLU(inplace=True),
         )
         self.conv_block = UnetResBlock(
-            2,
-            out_channels * 2,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            norm_name=norm_name,
+            out_channels+out_channels, 
+            out_channels, 
+            norm_name, 
+            spatial_dims=spatial_dims,
+            time_emb_dim = time_emb_dim, 
+            act_name=act_name,
+            dropout = dropout, 
+            stride = stride
         )
 
-    def forward(self, inp: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+    def forward(self, inp, skip, time_emb = None):
         out = self.upsampler(inp) 
         
         # concat along the channels/features dimension
         out = torch.cat((out, skip), dim=1)
-        out = self.conv_block(out)
+        out = self.conv_block(out, time_emb)
         return out
 
-
-# class SwinUNETR(ModelABC, MonaiSwinUNETR):
-#     """
-#     Wrapper around the SwinUNETR from MONAI.
-#     Instanciated in 2D for now, with a custom decoder.
-#     """
-
-#     onnx_supported = False
-#     settings_kls = SwinUNETRSettings
-#     supported_num_spatial_dims = (2,)
-#     features_last = False
-#     model_type = ModelType.VISION_TRANSFORMER
-#     num_spatial_dims: int = 2
-#     register: bool = True
-
-#     def __init__(
-#         self,
-#         in_channels: int,
-#         out_channels: int,
-#         self_condition = False,
-#         n_conditions =1,
-#         input_shape: Union[None, Tuple[int, int]] = None,
-#         settings: SwinUNETRSettings = SwinUNETRSettings(),
-#         *args,
-#         **kwargs,
-#     ):
-#         super().__init__(
-#             in_channels=in_channels,
-#             out_channels=out_channels,
-#             spatial_dims=2,
-#             img_size=(128, 128),  # TODO: fix this and pass the grid shape
-#             **settings.to_dict(),
-#         )
-
-#         self.in_channels = in_channels *((n_conditions+1) if self_condition else 1)
-#         self.out_channels = out_channels
-#         self.input_shape = input_shape
-#         self._settings = settings
-#         self.self_condition = self_condition
-#         # We replace the decoders by UpsamplingBilinear2d + Conv2d
-#         # because ConvTranspose2d introduced checkerboard artifacts
-
-#         feature_size = settings.feature_size
-#         self.decoder5 = UpsampleBlock(
-#             in_channels=16 * feature_size,
-#             out_channels=8 * feature_size,
-#             kernel_size=3,
-#             norm_name=settings.norm_name,
-#         )
-
-#         self.decoder4 = UpsampleBlock(
-#             in_channels=feature_size * 8,
-#             out_channels=feature_size * 4,
-#             kernel_size=3,
-#             norm_name=settings.norm_name,
-#         )
-
-#         self.decoder3 = UpsampleBlock(
-#             in_channels=feature_size * 4,
-#             out_channels=feature_size * 2,
-#             kernel_size=3,
-#             norm_name=settings.norm_name,
-#         )
-#         self.decoder2 = UpsampleBlock(
-#             in_channels=feature_size * 2,
-#             out_channels=feature_size,
-#             kernel_size=3,
-#             norm_name=settings.norm_name,
-#         )
-
-#         self.decoder1 = UpsampleBlock(
-#             in_channels=feature_size,
-#             out_channels=feature_size,
-#             kernel_size=3,
-#             norm_name=settings.norm_name,
-#         )
-
-#         self.check_required_attributes()
-
-#     @property
-#     def settings(self) -> SwinUNETRSettings:
-#         return self._settings
-
-#     def forward(self, x_in,*args,**kwargs):
-#         if not torch.jit.is_scripting():
-#             self._check_input_size(x_in.shape[2:])
-#         hidden_states_out = self.swinViT(x_in, self.normalize)
-#         enc0 = self.encoder1(x_in)
-#         enc1 = self.encoder2(hidden_states_out[0])
-#         enc2 = self.encoder3(hidden_states_out[1])
-#         enc3 = self.encoder4(hidden_states_out[2])
-#         dec4 = self.encoder10(hidden_states_out[4])
-#         dec3 = self.decoder5(dec4, hidden_states_out[3])
-#         dec2 = self.decoder4(dec3, enc3)
-#         dec1 = self.decoder3(dec2, enc2)
-#         dec0 = self.decoder2(dec1, enc1)
-#         out = self.decoder1(dec0, enc0)
-#         logits = self.out(out)
-#         return logits
-
-
-
-# Copyright (c) MONAI Consortium
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import itertools
 from collections.abc import Sequence
@@ -1211,15 +1239,22 @@ class SwinUNETR(nn.Module):
     )
     def __init__(
         self,
+        dim,
         img_size: Sequence[int] | int,
         in_channels: int,
         out_channels: int,
         config,
-        self_condition = False,
-        n_conditions =1,
+        spatial_conditions = False,
+        n_conditions =0,
         orog_cond = False,
-        # depths: Sequence[int] = (2, 2, 2, 2),
-        # num_heads: Sequence[int] = (3, 6, 12, 24),
+        var_cond = False,
+        mean_cond = False,
+        n_labels_embeded_cond = None,
+        learned_variance = False,
+        learned_sinusoidal_cond = False,
+        random_fourier_features = False,
+        learned_sinusoidal_dim = 16,
+        sinusoidal_pos_emb_theta = 10000,
         feature_size: int = 24,
         norm_name: tuple | str = "instance",
         drop_rate: float = 0.0,
@@ -1229,61 +1264,57 @@ class SwinUNETR(nn.Module):
         use_checkpoint: bool = False,
         spatial_dims: int = 2,
         downsample="merging",
+        
         use_v2=False,
     ):
-        """
-        Args:
-            img_size: spatial dimension of input image.
-                This argument is only used for checking that the input image size is divisible by the patch size.
-                The tensor passed to forward() can have a dynamic shape as long as its spatial dimensions are divisible by 2**5.
-                It will be removed in an upcoming version.
-            in_channels: dimension of input channels.
-            out_channels: dimension of output channels.
-            feature_size: dimension of network feature size.
-            depths: number of layers in each stage.
-            num_heads: number of attention heads.
-            norm_name: feature normalization type and arguments.
-            drop_rate: dropout rate.
-            attn_drop_rate: attention dropout rate.
-            dropout_path_rate: drop path rate.
-            normalize: normalize output intermediate features in each stage.
-            use_checkpoint: use gradient checkpointing for reduced memory usage.
-            spatial_dims: number of spatial dims.
-            downsample: module used for downsampling, available options are `"mergingv2"`, `"merging"` and a
-                user-specified `nn.Module` following the API defined in :py:class:`monai.networks.nets.PatchMerging`.
-                The default is currently `"merging"` (the original version defined in v0.9.0).
-            use_v2: using swinunetr_v2, which adds a residual convolution block at the beggining of each swin stage.
-
-        Examples::
-
-            # for 3D single channel input with size (96,96,96), 4-channel output and feature size of 48.
-            >>> net = SwinUNETR(img_size=(96,96,96), in_channels=1, out_channels=4, feature_size=48)
-
-            # for 3D 4-channel input with size (128,128,128), 3-channel output and (2,4,2,2) layers in each stage.
-            >>> net = SwinUNETR(img_size=(128,128,128), in_channels=4, out_channels=3, depths=(2,4,2,2))
-
-            # for 2D single channel input with size (96,96), 2-channel output and gradient checkpointing.
-            >>> net = SwinUNETR(img_size=(96,96), in_channels=3, out_channels=2, use_checkpoint=True, spatial_dims=2)
-
-        """
-        depths = config.transformers_depths
-        num_heads = config.transformers_num_heads
-        num_stages = config.transformers_num_stages   
+        
+         
              
-        assert len(depths) == num_stages,f"len(depths) must be equal to num_stages = {num_stages} and is {len(depths)}"
-        assert len(num_heads) == num_stages,f"len(num_heads) must be equal to num_stages = {num_stages} and is {len(num_heads)}"
-        if rank==0:
-            print("depths ", depths)
+       
             
         super().__init__()
-        self.in_channels = in_channels *((n_conditions+1) if self_condition else 1)
+        
+        depths = config.transformers_depths
+        num_heads = config.transformers_num_heads
+        num_stages = config.transformers_num_stages  
+        
+        assert len(depths) == num_stages,f"len(depths) must be equal to num_stages = {num_stages} and is {len(depths)}"
+        assert len(num_heads) == num_stages,f"len(num_heads) must be equal to num_stages = {num_stages} and is {len(num_heads)}"
+        
+        if rank==0:
+            print("depths ", depths)
+            print("spatial conditions", spatial_conditions)
+            print("n_conditions", n_conditions)
+        self.in_channels = in_channels *((n_conditions+1) if spatial_conditions else 1)
+        
         if orog_cond:
             self.in_channels += 1 
-        if rank==0: 
-            print("number of in channels:", self.in_channels)
+        
+        if rank == 0:
+            print("orog cond", orog_cond)
+            print("in channels", self.in_channels)
             
+        time_dim = dim * 4
+        
+        self.random_or_learned_sinusoidal_cond = learned_sinusoidal_cond or random_fourier_features
+
+        if self.random_or_learned_sinusoidal_cond:
+            sinu_pos_emb = RandomOrLearnedSinusoidalPosEmb(learned_sinusoidal_dim, random_fourier_features)
+            fourier_dim = learned_sinusoidal_dim + 1
+        else:
+            sinu_pos_emb = SinusoidalPosEmb(dim, theta = sinusoidal_pos_emb_theta)
+            fourier_dim = dim
+
+        self.time_mlp = nn.Sequential(
+            sinu_pos_emb,
+            nn.Linear(fourier_dim, time_dim),
+            nn.GELU(),
+            nn.Linear(time_dim, time_dim)
+        )
+                
+        self.config = config
         self.out_channels = out_channels
-        self.self_condition = self_condition
+        self.spatial_conditions = spatial_conditions
         img_size = ensure_tuple_rep(img_size, spatial_dims)
         patch_sizes = ensure_tuple_rep(self.patch_size, spatial_dims)
         window_size = ensure_tuple_rep(7, spatial_dims)
@@ -1307,8 +1338,21 @@ class SwinUNETR(nn.Module):
 
         self.normalize = normalize
 
+       
+
+        ################## Embedded condition
+        if n_labels_embeded_cond is not None:
+            self.emb_mlp = nn.Sequential(
+                SinusoidalPosEmb(dim, theta = n_labels_embeded_cond),
+                nn.Linear(fourier_dim, time_dim),
+                nn.GELU(),
+                nn.Linear(time_dim, time_dim)
+            )
+            # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
+        
+            
         self.swinViT = SwinTransformer(
-            in_chans=in_channels,
+            in_chans=self.in_channels,
             embed_dim=feature_size,
             window_size=window_size,
             patch_size=patch_sizes,
@@ -1329,38 +1373,33 @@ class SwinUNETR(nn.Module):
         
         self.downs=nn.ModuleList([])
         
-        self.encoder1 =UnetrBasicBlock(
+        self.encoder1 = UnetResBlock(
             spatial_dims=spatial_dims,
-            in_channels=in_channels,
+            in_channels=self.in_channels,
             out_channels=feature_size,
-            kernel_size=3,
-            stride=1,
             norm_name=norm_name,
-            res_block=True,
+            time_emb_dim=time_dim,
         )
+        
+
         self.downs.append(self.encoder1)
         for i in range(num_layers-1):
+            
+                
             i+=2
-                            
-            self.downs.append(UnetrBasicBlock(
-                spatial_dims=spatial_dims,
-                in_channels=feature_size * 2**(i-2),
+            
+            self.downs.append(UnetResBlock(
+                in_channels=feature_size * 2 ** (i-2),
                 out_channels=feature_size * 2 ** (i-2),
-                kernel_size=3,
-                stride=1,
                 norm_name=norm_name,
-                res_block=True,
-            )) 
-   
-        
-        self.mid_encoder = UnetrBasicBlock(
-            spatial_dims=spatial_dims,
+                time_emb_dim=time_dim,
+            ))         
+
+        self.mid_encoder = UnetResBlock(
             in_channels= (2**num_layers) * feature_size,
             out_channels= (2**num_layers) * feature_size,
-            kernel_size=3,
-            stride=1,
             norm_name=norm_name,
-            res_block=True,
+            time_emb_dim=time_dim,
         )
 
         self.ups = nn.ModuleList([])
@@ -1369,26 +1408,35 @@ class SwinUNETR(nn.Module):
         
         while i>1:
             i -= 1
-
+            
+            
             self.ups.append(UpsampleBlock(
+                spatial_dims=spatial_dims,
                 in_channels=2**i * feature_size,
                 out_channels=2**(i-1) * feature_size,
-                kernel_size=3,
                 norm_name=norm_name,
+                time_emb_dim=time_dim,
             ))
         
+
         self.last_decoder = UpsampleBlock(
+            spatial_dims=spatial_dims,
             in_channels=feature_size,
             out_channels=feature_size,
-            kernel_size=3,
             norm_name=norm_name,
+            time_emb_dim=time_dim,
         )
         self.ups.append(self.last_decoder)
         
+        if rank == 0:
+            print("les ups '", self.ups)
         self.out = UnetOutBlock(spatial_dims=spatial_dims, in_channels=feature_size, out_channels=out_channels)
 
+        
+        if rank==0:
+            print("out = ", self.out)
 
-
+        
     def load_from(self, weights):
         with torch.no_grad():
             self.swinViT.patch_embed.proj.weight.copy_(weights["state_dict"]["module.patch_embed.proj.weight"])
@@ -1461,46 +1509,70 @@ class SwinUNETR(nn.Module):
 
 
 
-    def forward(self, x_in, *args, **kwargs):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None, *args, **kwargs):
         if not torch.jit.is_scripting():
-            self._check_input_size(x_in.shape[2:])
-        hidden_states_out = self.swinViT(x_in, self.normalize)
+            self._check_input_size(x.shape[2:])
+        
+        # assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
+
+        if self.spatial_conditions:
+            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
+            # print("on passe bien la dedans")
+            # if rank ==0:
+                # print("x_self_cond =", x_self_cond)
+                
+            ##A FAIRE : REGARDER POURQUOI L'OROGRAPHIE N'EST PAS PRSE EN COMPTE ICI ET CORRIGER
+            x = torch.cat((x_self_cond, x), dim = 1)
+        
+        if self.config.patch_diffusion:
+            device = x.device
+            x_pos = x_pos.to(device)
+            x = torch.cat((x,x_pos),dim=1)
+                    
+        r = x.clone()
+
+        t = self.time_mlp(time)   
+         
+        ################## Embedded condition
+        if embedded_cond is not None:
+            cond_embedding = self.emb_mlp(embedded_cond)
+            t = t + cond_embedding 
+        
+        hidden_states_out = self.swinViT(x, self.normalize)
         
         encoders = []
 
-        enc0 = self.encoder1(x_in)
+        enc0 = self.encoder1(x, t)
         
         encoders.append(enc0)
         
         for i,encoder in enumerate(self.downs):
             if i==0:
                 continue
-            
-            enc = encoder(hidden_states_out[i-1])
+
+            enc = encoder(hidden_states_out[i-1], t)
             encoders.append(enc)
         
-        
-        mid_dec = self.mid_encoder(hidden_states_out[-1])
+        mid_dec = self.mid_encoder(hidden_states_out[-1], t)
         
         decoders = []
-        
         for i,decoder in enumerate(self.ups):
             if i==0:
-                dec = decoder(mid_dec,hidden_states_out[-2])
+                dec = decoder(mid_dec,hidden_states_out[-2], t)
                 decoders.append(dec)
+                
             elif i == len(encoders):
                 continue
+            
             else : 
 
-                dec = decoder(decoders[i-1], encoders[-i])
+                dec = decoder(decoders[i-1], encoders[-i], t)
                 decoders.append(dec)
 
-        last_dec = self.last_decoder(decoders[-1],encoders[0])
+        last_dec = self.last_decoder(decoders[-1],encoders[0], t)
         logits = self.out(last_dec)
+        
         return logits
-
-
-
 
 
 def window_partition(x, window_size):
@@ -1610,7 +1682,7 @@ class WindowAttention(nn.Module):
         qkv_bias: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-    ) -> None:
+    ) :
         """
         Args:
             dim: number of feature channels.
@@ -1725,7 +1797,7 @@ class SwinTransformerBlock(nn.Module):
         act_layer: str = "GELU",
         norm_layer: type[LayerNorm] = nn.LayerNorm,
         use_checkpoint: bool = False,
-    ) -> None:
+    ):
         """
         Args:
             dim: number of feature channels.
@@ -2114,7 +2186,7 @@ class SwinTransformer(nn.Module):
         spatial_dims: int = 3,
         downsample="merging",
         use_v2=False,
-    ) -> None:
+    ) :
         """
         Args:
             in_chans: dimension of input channels.
@@ -2139,6 +2211,8 @@ class SwinTransformer(nn.Module):
         """
 
         super().__init__()
+        if rank == 0 :
+            print("dans swintransformers, in chans =", in_chans)
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm

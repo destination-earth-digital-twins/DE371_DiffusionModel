@@ -128,12 +128,17 @@ def load_train_objs(config):
 
     if config.model_used == "swinunetr": 
         umodel = SwinUNETR(
+            dim = 64,
             in_channels=len(config.var_indexes),
             out_channels=len(config.var_indexes),
             img_size=config.image_size,
-            self_condition = False,
+            spatial_conditions = use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
             orog_cond = config.orography_conditioning,
             config = config,
+            n_labels_embeded_cond=n_lt,
         )
     else :
         umodel = Unet(
