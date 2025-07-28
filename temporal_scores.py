@@ -162,7 +162,7 @@ if __name__=="__main__" :
     output_dir_temporal_exp = params.output_dir + 'Temporal_Experiments/'
     if not os.path.exists(output_dir_temporal_exp):
         os.makedirs(output_dir_temporal_exp)
-    output_dir_plots = params.output_dir + 'plots/'
+    output_dir_plots = params.output_dir + 'Temporal_Experiments_Plots/'
     if not os.path.exists(output_dir_plots):
         os.makedirs(output_dir_plots)
 
@@ -219,12 +219,12 @@ if __name__=="__main__" :
     if 64//16 < nb_child_member:
         nb_child_member = 64//16
     nb_sample_total_gen = len(list_dates)*16*nb_child_member
-    gen_diurnal_cycle = np.zeros((len(pixel_coordinate_dict), 2, params.nb_timesteps-2, nb_sample_total_gen))
-    gen_pearsons_first_to_each_leadtime_img = np.zeros((3, params.nb_timesteps-2, nb_sample_total_gen))
-    gen_pearsons_sliding_img = np.zeros((3, params.nb_timesteps-2, nb_sample_total_gen))
-    gen_temporal_difference = np.zeros((3, params.nb_timesteps-2, nb_sample_total_gen))
-    gen_absolute_temporal_difference = np.zeros((3, params.nb_timesteps-2, nb_sample_total_gen))
-
+    gen_diurnal_cycle = np.empty((len(pixel_coordinate_dict), 2, params.nb_timesteps-2, nb_sample_total_gen))
+    gen_pearsons_first_to_each_leadtime_img = np.empty((3, params.nb_timesteps-2, nb_sample_total_gen))
+    gen_pearsons_sliding_img = np.empty((3, params.nb_timesteps-2, nb_sample_total_gen))
+    gen_temporal_difference = np.empty((3, params.nb_timesteps-2, nb_sample_total_gen))
+    gen_absolute_temporal_difference = np.empty((3, params.nb_timesteps-2, nb_sample_total_gen))
+    
     print(f'AROME : {nb_sample_total}, GEN : {nb_sample_total_gen}')
 
     for id_date, date_ in enumerate(list_dates):
@@ -292,39 +292,43 @@ if __name__=="__main__" :
                     AROME_temporal_difference[var_id, t, member_id+16*id_date] = np.mean(Ens_r_member[t+1][var_id] - Ens_r_member[t][var_id])
                     AROME_absolute_temporal_difference[var_id, t, member_id+16*id_date] = np.mean(np.abs(Ens_r_member[t+1][var_id] - Ens_r_member[t][var_id]))
 
-
-                for offset_child_member in range(nb_child_member):
-                    gen_member_id = offset_child_member + member_id*(len(Ens_gen)//len(Ens_r))
-                    # print(id_date,member_id , member_id+(16*(1+offset_child_member))*id_date)
-                    for key_id, key in enumerate(pixel_coordinate_dict):
-                        pixel_coordinate=pixel_coordinate_dict[key]
-                        # Diurnal Cycle for perturbated sample
-                        u = Ens_gen[gen_member_id][t][0][pixel_coordinate[0]][pixel_coordinate[1]]
-                        v = Ens_gen[gen_member_id][t][1][pixel_coordinate[0]][pixel_coordinate[1]]
-                        t2m = Ens_gen[gen_member_id][t][2][pixel_coordinate[0]][pixel_coordinate[1]]
-
-                        gen_diurnal_cycle[key_id, 0, t, gen_member_id+16*id_date*nb_child_member] = np.sqrt(u**2+v**2)
-                        gen_diurnal_cycle[key_id, 1, t, gen_member_id+16*id_date*nb_child_member] = t2m
-
-                    for var_id in range(3):
-                        # Pearson Correlation on perturbated samples
-                        gen_pearsons_first_to_each_leadtime_img[var_id, t, gen_member_id+16*id_date*nb_child_member] = scipy.stats.pearsonr(
-                                                                            Ens_gen[gen_member_id][1][var_id].flatten(),
-                                                                            Ens_gen[gen_member_id][t+1][var_id].flatten()
-                        ).statistic
-
-                        if t < params.nb_timesteps-2:
-
+                if t>0:
+                    for offset_child_member in range(nb_child_member):
+                        gen_member_id = offset_child_member + member_id*(len(Ens_gen)//len(Ens_r))
+                        # print(id_date,member_id , member_id+(16*(1+offset_child_member))*id_date)
+                        for key_id, key in enumerate(pixel_coordinate_dict):
+                            pixel_coordinate=pixel_coordinate_dict[key]
+                            # Diurnal Cycle for perturbated sample
+                            u = Ens_gen[gen_member_id][t][0][pixel_coordinate[0]][pixel_coordinate[1]]
+                            v = Ens_gen[gen_member_id][t][1][pixel_coordinate[0]][pixel_coordinate[1]]
+                            t2m = Ens_gen[gen_member_id][t][2][pixel_coordinate[0]][pixel_coordinate[1]]
                             
-                            gen_pearsons_sliding_img[var_id, t, gen_member_id+16*id_date*nb_child_member] = scipy.stats.pearsonr(
-                                                                            Ens_gen[gen_member_id][t][var_id].flatten(),
-                                                                            Ens_gen[gen_member_id][t+1][var_id].flatten()
+                            gen_diurnal_cycle[key_id, 0, t-1, gen_member_id+16*id_date*nb_child_member] = np.sqrt(u**2+v**2)
+                            gen_diurnal_cycle[key_id, 0, -1, gen_member_id+16*id_date*nb_child_member] = np.nan
+                            gen_diurnal_cycle[key_id, 1, t-1, gen_member_id+16*id_date*nb_child_member] = t2m
+                            gen_diurnal_cycle[key_id, 1, -1, gen_member_id+16*id_date*nb_child_member] = np.nan
+
+                        for var_id in range(3):
+                            # Pearson Correlation on perturbated samples
+                            gen_pearsons_first_to_each_leadtime_img[var_id, t-1, gen_member_id+16*id_date*nb_child_member] = scipy.stats.pearsonr(
+                                                                                Ens_gen[gen_member_id][1][var_id].flatten(),
+                                                                                Ens_gen[gen_member_id][t+1][var_id].flatten()
                             ).statistic
-                        
-                        if t < params.nb_timesteps-2:
-                            gen_temporal_difference[var_id, t, gen_member_id+16*id_date*nb_child_member] = torch.mean(Ens_gen[gen_member_id][t+1][var_id] - Ens_gen[gen_member_id][t][var_id])
-                            gen_absolute_temporal_difference[var_id, t, gen_member_id+16*id_date*nb_child_member] = torch.mean(np.abs(Ens_gen[gen_member_id][t+1][var_id] - Ens_gen[gen_member_id][t][var_id]))
+                            gen_pearsons_first_to_each_leadtime_img[var_id, -1, gen_member_id+16*id_date*nb_child_member]=np.nan
+
+                            if t < params.nb_timesteps-2:
+
+                                
+                                gen_pearsons_sliding_img[var_id, t-1, gen_member_id+16*id_date*nb_child_member] = scipy.stats.pearsonr(
+                                                                                Ens_gen[gen_member_id][t][var_id].flatten(),
+                                                                                Ens_gen[gen_member_id][t+1][var_id].flatten()
+                                ).statistic
+                                gen_pearsons_sliding_img[var_id, -1, gen_member_id+16*id_date*nb_child_member]= np.nan
                             
+                            gen_temporal_difference[var_id, t-1, gen_member_id+16*id_date*nb_child_member] = torch.mean(Ens_gen[gen_member_id][t+1][var_id] - Ens_gen[gen_member_id][t][var_id])
+                            gen_temporal_difference[var_id, -1, gen_member_id+16*id_date*nb_child_member]=np.nan
+                            gen_absolute_temporal_difference[var_id, t-1, gen_member_id+16*id_date*nb_child_member] = torch.mean(np.abs(Ens_gen[gen_member_id][t+1][var_id] - Ens_gen[gen_member_id][t][var_id]))
+                            gen_absolute_temporal_difference[var_id, -1, gen_member_id+16*id_date*nb_child_member]=np.nan
     
     list_ticks = np.array(params.leadtimes)
     
@@ -450,7 +454,7 @@ if __name__=="__main__" :
     for i in ax :
         i.legend()
 
-    fig.suptitle('Absolute Temporal Difference for Each Leadtime : ∆X = X(t+1) - X(t)', size=30)
+    fig.suptitle('Temporal Difference for Each Leadtime : ∆X = X(t+1) - X(t)', size=30)
     output_dir_temporal_difference = output_dir_plots + 'Temporal_Difference/'
     if not os.path.exists(output_dir_temporal_difference):
         os.makedirs(output_dir_temporal_difference)
@@ -475,7 +479,7 @@ if __name__=="__main__" :
     for i in ax :
         i.legend()
 
-    fig.suptitle('Temporal Difference for Each Leadtime : ∆X = |X(t+1) - X(t)|', size=30)
+    fig.suptitle('Absolute Temporal Difference for Each Leadtime : ∆X = |X(t+1) - X(t)|', size=30)
     fig.savefig(output_dir_temporal_difference+f'Temporal_Difference_over_{nb_sample_total}_samples_{params.nb_timesteps}_nb_var_{len(params.var_names)}.pdf') 
       
             
