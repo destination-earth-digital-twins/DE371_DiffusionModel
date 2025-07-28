@@ -311,7 +311,7 @@ class GrandEnsembleDataset(Dataset):
         Returns:
             int: Number of samples in the dataset.
         """
-        return len(self.labels)
+        return len(self.config.leadtimes)*self.config.N_draws_grand_ensemble
 
     def __getitem__(self, idx):
         """
@@ -323,6 +323,7 @@ class GrandEnsembleDataset(Dataset):
         """
         ensemble_file_name = self.labels.iloc[idx, 1]
         mb_file_name = self.labels.iloc[idx, 2]
+        print(mb_file_name)
         sample = self.file_to_torch(ensemble_file_name, mb_file_name) # target
 
         mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
@@ -355,7 +356,7 @@ class GrandEnsembleDataset(Dataset):
         lt = self.labels.iloc[idx,4]
         draw_idx = self.labels.iloc[idx,5]
 
-        return {"id_in_csv": idx, "img": sample, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "draw_idx":draw_idx, "lt":lt, "date":date}
+        return {"id_in_csv": idx, "img": sample, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "draw_idx":draw_idx, "leadtime":lt, "date":date}
 
     def get_conditioning_members(self, sample):
         """
@@ -389,7 +390,6 @@ class GrandEnsembleDataset(Dataset):
         if type(ensemble_file_name) == list:
             ensemble_file_name = ensemble_file_name[0]
         sample_path = os.path.join(self.data_dir, ensemble_file_name)
-        print(ensemble_file_name)
         mb_path = os.path.join(self.mb_diles_dir, mb_file_name)
         mb_list = list(np.load(mb_path))
         sample = np.float32(np.load(sample_path))

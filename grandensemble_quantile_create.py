@@ -83,8 +83,7 @@ if __name__=="__main__" :
     parser.add_argument('--output_dir', type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_4steps/quantiles_data/')
     parser.add_argument('--exp_name', type=str, default='Sdedit_ED_4steps')
     parser.add_argument('--leadtimes', type=str2intlist, default=[6,12,18,24,30,36,42]) # echeance de la prevision, n'importe quelle valeur entre 0 et 45h est disponible (par pas de 1h)
-    parser.add_argument('--inv_step', type=int, default=1000)
-
+    parser.add_argument('--nbrandinit', type=int, default=50)
     parser.add_argument('--unbias', action="store_true")
     args = parser.parse_args()
 
@@ -94,7 +93,7 @@ if __name__=="__main__" :
     quantile_to_compute = [0,0.5,1,5,10,25,50,75,90,95,99,99.5,100]
     Nsmall = 16
     Nlbc = 25
-    nbrandinit = 50
+    nbrandinit = args.nbrandinit
     Generatednameout = [args.exp_name]
     plot_id_nbrandinit = 0
     os.makedirs(args.output_dir, exist_ok=True)
@@ -200,7 +199,7 @@ if __name__=="__main__" :
                 
                 ### This loop should maybe be rewritten and using numpy array reindexing directly
                 tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
-                mb = np.load(args.generated_sample_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
+                mb = np.load(args.base_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
                 for mb_idx in range(Nsmall):
                     tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
                 
@@ -278,7 +277,7 @@ if __name__=="__main__" :
                     # gen_tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + gen_filename, allow_pickle=True), param=param)
                     ### This loop should maybe be rewritten and using numpy array reindexing directly
                     gen_tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
-                    mb = np.load(args.generated_sample_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
+                    mb = np.load(args.base_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
                     for mb_idx in range(Nsmall):
                         gen_tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
                     
