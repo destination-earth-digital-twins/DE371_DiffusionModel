@@ -518,7 +518,9 @@ class GaussianDiffusion(Module):
         min_snr_loss_weight = False, # https://arxiv.org/abs/2303.09556
         min_snr_gamma = 5,
         immiscible = False,
-        num_edition_timesteps=1000 # Num step for SDEdit setting
+        num_edition_timesteps=1000, # Num step for SDEdit setting
+        fixed_forward_noise=False,
+        fixed_sampling_noise=False
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -555,6 +557,9 @@ class GaussianDiffusion(Module):
 
         timesteps, = betas.shape
         self.num_timesteps = int(timesteps)
+
+        self.fixed_forward_noise = fixed_forward_noise
+        self.fixed_sampling_noise = fixed_sampling_noise
 
         # SDEdit flag setting
         self.sdedit_flag = False
@@ -705,16 +710,19 @@ class GaussianDiffusion(Module):
         return model_mean, posterior_variance, posterior_log_variance, x_start
 
     @torch.inference_mode()
-    def p_sample(self, x, t: int, x_self_cond = None):
+    def p_sample(self, x, t: int, x_self_cond = None, sampling_noise=None):
         b, *_, device = *x.shape, self.device
         batched_times = torch.full((b,), t, device = device, dtype = torch.long)
         model_mean, _, model_log_variance, x_start = self.p_mean_variance(x = x, t = batched_times, x_self_cond = x_self_cond, clip_denoised = True)
-        noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
+        if sampling_noise is None :
+            noise = torch.randn_like(x) if t > 0 else 0. # no noise if t == 0
+        else :
+            noise = sampling_noise if  t> 0 else 0.
         pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
         return pred_img, x_start
 
     @torch.inference_mode()
-    def p_sample_loop(self, shape, return_all_timesteps = False, condition=None):
+    def p_sample_loop(self, shape, return_all_timesteps = False, condition=None, forward_noise=None, sampling_noise=None):
         r"""
         Sample from SDEdit diffusion using a loop over timesteps.
         Args:
@@ -730,9 +738,15 @@ class GaussianDiffusion(Module):
             # Start from random image
             img = torch.randn(shape, device = device)
         else :
+            if not self.fixed_forward_noise:
+                noise = torch.randn_like(condition, device = self.device)
+            else :
+                noise = forward_noise
+                if forward_noise is None:
+                    raise ValueError('Fixed forward noise mode but forward_noise is None!')
             # Start from noised condition
             t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
-            img = self.q_sample(x_start=condition, t=t).to(self.device)
+            img = self.q_sample(x_start=condition, t=t, noise=noise).to(self.device)
 
         imgs = [img]
 
@@ -742,7 +756,7 @@ class GaussianDiffusion(Module):
 
         for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
             self_cond = x_start if self.spatial_conditions else None
-            img, x_start = self.p_sample(img, t, self_cond)
+            img, x_start = self.p_sample(img, t, self_cond, sampling_noise)
             imgs.append(img)
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
@@ -755,7 +769,9 @@ class GaussianDiffusion(Module):
         self,
         shape,
         return_all_timesteps = False,
-        condition=None
+        condition=None,
+        forward_noise=None,
+        sampling_noise=None
         ):
         r"""
         Sample from conditioned diffusion using ddim sampling.
@@ -773,9 +789,16 @@ class GaussianDiffusion(Module):
             img = torch.randn(shape, device = device)
             total_timesteps=self.num_timesteps
         else :
+            if not self.fixed_forward_noise:
+                noise = torch.randn_like(condition, device = self.device)
+            else :
+                noise = forward_noise
+                if forward_noise is None:
+                    raise ValueError('Fixed forward noise mode but forward_noise is None!')
+
             # Start from a noised version of the condition
             t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
-            img = self.q_sample(x_start=condition, t=t).to(self.device)
+            img = self.q_sample(x_start=condition, t=t, noise=noise).to(self.device)
             total_timesteps=self.num_edition_timesteps
 
         times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
@@ -807,7 +830,16 @@ class GaussianDiffusion(Module):
             sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
             c = (1 - alpha_next - sigma ** 2).sqrt()
 
-            noise = torch.randn_like(img)
+            
+
+            if not self.fixed_sampling_noise:
+                noise = torch.randn_like(img)
+            else : 
+                print('Using sampling noise', 'sampling_noise.shape', sampling_noise.shape, 'shape',img.shape)
+                noise = sampling_noise
+                if sampling_noise is None:
+                    raise ValueError('Fixed sampling noise mode but sampling_noise is None!')
+
 
             img = x_start * alpha_next.sqrt() + \
                   c * pred_noise + \
@@ -821,7 +853,7 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None, forward_noise=None, sampling_noise=None):
         r"""
         Generate samples using SDEdit diffusion.
         Args:
@@ -841,6 +873,8 @@ class GaussianDiffusion(Module):
             (batch_size, channels, *image_size),
             return_all_timesteps=return_all_timesteps,
             condition=condition,
+            forward_noise=forward_noise,
+            sampling_noise=sampling_noise
         )
 
     @torch.inference_mode()

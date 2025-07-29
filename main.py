@@ -143,7 +143,9 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
-                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000,
+                fixed_forward_noise=config.fixed_forward_noise,
+                fixed_sampling_noise=config.fixed_sampling_noise
             )
     else:
         model = ElucidatedDiffusion(
