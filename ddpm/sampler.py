@@ -9,6 +9,8 @@ from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 from utils.plotter import online_plot, online_plot_var, online_plot_mean, online_plot_quantiles
 from datetime import datetime
+import matplotlib.pyplot as plt
+rank = int(os.environ.get("LOCAL_RANK",0))
 
 
 class Sampler(Ddpm_base):
@@ -18,15 +20,15 @@ class Sampler(Ddpm_base):
         config,
         dataloader=None,
         inversion_transforms=None,
-    ) -> None:
+    ):
         
-        
-        # Initialize the Sampler class.
-        # Args:
-        #     model (torch.nn.Module): The neural network model for sampling.
-        #     config: Configuration settings for sampling.
-        #     dataloader: The data loader for input data (optional).
-        
+        """ 
+            Initialize the Sampler class.
+            Args:
+                model (torch.nn.Module): The neural network model for sampling.
+                config: Configuration settings for sampling.
+                dataloader: The data loader for input data (optional).
+        """
         
         super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
@@ -74,11 +76,11 @@ class Sampler(Ddpm_base):
     @torch.no_grad()
     def sample(self, filename_format="fake_sample_{i}.npy", Shape=(4, 256, 256)):
         """
-        # Generate and save sample images during training.
-        # Args:
-        #     filename_format (str): Format of the filename to save the images.
-        # Returns:
-        #     None
+        Generate and save sample images during training.
+        Args:
+            filename_format (str): Format of the filename to save the images.
+        Returns:
+            None
         """
 
         i = self.gpu_id if type(self.gpu_id) is int else 0

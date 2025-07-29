@@ -140,6 +140,19 @@ def load_train_objs(config):
             config = config,
             n_labels_embeded_cond=n_lt,
         )
+    
+    elif config.model_used == "karras_unet":
+        umodel= KarrasUnet(
+            dim=64,
+            config=config,
+            channels=len(config.var_indexes),
+            spatial_conditions=use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
+            n_labels_embeded_cond = n_lt,
+        )
     else :
         umodel = Unet(
             dim=64,

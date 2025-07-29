@@ -114,6 +114,7 @@ class ElucidatedDiffusion(nn.Module):
         That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
         """
         data_path = self.config.data_dir
+        # file_name = '2020-06-15T21:00:00Z_complete_0_0.npy'
         file_name = "2021-06-17T21:00:00Z_u_v_t2m_0_0.npy"
         file = os.path.join(data_path,file_name)
 
@@ -154,6 +155,7 @@ class ElucidatedDiffusion(nn.Module):
             sigma = torch.full((batch,), sigma, device = device)
 
         padded_sigma = rearrange(sigma, 'b -> b 1 1 1')
+
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
@@ -459,3 +461,6 @@ class ElucidatedDiffusion(nn.Module):
 
                 losses = losses * self.loss_weight(sigmas)
                 return losses.mean()
+
+
+

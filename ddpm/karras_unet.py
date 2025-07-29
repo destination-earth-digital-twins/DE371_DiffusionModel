@@ -1,6 +1,9 @@
 """
 the magnitude-preserving unet proposed in https://arxiv.org/abs/2312.02696 by Karras et al.
 """
+import os
+rank = int(os.environ.get("LOCAL_RANK",0))
+
 
 import math
 from math import sqrt, ceil
@@ -15,7 +18,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat, pack, unpack
 
 from denoising_diffusion_pytorch.attend import Attend
-
+from utils.plotter_inconditionnal import plotter3D_3var
 # helpers functions
 
 def exists(x):
@@ -71,6 +74,22 @@ class Gain(Module):
     def forward(self, x):
         return x * self.gain
 
+# sinusoidal positional embeds
+
+class SinusoidalPosEmb(Module):
+    def __init__(self, dim, theta = 10000):
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+
+    def forward(self, x):
+        device = x.device
+        half_dim = self.dim // 2
+        emb = math.log(self.theta) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+        emb = x[:, None] * emb[None, :]
+        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
+        return emb
 # magnitude preserving concat
 # equation (103) - default to 0.5, which they recommended
 
@@ -420,7 +439,7 @@ class KarrasUnet(Module):
         dim = 192,
         dim_max = 768,            # channels will double every downsample and cap out to this value
         num_classes = None,       # in paper, they do 1000 classes for a popular benchmark
-        channels = 4,             # 4 channels in paper for some reason, must be alpha channel?
+        channels = 3,             # 4 channels in paper for some reason, must be alpha channel?
         num_downsamples = 3,
         num_blocks_per_stage = 4,
         attn_res = (16, 8),
@@ -432,18 +451,31 @@ class KarrasUnet(Module):
         attn_res_mp_add_t = 0.3,
         resnet_mp_add_t = 0.3,
         dropout = 0.1,
-        self_condition = False
+        spatial_conditions = False,
+        n_conditions = 1,
+        orog_cond = False,
+        var_cond = False,
+        mean_cond = False,
+        n_labels_embeded_cond = None,
+        learned_variance = False,
+        learned_sinusoidal_cond = False,
+        random_fourier_features = False,
     ):
         super().__init__()
 
-        self.self_condition = self_condition
+        self.spatial_conditions = spatial_conditions
         self.config = config
         # determine dimensions
 
         self.channels = channels
         self.image_size = self.config.image_size
-        input_channels = channels * (2 if self_condition else 1)
-
+        input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
+        if var_cond:
+            input_channels += channels
+        if mean_cond:
+            input_channels += channels
+        if orog_cond:
+            input_channels += 1 
         # input and output blocks
 
         self.input_block = Conv2d(input_channels, dim, 3, concat_ones_to_input = True)
@@ -482,7 +514,15 @@ class KarrasUnet(Module):
         # attention
 
         attn_res = set(cast_tuple(attn_res))
-
+        
+        ################## Embedded condition
+        if n_labels_embeded_cond is not None:
+            self.emb_mlp = nn.Sequential(
+                SinusoidalPosEmb(dim, theta = n_labels_embeded_cond),
+                nn.Linear(fourier_dim, emb_dim),
+                nn.GELU(),
+                nn.Linear(emb_dim, emb_dim)
+            )
         # resnet block
 
         block_kwargs = dict(
@@ -499,9 +539,9 @@ class KarrasUnet(Module):
         self.ups = ModuleList([])
 
         curr_dim = dim
-        curr_res = tuple(image_size)
-        print("curr_res",curr_res)
-        print("curr_res[0]", curr_res[0])
+
+        curr_res = tuple(self.image_size)
+
         self.skip_mp_cat = MPCat(t = mp_cat_t, dim = 1)
 
         # take care of skip connection for initial input block and first three encoder blocks
@@ -522,7 +562,6 @@ class KarrasUnet(Module):
             dim_out = min(dim_max, curr_dim * 2)
             
             upsample = Decoder(dim_out, curr_dim, has_attn = curr_res in attn_res, upsample = True, **block_kwargs)
-            print("curr_res vaut :", curr_res)
             curr_res = curr_res[0]//2,curr_res[1]//2
             has_attn = curr_res in attn_res
 
@@ -557,28 +596,38 @@ class KarrasUnet(Module):
         return 2 ** self.num_downsamples
 
     def forward(
-        self,
-        x,
-        time,
-        self_cond = None,
-        class_labels = None
+        self, 
+        x, 
+        time, 
+        x_self_cond = None, 
+        embedded_cond = None,
+        class_labels = None,
+        x_pos=None,
+        patch_size=None
     ):
         # validate image shape
 
         assert x.shape[1:] == (self.channels, self.image_size[0], self.image_size[1])
 
         # self conditioning
+        if self.spatial_conditions:
+            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
+            x = torch.cat((x_self_cond, x), dim = 1)
 
-        if self.self_condition:
-            self_cond = default(self_cond, lambda: torch.zeros_like(x))
-            x = torch.cat((self_cond, x), dim = 1)
         else:
-            assert not exists(self_cond)
-
+            assert not exists(x_self_cond)
+        
+        if self.config.patch_diffusion:
+            device = x.device
+            x_pos = x_pos.to(device)
+            x = torch.cat((x,x_pos),dim=1)
+        
         # time condition
 
         time_emb = self.to_time_emb(time)
-
+        if embedded_cond is not None:
+            cond_embedding = self.emb_mlp(embedded_cond)
+            time_emb = time_emb + cond_embedding 
         # class condition
 
         assert xnor(exists(class_labels), self.needs_class_labels)
@@ -603,7 +652,6 @@ class KarrasUnet(Module):
         skips = []
 
         # input block
-
         x = self.input_block(x)
 
         skips.append(x)
