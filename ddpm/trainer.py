@@ -19,6 +19,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import torch.amp
 from ddpm import normalize
 from pickle import dump
+from utils.utils import plot_loss_during_training
+
 rank = int(os.environ.get("LOCAL_RANK",0))
 
 class Trainer(Ddpm_base):
@@ -401,6 +403,7 @@ class Trainer(Ddpm_base):
         """
         scaler = torch.amp.GradScaler()
         filename_format = "sample_epoch{epoch}_{i}.npy"
+        losses = [] #to plot loss at each epoch
         if is_main_gpu():
 
             if self.config.use_wandb:
@@ -419,6 +422,11 @@ class Trainer(Ddpm_base):
 
         for epoch in loop:
             avg_train_loss, avg_val_loss = self._run_epoch(epoch, scaler)
+            loss = avg_train_loss.detach().cpu().numpy()
+            losses.append(loss)
+            save_path_plot = os.path.join(self.config.output_dir,self.config.run_name, "loss_plot")
+            plot_loss_during_training(losses,save_path_plot,"loss durant l'entraînement")
+            
             if is_main_gpu():
                 loop.set_postfix_str(
                     f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"

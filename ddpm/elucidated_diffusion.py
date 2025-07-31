@@ -1,5 +1,5 @@
 from math import sqrt
-from random import random
+import random
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
@@ -114,8 +114,10 @@ class ElucidatedDiffusion(nn.Module):
         That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
         """
         data_path = self.config.data_dir
-        # file_name = '2020-06-15T21:00:00Z_complete_0_0.npy'
-        file_name = "2021-06-17T21:00:00Z_u_v_t2m_0_0.npy"
+
+        #choose a random file in data folder
+        files = [f for f in os.listdir(data_path)]
+        file_name = random.choice(files)
         file = os.path.join(data_path,file_name)
 
         img = np.load(file)
@@ -356,10 +358,7 @@ class ElucidatedDiffusion(nn.Module):
             losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
             losses = reduce(losses,'b ... -> b','mean')
             losses = losses * self.loss_weight(sigmas)
-            # if rank ==0:
-            #     print("la loss ici a pour shape :", losses.shape)
-            #     print("la loss a pour valeur",losses)
-            #     print("quand on applique la moyenne",losses.mean())
+
             return losses.mean()
         
         else :
@@ -372,6 +371,7 @@ class ElucidatedDiffusion(nn.Module):
             #TODO : stock the mask in memory (self.mask) to use the condition with different variables
             
             if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
+                
                 img_filled = img.masked_fill(~mask,0.5) 
                 img = normalize_to_neg_one_to_one(img_filled) 
                 sigmas = self.noise_distribution(batch_size)
@@ -379,7 +379,6 @@ class ElucidatedDiffusion(nn.Module):
 
                 noise = torch.randn_like(img)
                 noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-                self_cond = None
 
                 cond_2d = None
                 if self.spatial_conditions:
@@ -400,19 +399,21 @@ class ElucidatedDiffusion(nn.Module):
                 return losses.mean()
         
             elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+                
                 img_filled = img.clone().to(img.device)
+                
                 for batch in range(self.config.batch_size):
+                    
                     #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
                     img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
                     img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
                     img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
+                    
                 sigmas = self.noise_distribution(batch_size)
                 padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
                 noise = torch.randn_like(img)
                 noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
         
-                self_cond = None
-
                 cond_2d = None
                 if self.spatial_conditions:
                     cond_2d = kwargs.get('condition_tensor')
@@ -432,19 +433,7 @@ class ElucidatedDiffusion(nn.Module):
                 noise = torch.randn_like(img)
 
                 noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-                self_cond = None
-                
-                # Conditioned diffusion :
-                if self.spatial_conditions:
-                    with torch.no_grad():
-                        self_cond = kwargs.get('condition_tensor')
-                        #self_cond.detach_()
-                        
-                # if self.self_condition and random() < 0.5:
-                #     # from hinton's group's bit diffusion paper
-                #     with torch.no_grad():
-                #         self_cond = self.preconditioned_network_forward(noised_images, sigmas)
-                #         self_cond.detach_()
+
                 # Conditioned diffusion :
                 cond_2d = None
                 if self.spatial_conditions:

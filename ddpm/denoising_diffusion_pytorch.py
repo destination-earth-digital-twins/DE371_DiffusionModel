@@ -1,5 +1,6 @@
 import math
 import copy
+import os
 from pathlib import Path
 from random import random
 from functools import partial
@@ -7,44 +8,37 @@ from collections import namedtuple
 from multiprocessing import cpu_count
 from dataclasses import dataclass
 from typing import Tuple, Union
-
-from dataclasses_json import dataclass_json
-from monai.networks.nets.swin_unetr import SwinUNETR as MonaiSwinUNETR
+import numpy as np
 from torch import nn
-from .ddpm_base import ModelABC, ModelType
+from ddpm.base import AutoPaddingModel, BaseModel, ModelType
 from utils.plotter_inconditionnal import plotter3D_3var
-
+from PIL import Image
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
 from torch.nn import Module, ModuleList
 from torch.amp import autocast
 from torch.utils.data import Dataset, DataLoader
-
 from torch.optim import Adam
-
 from torchvision import transforms as T, utils
-
 from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange
-
 from scipy.optimize import linear_sum_assignment
-
-from PIL import Image
 from tqdm.auto import tqdm
-from ema_pytorch import EMA
-
-from accelerate import Accelerator
-
 from denoising_diffusion_pytorch.attend import Attend
-
 from denoising_diffusion_pytorch.version import __version__
-
-from utils.plotter_inconditionnal import plotter3D_3var
-import os
-
 from utils.transformers_utils import get_conv_layer
 from monai.networks.layers.utils import get_act_layer, get_norm_layer
+import itertools
+from collections.abc import Sequence
+import torch.utils.checkpoint as checkpoint
+from torch.nn import LayerNorm
+from typing_extensions import Final
+from monai.networks.blocks import MLPBlock as Mlp
+from monai.networks.blocks import PatchEmbed, UnetOutBlock, UnetrBasicBlock, UnetrUpBlock
+from monai.networks.layers import DropPath, trunc_normal_
+from monai.utils import ensure_tuple_rep, look_up_option, optional_import
+from monai.utils.deprecate_utils import deprecated_arg
 
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -345,7 +339,6 @@ class Unet(Module):
         if orog_cond:
             input_channels += 1
 
-        print("les inputs channels :", input_channels)
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
@@ -391,7 +384,7 @@ class Unet(Module):
         attn_dim_head = cast_tuple(attn_dim_head, num_stages)
 
         assert len(full_attn) == len(dim_mults)
-        print("dim mults : ", dim_mults)
+
         # prepare blocks
 
         FullAttention = partial(Attention, flash = flash_attn)
@@ -444,16 +437,13 @@ class Unet(Module):
         default_out_dim = default_out_dim -4 if config.patch_diffusion else default_out_dim
         self.out_dim = default(out_dim, default_out_dim)
         self.final_res_block = resnet_block(init_dim * 2, init_dim)
-        self.outdim = self.out_dim 
-        if rank==0:
-            print("self.out dim vaut", self.out_dim)
-        self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1) #change here of out_dim because channels are not only var with patching but also patch size and x,y the coord of the patch
+        self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1) 
 
     @property
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None, patch_size=None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None):
         
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
 
@@ -466,13 +456,10 @@ class Unet(Module):
             x_pos = x_pos.to(device)
             x = torch.cat((x,x_pos),dim=1)
         
-        if rank ==0:
-            print("shape de x ", x.shape)
         x = self.init_conv(x)
         r = x.clone()
 
         t = self.time_mlp(time)
-
 
         ################## Embedded condition
         if embedded_cond is not None:
@@ -1002,21 +989,6 @@ class GaussianDiffusion(Module):
         return self.p_losses(img, t, *args, **kwargs)
 
 
-@dataclass_json
-@dataclass(slots=True)
-class SwinUNETRSettings:
-    depths: Tuple[int, ...] = (4, 3, 2, 2)
-    num_heads: Tuple[int, ...] = (3, 6, 12, 24)
-    feature_size: int = 24
-    norm_name: tuple | str = "instance"
-    drop_rate: float = 0.0
-    attn_drop_rate: float = 0.0
-    dropout_path_rate: float = 0.0
-    normalize: bool = True
-    use_checkpoint: bool = False
-    downsample = "merging"
-    use_v2 = False
-
 class block(Module):
     def __init__(
         self, 
@@ -1047,12 +1019,12 @@ class block(Module):
         x = self.act(x)
         return self.dropout(x)
     
-class UnetResBlock(nn.Module):
+class UnetResBlock(nn.Module): #Resblock used for swinunetr (almost the same as resblock used in UNet)
     def __init__(
         self, 
-        in_channels, 
-        out_channels, 
-        norm_name, 
+        in_channels = None, 
+        out_channels = None, 
+        norm_name = None, 
         *, 
         spatial_dims=2,
         act_name: Union[Tuple, str] = ("leakyrelu",{"inplace":True, "negative_slope":0.01}),
@@ -1087,10 +1059,6 @@ class UnetResBlock(nn.Module):
             stride = stride,           
         )
 
-        # if rank == 0:
-        #     print("self.block1", self.block1)
-        #     print("self.block2", self.block2)
-        
         self.downsample = in_channels != out_channels
         
         stride_np = np.atleast_1d(stride)
@@ -1119,6 +1087,7 @@ class UnetResBlock(nn.Module):
     def forward(self, x, time_emb=None):
         
         residual = x
+        
         scale_shift = None
         
         if exists(self.mlp) and exists(time_emb):
@@ -1126,13 +1095,8 @@ class UnetResBlock(nn.Module):
             time_emb = rearrange(time_emb, 'b c -> b c 1 1')
             scale_shift = time_emb.chunk(2, dim = 1)
         
-        # if rank == 0:
-        #     print("scale shift existe :", type(scale_shift))
         h = self.block1(x, scale_shift = scale_shift)
-        
-        # if rank == 0:
-        #     print("avec time embedding : ", self.block1(x, scale_shift = scale_shift)[0,0,:3,:3])
-        #     print("sans time embedding :", self.block1(x, scale_shift = None)[0,0,:3,:3])
+
         h = self.block2(h)
         
         if hasattr(self, "conv3"):
@@ -1168,6 +1132,7 @@ class UpsampleBlock(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
+        
         self.conv_block = UnetResBlock(
             out_channels+out_channels, 
             out_channels, 
@@ -1187,42 +1152,6 @@ class UpsampleBlock(nn.Module):
         out = self.conv_block(out, time_emb)
         return out
 
-
-import itertools
-from collections.abc import Sequence
-
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
-from torch.nn import LayerNorm
-from typing_extensions import Final
-
-from monai.networks.blocks import MLPBlock as Mlp
-from monai.networks.blocks import PatchEmbed, UnetOutBlock, UnetrBasicBlock, UnetrUpBlock
-from monai.networks.layers import DropPath, trunc_normal_
-from monai.utils import ensure_tuple_rep, look_up_option, optional_import
-from monai.utils.deprecate_utils import deprecated_arg
-
-rearrange, _ = optional_import("einops", name="rearrange")
-
-__all__ = [
-    "SwinUNETR",
-    "window_partition",
-    "window_reverse",
-    "WindowAttention",
-    "SwinTransformerBlock",
-    "PatchMerging",
-    "PatchMergingV2",
-    "MERGING_MODE",
-    "BasicLayer",
-    "SwinTransformer",
-]
-
-
-
-
 class SwinUNETR(nn.Module):
     """
     Swin UNETR based on: "Hatamizadeh et al.,
@@ -1231,8 +1160,6 @@ class SwinUNETR(nn.Module):
     """
 
     patch_size: Final[int] = 2
-
-
 
     @deprecated_arg(
         name="img_size",
@@ -1271,32 +1198,46 @@ class SwinUNETR(nn.Module):
         
         use_v2=False,
     ):
-        
-         
-             
-       
-            
+                 
         super().__init__()
-        
+          
+        self.config = config
+        self.out_channels = out_channels
+        self.spatial_conditions = spatial_conditions
+        img_size = ensure_tuple_rep(img_size, spatial_dims)
+        patch_sizes = ensure_tuple_rep(self.patch_size, spatial_dims)
+        window_size = ensure_tuple_rep(7, spatial_dims)
         depths = config.transformers_depths
         num_heads = config.transformers_num_heads
         num_stages = config.transformers_num_stages  
         
+        if spatial_dims not in (2, 3):
+            raise ValueError("spatial dimension should be 2 or 3.")
+
+        self._check_input_size(img_size)
+
+        if not (0 <= drop_rate <= 1):
+            raise ValueError("dropout rate should be between 0 and 1.")
+
+        if not (0 <= attn_drop_rate <= 1):
+            raise ValueError("attention dropout rate should be between 0 and 1.")
+
+        if not (0 <= dropout_path_rate <= 1):
+            raise ValueError("drop path rate should be between 0 and 1.")
+
+        if feature_size % 12 != 0:
+            raise ValueError("feature_size should be divisible by 12.")
+
         assert len(depths) == num_stages,f"len(depths) must be equal to num_stages = {num_stages} and is {len(depths)}"
-        assert len(num_heads) == num_stages,f"len(num_heads) must be equal to num_stages = {num_stages} and is {len(num_heads)}"
         
-        if rank==0:
-            print("depths ", depths)
-            print("spatial conditions", spatial_conditions)
-            print("n_conditions", n_conditions)
+        assert len(num_heads) == num_stages,f"len(num_heads) must be equal to num_stages = {num_stages} and is {len(num_heads)}"
+
+        self.normalize = normalize
+        
         self.in_channels = in_channels *((n_conditions+1) if spatial_conditions else 1)
         
         if orog_cond:
             self.in_channels += 1 
-        
-        if rank == 0:
-            print("orog cond", orog_cond)
-            print("in channels", self.in_channels)
             
         time_dim = dim * 4
         
@@ -1315,35 +1256,7 @@ class SwinUNETR(nn.Module):
             nn.GELU(),
             nn.Linear(time_dim, time_dim)
         )
-                
-        self.config = config
-        self.out_channels = out_channels
-        self.spatial_conditions = spatial_conditions
-        img_size = ensure_tuple_rep(img_size, spatial_dims)
-        patch_sizes = ensure_tuple_rep(self.patch_size, spatial_dims)
-        window_size = ensure_tuple_rep(7, spatial_dims)
-
-        if spatial_dims not in (2, 3):
-            raise ValueError("spatial dimension should be 2 or 3.")
-
-        self._check_input_size(img_size)
-
-        if not (0 <= drop_rate <= 1):
-            raise ValueError("dropout rate should be between 0 and 1.")
-
-        if not (0 <= attn_drop_rate <= 1):
-            raise ValueError("attention dropout rate should be between 0 and 1.")
-
-        if not (0 <= dropout_path_rate <= 1):
-            raise ValueError("drop path rate should be between 0 and 1.")
-
-        if feature_size % 12 != 0:
-            raise ValueError("feature_size should be divisible by 12.")
-
-        self.normalize = normalize
-
        
-
         ################## Embedded condition
         if n_labels_embeded_cond is not None:
             self.emb_mlp = nn.Sequential(
@@ -1351,9 +1264,7 @@ class SwinUNETR(nn.Module):
                 nn.Linear(fourier_dim, time_dim),
                 nn.GELU(),
                 nn.Linear(time_dim, time_dim)
-            )
-            # self.time_and_cond_proj = nn.Linear(time_dim + time_dim, time_dim)
-        
+            )        
             
         self.swinViT = SwinTransformer(
             in_chans=self.in_channels,
@@ -1389,7 +1300,6 @@ class SwinUNETR(nn.Module):
         self.downs.append(self.encoder1)
         for i in range(num_layers-1):
             
-                
             i+=2
             
             self.downs.append(UnetResBlock(
@@ -1413,7 +1323,6 @@ class SwinUNETR(nn.Module):
         while i>1:
             i -= 1
             
-            
             self.ups.append(UpsampleBlock(
                 spatial_dims=spatial_dims,
                 in_channels=2**i * feature_size,
@@ -1431,16 +1340,9 @@ class SwinUNETR(nn.Module):
             time_emb_dim=time_dim,
         )
         self.ups.append(self.last_decoder)
-        
-        if rank == 0:
-            print("les ups '", self.ups)
+
         self.out = UnetOutBlock(spatial_dims=spatial_dims, in_channels=feature_size, out_channels=out_channels)
 
-        
-        if rank==0:
-            print("out = ", self.out)
-
-        
 
     @torch.jit.unused
     def _check_input_size(self, spatial_shape):
@@ -1458,25 +1360,17 @@ class SwinUNETR(nn.Module):
     def forward(self, x, time, x_self_cond = None, embedded_cond = None, *args, **kwargs):
         if not torch.jit.is_scripting():
             self._check_input_size(x.shape[2:])
-        
-        # assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
+        #TODO : put an exception if image_size is not divisible by 2**(len(depths)+1)
 
         if self.spatial_conditions:
-            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
-            # print("on passe bien la dedans")
-            # if rank ==0:
-                # print("x_self_cond =", x_self_cond)
-                
-            ##A FAIRE : REGARDER POURQUOI L'OROGRAPHIE N'EST PAS PRSE EN COMPTE ICI ET CORRIGER
+            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))                
             x = torch.cat((x_self_cond, x), dim = 1)
         
         if self.config.patch_diffusion:
             device = x.device
             x_pos = x_pos.to(device)
             x = torch.cat((x,x_pos),dim=1)
-        r = x.clone()
-        # if rank==0:
-        #     print("xshape",x.shape)
+
         t = self.time_mlp(time)   
          
         ################## Embedded condition
@@ -1486,28 +1380,22 @@ class SwinUNETR(nn.Module):
         
         hidden_states_out = self.swinViT(x, self.normalize)
         encoders = []
-        # if rank == 0: 
-        #     print("encoder 1")
+
         enc0 = self.encoder1(x, t)
-        #tester en mettant 0 à la place de t voir si ça marche bien
+        
         encoders.append(enc0)
         
         for i,encoder in enumerate(self.downs):
             if i==0:
                 continue
-            # if rank == 0: 
-                # print("encoder", i+1)
             enc = encoder(hidden_states_out[i-1], t)
             encoders.append(enc)
         
-        # if rank == 0: 
-                # print("mid_dec")
         mid_dec = self.mid_encoder(hidden_states_out[-1], t)
         
         decoders = []
         for i,decoder in enumerate(self.ups):
-            # if rank == 0:
-                # print("decoder ", i)
+
             if i==0:
                 dec = decoder(mid_dec,hidden_states_out[-2], t)
                 decoders.append(dec)
@@ -1519,8 +1407,7 @@ class SwinUNETR(nn.Module):
 
                 dec = decoder(decoders[i-1], encoders[-i], t)
                 decoders.append(dec)
-        # if rank==0:
-            # print("last dec")
+
         last_dec = self.last_decoder(decoders[-1],encoders[0], t)
         logits = self.out(last_dec)
         
@@ -2130,8 +2017,7 @@ class SwinTransformer(nn.Module):
         """
 
         super().__init__()
-        if rank == 0 :
-            print("dans swintransformers, in chans =", in_chans)
+
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm

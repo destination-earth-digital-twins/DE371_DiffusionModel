@@ -3,7 +3,8 @@ import os
 from tqdm import tqdm
 import pandas as pd
 import torch
-from utils.distributed import is_main_gpu
+#from utils.distributed import is_main_gpu
+import matplotlib.pyplot as plt
 
 def filter_dates(csvfile, datestart, datestop):
     if datestart and datestop :
@@ -159,3 +160,18 @@ def mirror_fill(img, mask):
 
     return torch.IntTensor(valid_x_v), torch.IntTensor(invalid_x_v), torch.IntTensor(valid_y_v), torch.IntTensor(invalid_y_v), torch.IntTensor(valid_x_h), torch.IntTensor(invalid_x_h), torch.IntTensor(valid_y_h), torch.IntTensor(invalid_y_h)
 
+
+def plot_loss_during_training(losses : list, save_path : str, title : str):
+    plt.figure()
+    x = np.arange(len(losses))
+    plt.plot(x, losses)
+    plt.xlabel("epochs")
+    plt.ylabel("loss")
+    plt.title(title)
+    plt.savefig(save_path)
+    plt.close()
+    
+
+losses = [3,2,1,0,1,2,3,1,2]
+plot_loss_during_training(losses,"ici.png","loss durant l'entrainement")
+    

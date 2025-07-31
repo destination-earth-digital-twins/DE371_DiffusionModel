@@ -27,7 +27,7 @@ from utils.utils import batch_output_sample_files
 import numpy as np
 from pickle import dump
 from ddpm.karras_unet import KarrasUnet 
-
+from ddpm.UNETRPP import UNetRPP
 # from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -153,6 +153,21 @@ def load_train_objs(config):
             orog_cond=config.orography_conditioning,
             n_labels_embeded_cond = n_lt,
         )
+    
+    elif config.model_used == "UNETRPP":
+        umodel=UNetRPP(
+            dim = 64,
+            in_channels = len(config.var_indexes),
+            out_channels = len(config.var_indexes),
+            config = config,
+            spatial_conditions = use_cond,
+            n_conditions = config.n_conditions,
+            orog_cond = config.orography_conditioning,
+            var_cond = config.var_conditionning,
+            mean_cond = config.mean_conditionning,
+            n_labels_embeded_cond = n_lt,
+        )
+        
     else :
         umodel = Unet(
             dim=64,
