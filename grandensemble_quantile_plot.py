@@ -43,22 +43,22 @@ if __name__=="__main__" :
 
     PATH_exp = {#'Sdedit_ED_4steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_4steps/quantile_data/",
     #'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_3steps/quantile_data/",
-    'Sdedit_ED_3steps_mode3' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_3steps_bis_concat/quantile_data/"
+    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/test4_sampling_GE_3steps_900_members_5draws/quantile_data/"
     }
     base_dir = args.base_dir
-    output_dir = base_dir + 'quantiles_plots_mode3/'
+    output_dir = base_dir + 'quantiles_plots/'
     os.makedirs(output_dir, exist_ok=True)
     for param in args.param:
         for leadtime in args.leadtimes :
 
-            list_expe = ['Sdedit_ED_3steps_mode3']
+            list_expe = ['Sdedit_ED_3steps']
             list_data_xtremes = []
             for exp in list_expe:
                 list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_Generated_' + param + f'_{exp}_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
             list_data_xtremes.append(pd.read_pickle(PATH_exp[exp]+ 'Quantiles_Xtremes_avg/' + 'Quantiles_Xtremes_avg_AROME_' + param + f'_Small_2021-10-01T21:00:00Z+'+ str(leadtime) + '.pkl'))
 
             merge = pd.concat(list_data_xtremes)
-            value_vars = ["DiffSdedit_ED_3steps_mode3" , "DiffSmall"]
+            value_vars = ["DiffSdedit_ED_3steps" , "DiffSmall"]
             merge = merge.loc[(merge['Quantiles'] != 0.5) & (merge['Quantiles'] != 99.5)]
 
             dd=pd.melt(merge,

@@ -100,7 +100,7 @@ if __name__=="__main__" :
 
     AROME_large_ensemble_file_format = "_grand_sample_{leadtime}_875.npy"
     AROME_small_ensemble_file_format = "true_grand_ensemble_{leadtime}_draw_{draw_idx}.npy"
-    Generated_large_ensemble_file_format = "fake_grand_ensemble_{leadtime}_draw_{draw_idx}.npy"
+    Generated_large_ensemble_file_format = "fake_grand_ensemble_2021-10-01_{leadtime}_{draw_idx}.npy"
 
     # Initialisation projection
     lplotq=True
@@ -200,6 +200,7 @@ if __name__=="__main__" :
                 ### This loop should maybe be rewritten and using numpy array reindexing directly
                 tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
                 mb = np.load(args.base_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
+                print(mb)
                 for mb_idx in range(Nsmall):
                     tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
                 
@@ -274,16 +275,11 @@ if __name__=="__main__" :
                 for i in trange(nbrandinit):
                     print("Loading files containing generated members")
                     gen_filename = Generated_large_ensemble_file_format.format(leadtime = leadtime, draw_idx=i)
-                    # gen_tabs = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + gen_filename, allow_pickle=True), param=param)
-                    ### This loop should maybe be rewritten and using numpy array reindexing directly
-                    gen_tabs = np.zeros((Nsmall,tabref.shape[1],tabref.shape[2]))
-                    mb = np.load(args.base_dir + 'mb_files/' + "mb_" + str(i) + '.npy',allow_pickle=True).astype(np.uint16)
-                    for mb_idx in range(Nsmall):
-                        gen_tabs[mb_idx,:,:] = tabref[int(mb[mb_idx]),:,:]
+                    data = load_tab_var(tab = np.load(args.generated_sample_dir + 'samples/' + gen_filename, allow_pickle=True), param=param)
                     
                     print("Computing percentiles on Generated")
-                    percentile = np.percentile(gen_tabs,quantile_to_compute,interpolation='nearest',axis=0)
-                    Qs.append(np.concatenate([percentile, np.std(gen_tabs,axis=0,ddof=1)[np.newaxis,:]]))
+                    percentile = np.percentile(data,quantile_to_compute,interpolation='nearest',axis=0)
+                    Qs.append(np.concatenate([percentile, np.std(data,axis=0,ddof=1)[np.newaxis,:]]))
                     print("Keeping track of spatial means of quantiles for Generated")
                     for q in range(np.size(quantile_to_compute)):
                         qm = np.mean(Qs[-1][q])
