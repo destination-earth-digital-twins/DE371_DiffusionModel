@@ -137,32 +137,57 @@ class Sampler(Ddpm_base):
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 if self.fixed_forward_noise :
-                    filename = "forward_noise_{date}_1.pt" .format(date = d)
-                    forward_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "forward_noise", filename)
-                    os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "forward_noise"), exist_ok=True)
-                    if os.path.isfile(forward_noise_path):
-                        self.forward_noise = torch.load(forward_noise_path).to(self.gpu_id)
-                    else :
-                        if lt+1 == 1:
-                            self.forward_noise = torch.randn((self.config.n_var, x, y), device = self.gpu_id)
-                            torch.save(self.forward_noise,forward_noise_path)
-                            self.logger.info(f"Forward noise saved in {forward_noise_path} for leadtime : {lt}")
+                    # if not self.config.progressive_noise_model or lt == 0:
+                        filename = "forward_noise_{date}_1.pt" .format(date = d)
+                        forward_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "forward_noise", filename)
+                        os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "forward_noise"), exist_ok=True)
+                        if os.path.isfile(forward_noise_path):
+                            self.forward_noise = torch.load(forward_noise_path).to(self.gpu_id)
                         else :
-                            raise IndexError(f'At {d}_{lt} should have been created before.')
-                
+                            if lt+1 == 1:
+                                self.forward_noise = torch.randn((self.config.n_var, x, y), device = self.gpu_id)
+                                torch.save(self.forward_noise,forward_noise_path)
+                                self.logger.info(f"Forward noise saved in {forward_noise_path} for leadtime : {lt}")
+                            else :
+                                raise IndexError(f'At {d}_{lt} should have been created before.')
+                    # else :
+                    #     filename = "forward_noise_{date}_{lt}.pt" .format(date = d, lt = lt-1)
+                    #     forward_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "forward_noise", filename)
+                    #     former_forward_noise = torch.load(forward_noise_path).to(self.gpu_id)
+
+                    #     forward_noise_ind = ((1/(1+self.config.alpha_noise**2))**0.5)*torch.randn((self.config.n_var, x, y), device = self.gpu_id)
+                    #     self.forward_noise = (1/((1+self.config.alpha_noise**2)**0.5))*former_forward_noise + forward_noise_ind
+                    
+                    # filename = "forward_noise_{date}_{lt}.pt" .format(date = d, lt = lt)
+                    # forward_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "forward_noise", filename)
+                    # torch.save(self.forward_noise,forward_noise_path)
+
                 if self.fixed_sampling_noise :
-                    filename = "sampling_noise_{date}_1.pt" .format(date = d)
-                    sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
-                    os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise"), exist_ok=True)
-                    if os.path.isfile(sampling_noise_path):
-                        self.sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
-                    else :
-                        if lt+1 == 1:
-                            self.sampling_noise = torch.randn((len(conditioning_sets),self.config.n_var, x, y), device = self.gpu_id)
-                            torch.save(self.sampling_noise,sampling_noise_path)
-                            self.logger.info(f"Sampling noise saved in {sampling_noise_path} for leadtime : {lt}")
+                    # if not self.config.progressive_noise_model or lt == 0:
+                        filename = "sampling_noise_{date}_1.pt" .format(date = d)
+                        sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
+                        os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise"), exist_ok=True)
+                        if os.path.isfile(sampling_noise_path):
+                            self.sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
                         else :
-                            raise IndexError(f'At {d}_{lt} should have been created before.')
+                            if lt+1 == 1:
+                                self.sampling_noise = torch.randn((len(conditioning_sets),self.config.n_var, x, y), device = self.gpu_id)
+                                torch.save(self.sampling_noise,sampling_noise_path)
+                                self.logger.info(f"Sampling noise saved in {sampling_noise_path} for leadtime : {lt}")
+                            else :
+                                raise IndexError(f'At {d}_{lt} should have been created before.')
+                    # else :
+                    #     filename = "sampling_noise_{date}_{lt}.pt" .format(date = d, lt = lt-1)
+                    #     sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
+                    #     former_sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
+
+                    #     sampling_noise_ind = (1/(1+self.config.alpha_noise**2))*torch.randn((self.config.n_var, x, y), device = self.gpu_id)
+                    #     self.sampling_noise = (1/(1+self.config.alpha_noise**2)**0.5)*former_sampling_noise + sampling_noise_ind
+                    
+                    # filename = "sampling_noise_{date}_{lt}.pt" .format(date = d, lt = lt)
+                    # sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
+                    # torch.save(self.sampling_noise,sampling_noise_path)
+                
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
                 if self.config.n_var != self.config.n_var_in_dataset:
