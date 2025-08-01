@@ -41,9 +41,8 @@ if __name__=="__main__" :
     parser.add_argument("--base_dir", type=str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/')
     args = parser.parse_args()
 
-    PATH_exp = {#'Sdedit_ED_4steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_4steps/quantile_data/",
-    #'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_3steps/quantile_data/",
-    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/test4_sampling_GE_3steps_900_members_5draws/quantile_data/"
+    PATH_exp = {
+    'Sdedit_ED_3steps' : "/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/GrandEnsemble/sdedit_ED/sampling_GE_3steps_900_members_50draws/quantile_data/"
     }
     base_dir = args.base_dir
     output_dir = base_dir + 'quantiles_plots/'
