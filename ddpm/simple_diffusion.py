@@ -312,7 +312,7 @@ class UViT(nn.Module):
         config,
         init_dim = None,
         out_dim = None,
-        dim_mults = (1, 2, 4, 8),
+        dim_mults = (1, 2, 4, 16),
         downsample_factor = 2,
         channels = 3,
         vit_depth = 6,
@@ -452,7 +452,7 @@ class UViT(nn.Module):
         self.final_res_block = ResnetBlock(init_dim * 2, init_dim, time_emb_dim = time_dim)
         self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1)
 
-    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None):
 
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
@@ -566,15 +566,20 @@ class GaussianDiffusionAdapted(nn.Module):
         noise_d = None,
         noise_d_low = None,
         noise_d_high = None,
-        num_sample_steps = 500,
+        timesteps = 500,
+        sampling_timesteps = None,
+        ddim_sampling_eta = 0.,
         clip_sample_denoised = True,
         min_snr_loss_weight = True,
-        min_snr_gamma = 5
+        min_snr_gamma = 5,
+        auto_normalize=True,
+        
     ):
         super().__init__()
         assert pred_objective in {'v', 'eps'}, 'whether to predict v-space (progressive distillation paper) or noise'
 
         self.umodel = umodel
+        self.spatial_conditions = self.umodel.spatial_conditions
 
         # image dimensions
 
@@ -603,19 +608,27 @@ class GaussianDiffusionAdapted(nn.Module):
 
         # sampling
 
-        self.num_sample_steps = num_sample_steps
+        self.num_timesteps = timesteps
         self.clip_sample_denoised = clip_sample_denoised
+        self.sampling_timesteps = default(sampling_timesteps, timesteps) # default num sampling timesteps to number of timesteps at training
+
+        assert self.sampling_timesteps <= timesteps
+        self.is_ddim_sampling = self.sampling_timesteps < timesteps
+        self.ddim_sampling_eta = ddim_sampling_eta
 
         # loss weight
 
         self.min_snr_loss_weight = min_snr_loss_weight
         self.min_snr_gamma = min_snr_gamma
 
+        self.normalize = normalize_to_neg_one_to_one if auto_normalize else identity
+        self.unnormalize = unnormalize_to_zero_to_one if auto_normalize else identity
+
     @property
     def device(self):
         return next(self.umodel.parameters()).device
-
-    def p_mean_variance(self, x, time, time_next):
+    
+    def p_mean_variance(self, x, time, time_next, x_self_cond = None, clip_denoised = True):
 
         log_snr = self.log_snr(time)
         log_snr_next = self.log_snr(time_next)
@@ -627,7 +640,7 @@ class GaussianDiffusionAdapted(nn.Module):
         alpha, sigma, alpha_next = map(sqrt, (squared_alpha, squared_sigma, squared_alpha_next))
 
         batch_log_snr = repeat(log_snr, ' -> b', b = x.shape[0])
-        pred = self.umodel(x, batch_log_snr)
+        pred = self.umodel(x, batch_log_snr,  x_self_cond = x_self_cond)
 
         if self.pred_objective == 'v':
             x_start = alpha * x - sigma * pred
@@ -635,47 +648,161 @@ class GaussianDiffusionAdapted(nn.Module):
         elif self.pred_objective == 'eps':
             x_start = (x - sigma * pred) / alpha
 
-        x_start.clamp_(-1., 1.)
+        if clip_denoised:
+            x_start.clamp_(-1., 1.)
 
         model_mean = alpha_next * (x * (1 - c) / alpha + c * x_start)
 
         posterior_variance = squared_sigma_next * c
 
-        return model_mean, posterior_variance
+        return model_mean, posterior_variance, x_start
 
     # sampling related functions
 
     @torch.no_grad()
     def p_sample(self, x, time, time_next):
-        batch, *_, device = *x.shape, x.device
+        b, *_, device = *x.shape, self.device
 
-        model_mean, model_variance = self.p_mean_variance(x = x, time = time, time_next = time_next)
+        model_mean, model_variance, x_start = self.p_mean_variance(x = x, time = time, time_next = time_next)
 
-        if time_next == 0:
-            return model_mean
+        noise = torch.randn_like(x) if time > 0 else 0. # no noise if t == 0
 
-        noise = torch.randn_like(x)
-        return model_mean + sqrt(model_variance) * noise
+        pred_img = model_mean + sqrt(model_variance) * noise
+        
+        return pred_img, x_start
 
-    @torch.no_grad()
-    def p_sample_loop(self, shape):
-        batch = shape[0]
+    @torch.inference_mode()
+    def p_sample_loop(self, shape, return_all_timesteps = False, condition=None):
+        r"""
+        Sample from SDEdit diffusion using a loop over timesteps.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        batch, device = shape[0], self.device
 
-        img = torch.randn(shape, device = self.device)
-        steps = torch.linspace(1., 0., self.num_sample_steps + 1, device = self.device)
+        if not self.sdedit_flag:
+            # Start from random image
+            img = torch.randn(shape, device = device)
+        else :
+            # Start from noised condition
+            raise NotImplementedError
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
 
-        for i in tqdm(range(self.num_sample_steps), desc = 'sampling loop time step', total = self.num_sample_steps):
-            times = steps[i]
-            times_next = steps[i + 1]
-            img = self.p_sample(img, times, times_next)
+        imgs = [img]
 
-        img.clamp_(-1., 1.)
-        img = unnormalize_to_zero_to_one(img)
-        return img
+        x_start = None
 
-    @torch.no_grad()
-    def sample(self, batch_size = 16):
-        return self.p_sample_loop((batch_size, self.channels, self.image_size, self.image_size))
+        num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
+
+        for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
+            self_cond = x_start if self.spatial_conditions else None
+            img, x_start = self.p_sample(img, t, self_cond)
+            imgs.append(img)
+
+        ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
+
+        ret = self.unnormalize(ret)
+        return ret
+
+    @torch.inference_mode()
+    def ddim_sample(
+        self,
+        shape,
+        return_all_timesteps = False,
+        condition=None
+        ):
+        r"""
+        Sample from conditioned diffusion using ddim sampling.
+        Args:
+            shape: Shape of the samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information  (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        raise NotImplementedError
+        batch, device, sampling_timesteps, eta, objective = shape[0], self.device, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+
+        if not self.sdedit_flag:
+            # Start from a random noise
+            img = torch.randn(shape, device = device)
+            total_timesteps=self.num_timesteps
+        else :
+            raise NotImplementedError
+            # Start from a noised version of the condition
+            t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
+            img = self.q_sample(x_start=condition, t=t).to(self.device)
+            total_timesteps=self.num_edition_timesteps
+
+        times = torch.linspace(-1, total_timesteps - 1, steps = sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:])) # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
+
+        imgs = [img]
+
+        x_start = None
+
+        for time, time_next in tqdm(
+            time_pairs,
+            desc = 'sampling loop time step'
+        ):
+            time_cond = torch.full(
+                (batch,), time, device = device, dtype = torch.long
+            )
+            self_cond = x_start if self.spatial_conditions else None
+            pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = True, rederive_pred_noise = True)
+            
+            if time_next < 0:
+                img = x_start
+                imgs.append(img)
+                continue
+
+            alpha = self.alphas_cumprod[time]
+            alpha_next = self.alphas_cumprod[time_next]
+
+            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
+            c = (1 - alpha_next - sigma ** 2).sqrt()
+
+            noise = torch.randn_like(img)
+
+            img = x_start * alpha_next.sqrt() + \
+                  c * pred_noise + \
+                  sigma * noise
+
+            imgs.append(img)
+
+        ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
+
+        ret = self.unnormalize(ret)
+        return ret
+
+    @torch.inference_mode()
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
+        r"""
+        Generate samples using SDEdit diffusion.
+        Args:
+            batch_size (int): Number of samples to generate.
+            return_all_timesteps (bool): Whether to return samples at all timesteps.
+            condition: Additional conditioning information (only used with SDEdit config)
+        Returns:
+            torch.Tensor: Generated samples.
+        """
+        image_size, channels = self.image_size, self.channels
+        sample_fn = (
+            self.p_sample_loop
+            if not self.is_ddim_sampling
+            else self.ddim_sample
+        )
+        return sample_fn(
+            (batch_size, channels, *image_size),
+            return_all_timesteps=return_all_timesteps,
+            condition=condition,
+        )
 
     # training related functions - noise prediction
 
@@ -725,9 +852,8 @@ class GaussianDiffusionAdapted(nn.Module):
 
     def forward(self, img, *args, **kwargs):
         b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
-        assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
+        assert h == img_size[0] and w == img_size[1], f'height and width of image must be {img_size}'
+        t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
-        img = normalize_to_neg_one_to_one(img)
-        times = torch.zeros((img.shape[0],), device = self.device).float().uniform_(0, 1)
-
-        return self.p_losses(img, times, *args, **kwargs)
+        img = self.normalize(img)
+        return self.p_losses(img, t, *args, **kwargs)
