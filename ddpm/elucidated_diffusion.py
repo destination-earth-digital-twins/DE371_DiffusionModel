@@ -66,7 +66,7 @@ class ElucidatedDiffusion(nn.Module):
         self.model = model
         self.spatial_conditions = model.spatial_conditions
         self.embedding_cond_dims = n_leadtimes
-
+        self.config = config
         self.num_sample_steps = num_sample_steps  # otherwise known as N in the paper
         
         # SDEdit flag setting
@@ -191,6 +191,7 @@ class ElucidatedDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, image_pos=None):
+        
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
         
         shape = (batch_size, self.channels, self.image_size[0], self.image_size[1])
@@ -244,6 +245,11 @@ class ElucidatedDiffusion(nn.Module):
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6
 
             cond_2d = condition if self.spatial_conditions else None
+            
+            if self.config.orography_conditioning and not self.spatial_conditions:
+                self.spatial_conditions= True
+                cond_2d = condition
+            
             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
             model_output = self.preconditioned_network_forward(images_hat, sigma_hat, image_pos, cond_2d = cond_2d, embedded_cond= cond_emb, clamp = clamp)
             denoised_over_sigma = (images_hat - model_output) / sigma_hat # Algorithm 2 : line 7

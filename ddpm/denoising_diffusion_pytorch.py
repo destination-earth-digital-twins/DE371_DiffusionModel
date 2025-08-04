@@ -443,10 +443,12 @@ class Unet(Module):
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None, patch_size=None):
         
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
-
+            
+        if self.config.mode=="Sample" and self.config.orography_conditioning:
+            self.spatial_conditions=True
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)

@@ -1,7 +1,7 @@
 import logging
 import os
 import warnings
-
+import numpy as np
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -148,6 +148,16 @@ class Ddpm_base:
         Returns:
             numpy.ndarray: Array of sampled images.
         """
+        if self.config.orography_conditioning and self.config.mode=="Sample":
+                # Importing
+            orography = torch.from_numpy(np.float32(np.load(self.config.path_to_orography)))
+            # Cropping
+            orography = orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
+            # Normalizing
+            orography_normalized = (orography - orography.mean()) / orography.max() 
+            
+            orography = orography_normalized.unsqueeze(0).expand(self.config.batch_size, -1, -1, -1)
+            condition = orography.to(torch.device(self.gpu_id))
         if nb_img <= 0:
             return []  # No images to sample, return an empty list
         if condition is None:
@@ -156,7 +166,7 @@ class Ddpm_base:
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition, image_pos=image_pos, lt_cond=lt_cond)
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
         if not self.config.predict_residue:
-            ensemble_mean = torch.zeros_like(ensemble_mean)
+            ensemble_mean = torch.zeros_like(sampled_images)
         sampled_images = torch.add(sampled_images, ensemble_mean)
         
         if self.config.invert_norm == True:
