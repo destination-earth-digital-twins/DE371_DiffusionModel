@@ -28,6 +28,7 @@ import numpy as np
 from pickle import dump
 from ddpm.karras_unet import KarrasUnet 
 from ddpm.UNETRPP import UNetRPP
+from ddpm.simple_diffusion import UViT, GaussianDiffusionAdapted
 # from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -148,6 +149,7 @@ def load_train_objs(config):
             config=config,
             channels=len(config.var_indexes),
             spatial_conditions=use_cond,
+            num_downsamples=config.num_downsamples,
             n_conditions=config.n_conditions,
             var_cond=config.var_conditionning,
             mean_cond=config.mean_conditionning,
@@ -168,6 +170,22 @@ def load_train_objs(config):
             mean_cond = config.mean_conditionning,
             n_labels_embeded_cond = n_lt,
         )
+    
+    elif config.model_used == "UVIT":
+        umodel=UViT(
+            dim = 64,
+            init_dim = len(config.var_indexes),
+            out_dim = len(config.var_indexes),
+            dim_mults=dim_mults,
+            config=config,
+            channels=len(config.var_indexes),
+            spatial_conditions=use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
+            n_labels_embeded_cond = n_lt,
+        )
         
     else :
         umodel = Unet(
@@ -184,7 +202,14 @@ def load_train_objs(config):
         )
 
     if config.elucidated_diffusion_sampler == False:
-        if use_cond:
+        if use_cond and config.model_used == "UVIT":
+            model = GaussianDiffusionAdapted(
+                umodel,
+                image_size=config.image_size,
+                channels = len(config.var_indexes),
+                num_sample_steps = config.ddim_timesteps,
+            )
+        elif use_cond and not config.model_used == "UVIT":
             model = ConditionedGaussianDiffusion(
                 umodel,
                 image_size=config.image_size,
@@ -224,7 +249,7 @@ def load_train_objs(config):
             n_leadtimes=n_lt
             )
         
-            
+    
     optimizer = torch.optim.Adam(
     model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
     )

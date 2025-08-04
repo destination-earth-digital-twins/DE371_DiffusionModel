@@ -64,7 +64,8 @@ class Trainer(Ddpm_base):
                 anneal_strategy="cos",
                 pct_start=0.1,
             )
-
+        elif self.config.scheduler == "RootLR":
+            self.scheduler = None
         else:
             self.scheduler = None
         self._using_scheduler = self.config.scheduler is not None
@@ -259,8 +260,14 @@ class Trainer(Ddpm_base):
                 }
                 self._log(i, log)
 
-            if self._using_scheduler and self.config.scheduler == "OneCycleLR":
-                self.scheduler.step()
+            if self._using_scheduler:
+                if self.config.scheduler == "OneCycleLR":
+                    self.scheduler.step()
+                elif self.config.scheduler == "RootLR":
+                    lr_ref=2e-4
+                    lr_iter=512
+                    iter_idx = epoch + i
+                    self.optimizer.param_groups[0]['lr'] = lr_ref / np.sqrt(max(iter_idx / lr_iter, 1))
                 
         self.logger.debug(
             f"Epoch {epoch} | Batchsize: {self.config.batch_size} | Steps: {len(self.dataloader) * epoch} | "
@@ -347,7 +354,7 @@ class Trainer(Ddpm_base):
                 "CROP": self.config.crop,
             },
         }
-        if self._using_scheduler:
+        if self._using_scheduler and self.config.scheduler in ["ReduceLROnPlateau","OneCycleLR"]:
             snapshot["SCHEDULER_STATE"] = self.scheduler.state_dict()
         torch.save(snapshot, path)
         self.logger.info(
@@ -384,6 +391,14 @@ class Trainer(Ddpm_base):
                 },
             },
         )
+
+    def learning_rate_schedule(self, cur_nimg, batch_size, ref_lr=100e-4, ref_batches=70e3, rampup_Mimg=10):
+        lr = ref_lr
+        if ref_batches > 0:
+            lr /= np.sqrt(max(cur_nimg / (ref_batches * batch_size), 1))
+        if rampup_Mimg > 0:
+            lr *= min(cur_nimg / (rampup_Mimg * 1e6), 1)
+        return lr
 
     def _init_mlflow(self):
         # OUTDATED FOR NOW.

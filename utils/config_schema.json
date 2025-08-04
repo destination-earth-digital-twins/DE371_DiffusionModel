@@ -276,7 +276,8 @@
       "type": "string",
       "enum": [
         "ReduceLROnPlateau",
-        "OneCycleLR"
+        "OneCycleLR",
+        "RootLR"
       ],
       "default": "OneCycleLR",
       "description": "Use scheduler for learning rate during training"
