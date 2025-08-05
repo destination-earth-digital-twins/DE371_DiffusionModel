@@ -202,14 +202,15 @@ def load_train_objs(config):
         )
 
     if config.elucidated_diffusion_sampler == False:
-        if use_cond and config.model_used == "UVIT":
+        if use_cond and config.model_used == "UViT":
             model = GaussianDiffusionAdapted(
                 umodel,
                 image_size=config.image_size,
                 channels = len(config.var_indexes),
-                num_sample_steps = config.ddim_timesteps,
+                timesteps = 1000,
+                sampling_timesteps = config.ddim_timesteps,
             )
-        elif use_cond and not config.model_used == "UVIT":
+        elif use_cond and not config.model_used == "UViT":
             model = ConditionedGaussianDiffusion(
                 umodel,
                 image_size=config.image_size,

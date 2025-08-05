@@ -566,7 +566,7 @@ class GaussianDiffusionAdapted(nn.Module):
         noise_d = None,
         noise_d_low = None,
         noise_d_high = None,
-        timesteps = 500,
+        timesteps = 1000,
         sampling_timesteps = None,
         ddim_sampling_eta = 0.,
         clip_sample_denoised = True,
@@ -660,10 +660,10 @@ class GaussianDiffusionAdapted(nn.Module):
     # sampling related functions
 
     @torch.no_grad()
-    def p_sample(self, x, time, time_next):
+    def p_sample(self, x, time, time_next, condition=None):
         b, *_, device = *x.shape, self.device
 
-        model_mean, model_variance, x_start = self.p_mean_variance(x = x, time = time, time_next = time_next)
+        model_mean, model_variance, x_start = self.p_mean_variance(x = x, time = time, time_next = time_next, x_self_cond = condition)
 
         noise = torch.randn_like(x) if time > 0 else 0. # no noise if t == 0
 
@@ -689,20 +689,18 @@ class GaussianDiffusionAdapted(nn.Module):
             img = torch.randn(shape, device = device)
         else :
             # Start from noised condition
-            raise NotImplementedError
             t = torch.randint(0, self.num_edition_timesteps, (batch,), device=self.device).long()
             img = self.q_sample(x_start=condition, t=t).to(self.device)
 
         imgs = [img]
 
-        x_start = None
-
         num_steps = self.num_timesteps if not self.sdedit_flag else self.num_edition_timesteps
+        steps = torch.linspace(1., 0., num_steps + 1, device = self.device)
 
-        for t in tqdm(reversed(range(0, num_steps)), desc = 'sampling loop time step', total = num_steps):
-            self_cond = x_start if self.spatial_conditions else None
-            img, x_start = self.p_sample(img, t, self_cond)
-            imgs.append(img)
+        for i in tqdm(range(self.num_sample_steps), desc = 'sampling loop time step', total = self.num_sample_steps):
+            times = steps[i]
+            times_next = steps[i + 1]
+            img = self.p_sample(img, times, times_next, condition)
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
 
@@ -818,11 +816,11 @@ class GaussianDiffusionAdapted(nn.Module):
 
         return x_noised, log_snr
 
-    def p_losses(self, x_start, times, noise = None):
+    def p_losses(self, x_start, times, noise = None, condition_tensor=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
 
         x, log_snr = self.q_sample(x_start = x_start, times = times, noise = noise)
-        model_out = self.umodel(x, log_snr)
+        model_out = self.umodel(x, log_snr, x_self_cond=condition_tensor)
 
         if self.pred_objective == 'v':
             padded_log_snr = right_pad_dims_to(x, log_snr)
