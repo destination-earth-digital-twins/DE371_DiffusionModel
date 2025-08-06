@@ -171,12 +171,11 @@ def load_train_objs(config):
             n_labels_embeded_cond = n_lt,
         )
     
-    elif config.model_used == "UVIT":
+    elif config.model_used == "UViT":
         umodel=UViT(
             dim = 64,
             init_dim = len(config.var_indexes),
             out_dim = len(config.var_indexes),
-            dim_mults=dim_mults,
             config=config,
             channels=len(config.var_indexes),
             spatial_conditions=use_cond,

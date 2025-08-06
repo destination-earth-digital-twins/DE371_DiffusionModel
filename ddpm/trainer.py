@@ -197,7 +197,7 @@ class Trainer(Ddpm_base):
                     torch.cuda.synchronize()            
                     loss = self.model(**batch)
                 scaler.scale(loss).backward()
-
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
                 scaler.step(self.optimizer)
                 
                 scaler.update()
@@ -205,6 +205,7 @@ class Trainer(Ddpm_base):
             else : 
                 loss = self.model(**batch)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
                 self.optimizer.step()
         
         return loss

@@ -452,7 +452,7 @@ class UViT(nn.Module):
         self.final_res_block = ResnetBlock(init_dim * 2, init_dim, time_emb_dim = time_dim)
         self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1)
 
-    def forward(self, x, time, x_self_cond = None, embedded_cond = None):
+    def forward(self, x, time, x_self_cond=None, embedded_cond=None, x_pos=None, patch_size=None):
 
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
@@ -780,7 +780,7 @@ class GaussianDiffusionAdapted(nn.Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, lt_cond=None):
+    def sample(self, batch_size = 16, return_all_timesteps = False, condition=None, image_pos=None, lt_cond=None):
         r"""
         Generate samples using SDEdit diffusion.
         Args:
@@ -816,6 +816,11 @@ class GaussianDiffusionAdapted(nn.Module):
 
         return x_noised, log_snr
 
+    def downscale(self, x, scaling_time, mode='bilinear'):
+        for _ in range(scaling_time):
+            x = torch.nn.functional.interpolate(x, scale_factor=0.5, mode=mode)
+        return x
+    
     def p_losses(self, x_start, times, noise = None, condition_tensor=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
 
@@ -830,21 +835,21 @@ class GaussianDiffusionAdapted(nn.Module):
         elif self.pred_objective == 'eps':
             target = noise
 
-        loss = F.mse_loss(model_out, target, reduction = 'none')
+        loss = 0.
+        for i in range(4):
+            model_out_downscaled = self.downscale(model_out, scaling_time=i)
+            target_downscaled = self.downscale(target, scaling_time=i)
+            size = model_out_downscaled.shape[-1]*model_out_downscaled.shape[-2]
+            loss_ms = F.mse_loss(model_out_downscaled, target_downscaled, reduction = 'none')
+            loss += reduce(loss_ms, 'b ... -> b', 'mean')/size
 
-        loss = reduce(loss, 'b ... -> b', 'mean')
-
-        snr = log_snr.exp()
-
-        maybe_clip_snr = snr.clone()
-        if self.min_snr_loss_weight:
-            maybe_clip_snr.clamp_(max = self.min_snr_gamma)
+        snr = log_snr.exp().clamp_(max = self.min_snr_gamma)
 
         if self.pred_objective == 'v':
-            loss_weight = maybe_clip_snr / (snr + 1)
+            loss_weight = 1 / (snr + 1)
 
         elif self.pred_objective == 'eps':
-            loss_weight = maybe_clip_snr / snr
+            loss_weight = 1
 
         return (loss * loss_weight).mean()
 

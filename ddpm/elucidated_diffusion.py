@@ -327,6 +327,11 @@ class ElucidatedDiffusion(nn.Module):
     def noise_distribution(self, batch_size):
         return (self.P_mean + self.P_std * torch.randn((batch_size,), device = self.device)).exp()
 
+    def downscale(self, x, scaling_time, mode='bilinear'):
+        for _ in range(scaling_time):
+            x = torch.nn.functional.interpolate(x, scale_factor=0.5, mode=mode)
+        return x
+    
     def forward(self, img, image_pos = None, patch_size = None, *args, **kwargs):
         #TODO change terminology from cond_2d to cond 
         
@@ -361,8 +366,19 @@ class ElucidatedDiffusion(nn.Module):
             denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
             img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
             
-            losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
-            losses = reduce(losses,'b ... -> b','mean')
+            # classic
+            # losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
+            # losses = reduce(losses,'b ... -> b','mean')
+
+            # multi scale
+            loss = 0.
+            for i in range(4):
+                model_out_downscaled = self.downscale(denoised[:,:3,:,:], scaling_time=i)
+                target_downscaled = self.downscale(img[:,:3,:,:], scaling_time=i)
+                size = model_out_downscaled.shape[-1]*model_out_downscaled.shape[-2]
+                loss_ms = F.mse_loss(model_out_downscaled, target_downscaled, reduction = 'none')
+                loss += reduce(loss_ms, 'b ... -> b', 'mean')/size
+
             losses = losses * self.loss_weight(sigmas)
 
             return losses.mean()
