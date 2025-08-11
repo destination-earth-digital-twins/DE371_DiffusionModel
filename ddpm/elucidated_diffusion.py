@@ -367,17 +367,17 @@ class ElucidatedDiffusion(nn.Module):
             img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
             
             # classic
-            # losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
-            # losses = reduce(losses,'b ... -> b','mean')
+            losses = F.mse_loss(denoised[:,:3,:,:],img[:,:3,:,:],reduction='none')
+            losses = reduce(losses,'b ... -> b','mean')
 
             # multi scale
-            loss = 0.
-            for i in range(4):
-                model_out_downscaled = self.downscale(denoised[:,:3,:,:], scaling_time=i)
-                target_downscaled = self.downscale(img[:,:3,:,:], scaling_time=i)
-                size = model_out_downscaled.shape[-1]*model_out_downscaled.shape[-2]
-                loss_ms = F.mse_loss(model_out_downscaled, target_downscaled, reduction = 'none')
-                loss += reduce(loss_ms, 'b ... -> b', 'mean')/size
+            # loss = 0.
+            # for i in range(4):
+            #     model_out_downscaled = self.downscale(denoised[:,:3,:,:], scaling_time=i)
+            #     target_downscaled = self.downscale(img[:,:3,:,:], scaling_time=i)
+            #     size = model_out_downscaled.shape[-1]*model_out_downscaled.shape[-2]
+            #     loss_ms = F.mse_loss(model_out_downscaled, target_downscaled, reduction = 'none')
+            #     loss += reduce(loss_ms, 'b ... -> b', 'mean')/size
 
             losses = losses * self.loss_weight(sigmas)
 
