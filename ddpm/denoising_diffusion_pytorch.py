@@ -526,6 +526,15 @@ def linear_beta_schedule(timesteps):
     beta_end = scale * 0.02
     return torch.linspace(beta_start, beta_end, timesteps, dtype = torch.float64)
 
+def simple_linear_beta_schedule(timesteps, clip_min=1e-9):
+    """
+    Simple Linear schedule as proposed in https://arxiv.org/pdf/2301.10972
+    """
+    # A gamma function that simply is 1-t.
+    steps = timesteps + 1
+    t = torch.linspace(0, timesteps, steps, dtype = torch.float64)
+    return torch.clip(1 - t, clip_min, 1.)
+
 def cosine_beta_schedule(timesteps, s = 0.008):
     """
     cosine schedule
@@ -571,7 +580,8 @@ class GaussianDiffusion(Module):
         min_snr_loss_weight = False, # https://arxiv.org/abs/2303.09556
         min_snr_gamma = 5,
         immiscible = False,
-        num_edition_timesteps=1000 # Num step for SDEdit setting
+        num_edition_timesteps=1000, # Num step for SDEdit setting
+        b_scale=0.1 # See https://arxiv.org/pdf/2301.10972
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -597,6 +607,8 @@ class GaussianDiffusion(Module):
             beta_schedule_fn = cosine_beta_schedule
         elif beta_schedule == 'sigmoid':
             beta_schedule_fn = sigmoid_beta_schedule
+        elif beta_schedule == 'simple_linear':
+            beta_schedule_fn = simple_linear_beta_schedule
         else:
             raise ValueError(f'unknown beta schedule {beta_schedule}')
 
@@ -608,6 +620,8 @@ class GaussianDiffusion(Module):
 
         timesteps, = betas.shape
         self.num_timesteps = int(timesteps)
+
+        self.b_scale = b_scale # As proposed in https://arxiv.org/pdf/2301.10972
 
         # SDEdit flag setting
         self.sdedit_flag = False
@@ -704,12 +718,12 @@ class GaussianDiffusion(Module):
     def predict_v(self, x_start, t, noise):
         return (
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * noise -
-            extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * x_start
+            extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * x_start * self.b_scale
         )
 
     def predict_start_from_v(self, x_t, t, v):
         return (
-            extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
+            extract(self.sqrt_alphas_cumprod, t, x_t.shape) * self.b_scale * x_t -
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
         )
 
@@ -722,7 +736,8 @@ class GaussianDiffusion(Module):
         posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def model_predictions(self, x, t, x_self_cond = None, clip_x_start = False, rederive_pred_noise = False):
+    def model_predictions(self, x, t, x_self_cond = None, clip_x_start = False, rederive_pred_noise = False, variance_normalization = True):
+        x = x / x.std(axis=(1,2,3), keepdims=True) if variance_normalization else x
         model_output = self.model(x, t, x_self_cond)
         maybe_clip = partial(torch.clamp, min = -1., max = 1.) if clip_x_start else identity
 
@@ -935,7 +950,7 @@ class GaussianDiffusion(Module):
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
-    def p_losses(self, x_start, t, noise = None, offset_noise_strength = None):
+    def p_losses(self, x_start, t, noise = None, offset_noise_strength = None, variance_normalization=True):
         b, c, h, w = x_start.shape
 
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -963,8 +978,10 @@ class GaussianDiffusion(Module):
                 x_self_cond.detach_()
 
         # predict and take gradient step
+        x = x / x.std(axis=(1,2,3), keepdims=True) if variance_normalization else x
 
         model_out = self.model(x, t, x_self_cond)
+        
 
         if self.objective == 'pred_noise':
             target = noise
@@ -1204,6 +1221,8 @@ class SwinUNETR(nn.Module):
         super().__init__()
           
         self.config = config
+        self.channels=in_channels
+
         self.out_channels = out_channels
         self.spatial_conditions = spatial_conditions
         img_size = ensure_tuple_rep(img_size, spatial_dims)

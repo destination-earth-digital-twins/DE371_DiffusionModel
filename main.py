@@ -28,7 +28,7 @@ import numpy as np
 from pickle import dump
 from ddpm.karras_unet import KarrasUnet 
 from ddpm.UNETRPP import UNetRPP
-from ddpm.simple_diffusion import UViT, GaussianDiffusionAdapted
+from ddpm.simple_diffusion import UViT
 # from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -149,7 +149,7 @@ def load_train_objs(config):
             config=config,
             channels=len(config.var_indexes),
             spatial_conditions=use_cond,
-            num_downsamples=config.num_downsamples,
+            num_downsamples=3,
             n_conditions=config.n_conditions,
             var_cond=config.var_conditionning,
             mean_cond=config.mean_conditionning,
@@ -201,15 +201,7 @@ def load_train_objs(config):
         )
 
     if config.elucidated_diffusion_sampler == False:
-        if use_cond and config.model_used == "UViT":
-            model = GaussianDiffusionAdapted(
-                umodel,
-                image_size=config.image_size,
-                channels = len(config.var_indexes),
-                timesteps = 1000,
-                sampling_timesteps = config.ddim_timesteps,
-            )
-        elif use_cond and not config.model_used == "UViT":
+        if use_cond :
             model = ConditionedGaussianDiffusion(
                 umodel,
                 image_size=config.image_size,
@@ -217,6 +209,7 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
+                b_scale=config.b_scale
             )
         else:
             model = GaussianDiffusion(
@@ -226,7 +219,8 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
-                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000,
+                b_scale=config.b_scale
             )
     else:
         model = ElucidatedDiffusion(

@@ -339,7 +339,8 @@
       "type": "string",
       "enum": [
         "cosine",
-        "linear"
+        "linear",
+        "simple_linear"
       ],
       "default": "linear",
       "description": "Type of beta schedule (cosine or linear)"

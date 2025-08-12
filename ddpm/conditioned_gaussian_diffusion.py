@@ -1,5 +1,5 @@
 import torch
-from denoising_diffusion_pytorch import GaussianDiffusion
+from ddpm.denoising_diffusion_pytorch import GaussianDiffusion
 from denoising_diffusion_pytorch.denoising_diffusion_pytorch import (
     default,
     extract,
@@ -137,6 +137,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         noise=None,
         offset_noise_strength=None,
         condition_tensor=None,
+        variance_normalization=True
     ):
         """
         Calculate pixel-wise loss for conditioned diffusion.
@@ -163,6 +164,8 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
 
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
         x_self_cond = condition_tensor
+
+        x = x / x.std(axis=(1,2,3), keepdims=True) if variance_normalization else x
 
         model_out = self.model(x, t, x_self_cond)
 
