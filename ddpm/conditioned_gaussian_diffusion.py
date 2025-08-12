@@ -21,7 +21,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         super().__init__(*args, **kwargs)
 
     @torch.no_grad()
-    def sample(self, batch_size, return_all_timesteps=False, condition=None):
+    def sample(self, batch_size, return_all_timesteps=False, condition=None, image_pos=None, lt_cond=None):
         """
         Generate samples using conditioned diffusion.
         Args:
