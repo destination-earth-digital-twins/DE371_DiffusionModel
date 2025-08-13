@@ -2,7 +2,7 @@ import math
 import copy
 import os
 from pathlib import Path
-from random import random
+import random
 from functools import partial
 from collections import namedtuple
 from multiprocessing import cpu_count
@@ -39,6 +39,7 @@ from monai.networks.blocks import PatchEmbed, UnetOutBlock, UnetrBasicBlock, Une
 from monai.networks.layers import DropPath, trunc_normal_
 from monai.utils import ensure_tuple_rep, look_up_option, optional_import
 from monai.utils.deprecate_utils import deprecated_arg
+from utils.utils import mirror_fill
 
 rank = int(os.environ.get("LOCAL_RANK",0))
 
@@ -532,7 +533,7 @@ def simple_linear_beta_schedule(timesteps, clip_min=1e-9):
     """
     # A gamma function that simply is 1-t.
     steps = timesteps + 1
-    t = torch.linspace(0, timesteps, steps, dtype = torch.float64)
+    t = torch.linspace(0, timesteps, steps, dtype = torch.float64) / timesteps
     return torch.clip(1 - t, clip_min, 1.)
 
 def cosine_beta_schedule(timesteps, s = 0.008):
@@ -567,6 +568,7 @@ class GaussianDiffusion(Module):
     def __init__(
         self,
         model,
+        config,
         *,
         image_size,
         timesteps = 1000,
@@ -588,7 +590,7 @@ class GaussianDiffusion(Module):
         assert not hasattr(model, 'random_or_learned_sinusoidal_cond') or not model.random_or_learned_sinusoidal_cond
 
         self.model = model
-
+        self.config = config
         self.channels = self.model.channels
         self.spatial_conditions = self.model.spatial_conditions
 
@@ -699,9 +701,36 @@ class GaussianDiffusion(Module):
         self.normalize = normalize_to_neg_one_to_one if auto_normalize else identity
         self.unnormalize = unnormalize_to_zero_to_one if auto_normalize else identity
 
+        if self.config.training_configuration == "mirror":
+            # init data for mirroring   
+            self.init_mirror_filling()
+
     @property
     def device(self):
         return self.betas.device
+
+    def init_mirror_filling(self):
+        """ 
+        That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
+        """
+        data_path = self.config.data_dir
+
+        #choose a random file in data folder
+        files = [f for f in os.listdir(data_path)]
+        file_name = random.choice(files)
+        file = os.path.join(data_path,file_name)
+
+        img = np.load(file)
+        img=torch.from_numpy(img).to("cuda")
+
+        img = img.unsqueeze(0)
+        img = img.permute((0,3,1,2))
+        crop = self.config.crop
+        img = img[:,:,crop[0]:crop[1],crop[2]:crop[3]]
+        mask = (torch.abs(img) < 1000)
+
+        self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
+
 
     def predict_start_from_noise(self, x_t, t, noise):
         return (
@@ -718,12 +747,12 @@ class GaussianDiffusion(Module):
     def predict_v(self, x_start, t, noise):
         return (
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * noise -
-            extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * x_start * self.b_scale
+            extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * x_start
         )
 
     def predict_start_from_v(self, x_t, t, v):
         return (
-            extract(self.sqrt_alphas_cumprod, t, x_t.shape) * self.b_scale * x_t -
+            extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
         )
 
@@ -946,7 +975,7 @@ class GaussianDiffusion(Module):
             noise = noise[assign]
 
         return (
-            extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
+            extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start * self.b_scale +
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
@@ -972,7 +1001,7 @@ class GaussianDiffusion(Module):
         # this technique will slow down training by 25%, but seems to lower FID significantly
 
         x_self_cond = None
-        if self.spatial_conditions and random() < 0.5:
+        if self.spatial_conditions and random.random() < 0.5:
             with torch.no_grad():
                 x_self_cond = self.model_predictions(x, t).pred_x_start
                 x_self_cond.detach_()
@@ -981,7 +1010,6 @@ class GaussianDiffusion(Module):
         x = x / x.std(axis=(1,2,3), keepdims=True) if variance_normalization else x
 
         model_out = self.model(x, t, x_self_cond)
-        
 
         if self.objective == 'pred_noise':
             target = noise

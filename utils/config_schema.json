@@ -340,7 +340,8 @@
       "enum": [
         "cosine",
         "linear",
-        "simple_linear"
+        "simple_linear",
+        "sigmoid"
       ],
       "default": "linear",
       "description": "Type of beta schedule (cosine or linear)"
