@@ -137,7 +137,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         noise=None,
         offset_noise_strength=None,
         condition_tensor=None,
-        variance_normalization=True
+        variance_normalization=False
     ):
         """
         Calculate pixel-wise loss for conditioned diffusion.

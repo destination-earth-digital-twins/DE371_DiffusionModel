@@ -1028,11 +1028,33 @@ class GaussianDiffusion(Module):
         return loss.mean()
 
     def forward(self, img, *args, **kwargs):
-        b, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
-        assert h == img_size[0] and w == img_size[1], f'height and width of image must be {img_size}'
+        mask = (torch.abs(img) < 1000) #need modification when adding variables
+        b, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+            
+        assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'
+        assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
+        assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
+        
+        if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
+            
+            img_filled = img.masked_fill(~mask,0.5) 
+            img = self.normalize(img_filled) 
+    
+        elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
+            
+            img_filled = img.clone().to(img.device)
+            
+            for batch in range(self.config.batch_size):
+                
+                #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+                img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+                img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                img = self.normalize(img_filled) #filled img normalized
+                
+            
+        else :
+            img = self.normalize(img)
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
-
-        img = self.normalize(img)
         return self.p_losses(img, t, *args, **kwargs)
 
 
