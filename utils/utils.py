@@ -170,8 +170,3 @@ def plot_loss_during_training(losses : list, save_path : str, title : str):
     plt.title(title)
     plt.savefig(save_path)
     plt.close()
-    
-
-losses = [3,2,1,0,1,2,3,1,2]
-plot_loss_during_training(losses,"ici.png","loss durant l'entrainement")
-    

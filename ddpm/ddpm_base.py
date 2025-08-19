@@ -233,7 +233,7 @@ class Ddpm_base:
             var_id=dict_var[var]
             ax = axes[id]
             im=ax.imshow(img[id],cmap = colormap[id],origin='lower')
-            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04)
+            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04, shrink=0.21)
             ax.set_title(f'{var}',fontsize=12)
             ax.axis('off')
        
