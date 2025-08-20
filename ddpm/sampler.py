@@ -184,24 +184,6 @@ class Sampler(Ddpm_base):
                     # filename = "sampling_noise_{date}_{lt}.pt" .format(date = d, lt = lt)
                     # sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
                     # torch.save(self.sampling_noise,sampling_noise_path)
-                
-                # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
-                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-                if self.config.n_var != self.config.n_var_in_dataset:
-                        # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
-                        zero_pad = torch.zeros(conditioning_sets.shape[1], self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
-                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
-                        ensemble = torch.cat([
-                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), forward_noise=self.forward_noise, sampling_noise=self.sampling_noise)), dim=1).unsqueeze(0) # concatenate an empty rr channel
-                            for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-                else:
-                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
-                        ensemble = torch.cat([
-                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), forward_noise=self.forward_noise, sampling_noise=self.sampling_noise).unsqueeze(0)
-                            for set in conditioning_sets
-                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-
 
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
