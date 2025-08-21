@@ -45,6 +45,16 @@
       "default": false,
       "description": "Enable/disable plotting during training"
     },
+    "grand_ensemble": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable to sample grand_ensemble way"
+    },
+    "N_draws_grand_ensemble": {
+      "type": "integer",
+      "default": 50,
+      "description": "Number of draw for grand_ensemble enrichement"
+    },
     "sampling_mode": {
       "type": "string",
       "enum": [

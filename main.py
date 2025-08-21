@@ -7,21 +7,22 @@ import sys
 import time
 import warnings
 from multiprocessing import cpu_count
-
+import numpy as np
 import torch
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
+from ddpm.normalize import var_dict, SpecialNormalize
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
 from ddpm.denoising_diffusion_pytorch import Unet, GaussianDiffusion
-from ddpm.sampler import Sampler
+from ddpm.sampler import Sampler, SamplerGrandEnsemble
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+from utils.utils import initsmall
 
 warnings.filterwarnings(
     "ignore",
@@ -84,7 +85,7 @@ def ddp_setup():
         return
     # Initialize the process group for DDP
     init_process_group(
-        "nccl" if dist.is_nccl_available() else "gloo",
+        "gloo", #"nccl" if dist.is_nccl_available() else "gloo",
         world_size=torch.cuda.device_count(),
     )
     torch.cuda.set_device(get_rank())
@@ -229,6 +230,38 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
     return train_dataloader, val_dataloader
 
 
+def prepare_dataloader_GrandEnsemble(config, path, csv_file, num_workers=None):
+    """
+    Prepare the data loaders.
+    Args:
+        config (Namespace): Configuration parameters.
+    Returns:
+        DataLoader: Data loader.
+    """
+    # Load the dataset and create a DataLoader with distributed sampling if using multiple GPUs
+    # different preprocessing strategies if we have to deal with rain rates ("rr")
+    
+    set = dataSet_Handler.GrandEnsembleDataset(config, path, csv_file)
+    
+    dataloader = DataLoader(
+        set,
+        batch_size=config.batch_size,
+        pin_memory=True,
+        persistent_workers=True if num_workers is None else False,
+        # non_blocking=True,
+        shuffle=not torch.cuda.device_count() >= 2,
+        num_workers=cpu_count() if num_workers is None else num_workers,
+        sampler=(
+            DistributedSampler(
+                set, rank=get_rank_num(), shuffle=False, drop_last=False
+            )
+            if torch.cuda.device_count() >= 2
+            else None
+        )
+    )
+    return dataloader
+
+
 def main_train(config):
     """
     Main function for training.
@@ -317,7 +350,25 @@ def main_sample(config):
     barrier() # Wait for every GPU to finish their sampling
     if is_main_gpu():
         logger.info(f"Sampling done")
-        
+
+def main_sample_grand_ensemble(config):
+    """
+    Main function for testing.
+    Args:
+        config (Namespace): Configuration parameters.
+    """
+    # Load the model and start the sampling process
+    model, _ = load_train_objs(config)
+    sample_data = prepare_dataloader_GrandEnsemble(config, path=config.data_dir, csv_file=config.csv_file, num_workers=0)
+    inversion_tf = sample_data.dataset.inversion_transforms
+    dataloader = sample_data if config.sampling_mode!="simple" else None
+    sampler = SamplerGrandEnsemble(model, config, dataloader=dataloader, inversion_transforms=inversion_tf)
+
+    if is_main_gpu():
+        logger.info(f"Sampling of {config.n_sampling_conditioning_sets * 16} members : file_format = '4var_fake_ensemble_date_leadtime.npy'")
+    file_format = "fake_grand_ensemble_{date}_{leadtime}_{draw_idx}.npy"
+    sampler.sample(filename_format=file_format)
+
 def convert_to_type(value, type_list):
     if isinstance(type_list, list):
         if isinstance(type_list[0], int):
@@ -388,7 +439,10 @@ if __name__ == "__main__":
     if config.mode == "Train":
         main_train(config)
     elif config.mode != "Train":
-        main_sample(config)
+        if not config.grand_ensemble:
+            main_sample(config)
+        else :
+            main_sample_grand_ensemble(config)
 
     # Clean up distributed processes if initialized
     if dist.is_initialized():

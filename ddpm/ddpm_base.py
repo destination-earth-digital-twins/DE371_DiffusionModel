@@ -151,9 +151,9 @@ class Ddpm_base:
         else:
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond)
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
-        if not self.config.predict_residue:
+        if not self.config.predict_residue or ensemble_mean is not None:
             ensemble_mean = torch.zeros_like(ensemble_mean)
-        sampled_images = torch.add(sampled_images, ensemble_mean)
+            sampled_images = torch.add(sampled_images, ensemble_mean)
         
         if self.config.invert_norm == True:
             detransform_func = self.transforms_func()

@@ -105,14 +105,14 @@ def online_plot(
           var_names=['u','v','t2m'], 
           dict_var={'u': 0, 'v': 1, 't2m': 2},
           colormap_var=['viridis','viridis','coolwarm'],
-          clim_global=[(-5,5),(-5,5),(270,300)],
+          clim_global=None,
           axis_title_global=''
           ):
 
         fig, ax = plt.subplots(figsize=(15,5*len(var_names)), nrows=3, ncols=len(var_names))
         for id, var in enumerate(var_names):
             var_id = dict_var[var]
-            if not clim_global :
+            if clim_global is None :
                 vmin = np.min([np.min(packsample[:,var_id,crop[0]:crop[1],crop[2]:crop[3]])])
                 vmax = np.min([np.max(packsample[:,var_id,crop[0]:crop[1],crop[2]:crop[3]])])
                 clim = (vmin, vmax)
@@ -128,7 +128,7 @@ def online_plot(
 
             diff = packsample[mem_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]] - pert_sample[mem_pert_idx,var_id,crop[0]:crop[1],crop[2]:crop[3]]
             ax[2][id].set_title(f"diff {axis_title_global}{var}")
-            im = ax[2][id].imshow(diff, origin="lower", cmap="RdYlGn", clim=(-2,2))
+            im = ax[2][id].imshow(diff, origin="lower", cmap="RdYlGn")
             fig.colorbar(im, ax=ax[2][id], shrink=0.5)
 
         fig.suptitle(figtitle)

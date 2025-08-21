@@ -152,7 +152,7 @@ class ISDataset(Dataset):
             condition_tensor = torch.cat([condition_tensor, orography], dim=1)
 
         if self.config.sampling_mode == 'conditioned_sdedit':
-            sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            sample = sample.expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
         
         sample_id = re.search(r"\d+", file_name).group()
 
@@ -259,3 +259,146 @@ class CustomDistributedSampler(Sampler):
 
     def __len__(self):
         return self.num_samples
+
+
+class GrandEnsembleDataset(Dataset):
+    def __init__(self, config, path, csv_file):
+        """
+        Initialize the GrandEnsembleDataset.
+        Args:
+            config: Configuration settings.
+            path (str): Directory path containing data.
+            csv_file (str): CSV file containing sample labels (file names, dates, lead times, members id) 
+        """
+        self.data_dir = path
+        self.mb_diles_dir = path + 'mb_files/'
+        self.labels = pd.read_csv(csv_file, index_col=False)
+        self.config = config
+
+        if "Unnamed: 0" in self.labels:
+            self.labels = self.labels.drop("Unnamed: 0", axis=1)
+
+        self.CI = config.crop
+        self.config.VI = [var_dict[var] for var in config.var_indexes]
+
+        # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
+        # if training : Prepare only 1 conditioning set
+        self.n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
+
+        # shape of the images 
+        self.height_dim, self.width_dim = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
+
+        # Add positional encoding
+        self.transform = transforms.Compose(
+
+            [
+                transforms.ToTensor(),
+                SpecialNormalize(self.config),
+            ]
+        )
+        
+        self.labels = self.labels.reset_index(drop=True)
+
+    def inversion_transforms(self):
+        """
+        Returns function to revert normalisation and special transforms for generated samples.
+        """
+        return SpecialNormalize(self.config).denorm
+
+    def __len__(self):
+        """
+        Get the length of the dataset.
+        Returns:
+            int: Number of samples in the dataset.
+        """
+        return len(self.config.leadtimes)*self.config.N_draws_grand_ensemble
+
+    def __getitem__(self, idx):
+        """
+        Get a sample from the dataset.
+        Args:
+            idx (int): Index of the sample.
+        Returns:
+            dict: Dictionary containing 'img' (sample), 'img_id' (sample ID), and 'condition' (conditional used for training), and 'condition_sample' (condition used for sampling).
+        """
+        ensemble_file_name = self.labels.iloc[idx, 1]
+        mb_file_name = self.labels.iloc[idx, 2]
+        print(mb_file_name)
+        sample = self.file_to_torch(ensemble_file_name, mb_file_name) # target
+
+        mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
+        var_cond = self.config.var_conditioning # Use the var as a condition ?
+
+        # Build the tensors for the sampling and the training
+        condition_tensor = self.get_conditioning_members(sample)
+
+        # Optional configs based on the ensemble mean and variance
+        if self.config.predict_residue and not self.config.learn_residue:
+            raise Exception(
+                f"The model must learn from the residue of the conditioning members to predict the residue"
+            )
+        ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
+        if mean_cond or var_cond or self.config.learn_residue:
+            ensemble_mean_tensor = np.expand_dims(sample.mean(axis=0),0)
+            # Using the mean and/or the var of the ensemble as additionnal conditions
+            if mean_cond:
+                mean = ensemble_mean_tensor.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, mean], dim=1)
+            if var_cond:
+                var = np.expand_dims(sample.std(axis=0),0).unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+                condition_tensor = torch.cat([condition_tensor, var], dim=1)
+
+        if self.config.sampling_mode == 'conditioned_sdedit':
+            # Checkout dimension before and after this step to maje sure the members are reproduced correctly ! 
+            sample = sample.expand_as(torch.zeros(self.n_conditioning_sets, 16, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+        
+        date = str(pd.to_datetime(self.labels.iloc[idx,3]).strftime('%Y-%m-%d'))
+        lt = self.labels.iloc[idx,4]
+        draw_idx = self.labels.iloc[idx,5]
+
+        return {"id_in_csv": idx, "img": sample, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "draw_idx":draw_idx, "leadtime":lt, "date":date}
+
+    def get_conditioning_members(self, sample):
+        """
+            Loads the conditioning members for the training and the sampling, stacks them
+            and returns the result
+
+            Args:
+                sample (numpy.array)
+
+            Returns:
+                torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.height_dim, self.width_dim] 
+        """
+
+        if self.config.n_conditions > self.config.n_members_dataset:
+            raise ValueError(
+                f"The number of conditioning members must not exceed the number of members in the dataset. Got {self.config.n_conditions} conditioning members and {self.config.n_members_dataset} members in the dataset."
+            )
+        condition = np.concatenate([np.random.randint(subsample, self.config.n_conditions).reshape(self.config.n_conditions*self.config.n_var, self.height_dim, self.width_dim)[np.newaxis,:] for subsample in sample], axis=0)
+        return torch.from_numpy(condition)
+    
+        
+    def file_to_torch(self, ensemble_file_name, mb_file_name):
+        """
+        Convert a file to a torch tensor.
+        Args:
+            ensemble_file_name (str or list): Name of the file or list of ensemble file names.
+            mb_file_name (str or list) : Name of the file or list of member file names.
+        Returns:
+            torch.Tensor: Torch tensor representing the sample.
+        """
+        if type(ensemble_file_name) == list:
+            ensemble_file_name = ensemble_file_name[0]
+        sample_path = os.path.join(self.data_dir, ensemble_file_name)
+        mb_path = os.path.join(self.mb_diles_dir, mb_file_name)
+        mb_list = list(np.load(mb_path))
+        sample = np.float32(np.load(sample_path))
+        sample = sample[mb_list]
+        
+        sample = sample[
+            :, self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+        ]
+        
+        sample = torch.cat([self.transform(single_sample.transpose((1, 2, 0))).unsqueeze(0) for single_sample in sample], dim=0)
+
+        return sample
