@@ -53,7 +53,7 @@ class ISDataset(Dataset):
         self.var_dict_subset = {var: new_idx for new_idx, var_idx in enumerate(self.config.VI)
         for var, full_idx in self.var_dict.items()
         if var_idx == full_idx
-    }
+        }
         # if sampling : Proceed sampling n_sampling_conditioning_sets times, -> the final ensemble contains 16*n_sampling_conditioning_sets members
         # if training : Prepare only 1 conditioning set
         self.n_conditioning_sets = self.config.n_sampling_conditioning_sets if self.config.mode == "Sample" else self.config.n_training_conditioning_sets
@@ -136,7 +136,7 @@ class ISDataset(Dataset):
             )
         ensemble_mean_tensor = torch.zeros(self.config.n_var, self.height_dim, self.width_dim) # 0 tensor -> member = member + 0 when sampling
         if mean_cond or var_cond or self.config.learn_residue:
-            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy")))
+            mean_var_file = torch.from_numpy(np.load(os.path.join(mean_var_dir, date + "_" + str(lt) + ".npy"))[:, :, self.config.crop[0]:self.config.crop[1], self.config.crop[2]:self.config.crop[3]])
             if self.config.n_var == 3:
                 mean_var_file = mean_var_file[:, 1:, :, :] # Pop the rr channel
             # Learn and predict the residue of the members (members - ensemble mean) instead of the members

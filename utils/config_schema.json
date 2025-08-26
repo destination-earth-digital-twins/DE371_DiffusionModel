@@ -243,6 +243,16 @@
       "default": true,
       "description": "Invert normalization of input image samples"
     },
+    "weighted_loss": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use a weighted loss for the training"
+    },
+    "var_weights": {
+      "type": "array",
+      "default": [],
+      "description": "Weights to apply to the weighted loss"
+    },
     "stat_folder": {
       "type": [
         "string",
