@@ -175,7 +175,14 @@ class ElucidatedDiffusion(nn.Module):
             
             # images is noise at the beginning
             init_sigma = sigmas[0]
-            images = init_sigma * torch.randn(shape, device = self.device)
+            if not self.fixed_forward_noise:
+                noise = torch.randn(shape, device = self.device)
+            else :
+                noise = forward_noise
+                if forward_noise is None:
+                    raise ValueError('Fixed forward noise mode but forward_noise is None!')
+                
+            images = init_sigma * noise
 
         
         else :
