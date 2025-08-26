@@ -599,7 +599,7 @@ class GaussianDiffusion(Module):
         # SDEdit flag setting
         self.sdedit_flag = False
         self.num_edition_timesteps = int(num_edition_timesteps)
-        if num_edition_timesteps < timesteps - 1 :
+        if num_edition_timesteps < timesteps -1 :
             self.sdedit_flag = True
             print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < timesteps : {timesteps} ; SDEdit mode activated')
 
