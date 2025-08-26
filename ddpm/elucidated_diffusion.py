@@ -157,7 +157,6 @@ class ElucidatedDiffusion(nn.Module):
             sigma = torch.full((batch,), sigma, device = device)
 
         padded_sigma = rearrange(sigma, 'b -> b 1 1 1')
-
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
