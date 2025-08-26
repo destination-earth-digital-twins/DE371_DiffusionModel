@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plotter3D_3var(img,save_path,title):
+def plotter3D_3var(img,save_path,title = None):
     """
     Plots 3 (for each variable) images, from img of shape(batch_size,variables,latitude,longitude) and saves it 
 
@@ -28,18 +28,18 @@ def plotter3D_3var(img,save_path,title):
         if i==0:
             im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
             ax.set_title(f"u : vent zonal", fontsize=12)
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,shrink=0.21)
             ax.axis("off")
             
         elif i==1 : 
             
             im = ax.imshow(img_copy[i].detach().cpu().numpy(), cmap='viridis', origin='lower')
             ax.set_title('v : vent méridional',fontsize=12)
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,shrink=0.21)
             ax.axis("off")
         else :
             im = ax.imshow(img_copy[2].detach().cpu().numpy(), cmap='coolwarm', origin='lower')
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,shrink=0.21)
             ax.set_title("t2m", fontsize=12)    
             ax.axis("off")
 

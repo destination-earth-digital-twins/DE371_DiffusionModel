@@ -707,7 +707,6 @@ class UNetRPPEncoder(nn.Module):
 
     def forward_features(self, x: Tensor, time_emb=None):
         hidden_states = []
-
         x = self.downsample_layers[0](x)
         
         for i,block in enumerate(self.stages[0]):
@@ -1219,7 +1218,8 @@ class UNetRPP(BaseModel, AutoPaddingModel):
 
     def forward(self, x: Tensor,time, x_self_cond = None, embedded_cond = None, x_pos = None, *args, **kwargs) :
         x, old_shape = self._maybe_padding(data_tensor=x)
-        
+        if self.config.mode=="Sample" and self.config.orography_conditioning:
+            self.spatial_conditions=True
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))                
             x = torch.cat((x_self_cond, x), dim = 1)

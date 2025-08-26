@@ -157,7 +157,6 @@ class ElucidatedDiffusion(nn.Module):
             sigma = torch.full((batch,), sigma, device = device)
 
         padded_sigma = rearrange(sigma, 'b -> b 1 1 1')
-
         net_out = self.model(
             self.c_in(padded_sigma) * noised_images,
             self.c_noise(sigma),
@@ -428,9 +427,9 @@ class ElucidatedDiffusion(nn.Module):
                     
                     #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
                     img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+                    
                     img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
                     img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
-                    
                 sigmas = self.noise_distribution(batch_size)
                 padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
                 noise = torch.randn_like(img)
