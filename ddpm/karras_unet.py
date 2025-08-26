@@ -602,8 +602,6 @@ class KarrasUnet(Module):
         x_self_cond = None, 
         embedded_cond = None,
         class_labels = None,
-        x_pos=None,
-        patch_size=None
     ):
         # validate image shape
 
@@ -616,11 +614,6 @@ class KarrasUnet(Module):
 
         else:
             assert not exists(x_self_cond)
-        
-        if self.config.patch_diffusion:
-            device = x.device
-            x_pos = x_pos.to(device)
-            x = torch.cat((x,x_pos),dim=1)
         
         # time condition
 

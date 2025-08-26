@@ -9,8 +9,6 @@ from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 from utils.plotter import online_plot, online_plot_var, online_plot_mean, online_plot_quantiles
 from datetime import datetime
-import matplotlib.pyplot as plt
-rank = int(os.environ.get("LOCAL_RANK",0))
 
 
 class Sampler(Ddpm_base):
@@ -89,25 +87,23 @@ class Sampler(Ddpm_base):
         x, y  = self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]
 
         if self.config.sampling_mode == "simple":
-            # To be removed
-            print("self.config.n_samples = ", self.config.n_samples)
+            #Used on big domain to generate unconditional samples
             if is_main_gpu():
                 self.logger.info(
-                    #f"Sampling {self.config.n_sample * (torch.cuda.device_count() if torch.cuda.is_available() else 1)} images...")
                     f"Sampling {self.config.n_samples} images...")
             with tqdm(total=self.config.n_samples, desc="Sampling ", unit="batch",
                       disable= not is_main_gpu()) as pbar:
                 b = 0
                 i = 0
                 while b < self.config.n_samples:
-                    batch_size = min(self.config.n_samples - b, self.config.batch_size) ##mettre un chrono time.time
+                    batch_size = min(self.config.n_samples - b, self.config.batch_size) 
                     samples = super()._sample_batch(nb_img=batch_size)
                     
-                    if self.config.n_var != self.config.n_var_in_dataset:
-                        print("ok ici")
+                    if self.config.n_var != self.config.n_var_in_dataset: #create and concatenate an empty (rr) channel
+                        
                         zero_pad = torch.zeros(batch_size, self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
-                        print("zero_pad", zero_pad.shape)
-                        ensemble = torch.cat((zero_pad, samples), dim=1).cpu().numpy() # concatenate an empty rr channel
+                        
+                        ensemble = torch.cat((zero_pad, samples), dim=1).cpu().numpy() 
                         
                     filename = filename_format.format(sample_index=str(i))
                     save_path = os.path.join(self.config.output_dir ,self.config.run_name, "samples", filename)
@@ -115,8 +111,8 @@ class Sampler(Ddpm_base):
                     i += 1
                     b += 1
                     pbar.update(1)
-                    print("shape de samples :", ensemble.shape)
                     print(f"itération {i}/{self.config.n_samples}")
+                    
         elif "conditioned" in self.config.sampling_mode:
             if is_main_gpu():
                 self.logger.info(

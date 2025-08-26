@@ -912,8 +912,6 @@ class UNetRUpBlock(nn.Module):
         out = self.transp_conv(inp)
         out = out + skip if skip is not None else out
         for i,block in enumerate(self.decoder_block):   
-            # if rank==0:
-            #     print(f"dans UNetUP : block {i}")
             out = block(out,time_emb)
         return out
 
@@ -1054,8 +1052,6 @@ class UNetRPP(BaseModel, AutoPaddingModel):
                 self.input_shape[0] // self.dim_divider,
                 self.input_shape[1] // self.dim_divider,
             )
-            if rank ==0:
-                print("self.feat_size ", self.feat_size)
         else:
             self.feat_size = (
                 self.input_shape[0] // self.dim_divider,
@@ -1216,7 +1212,7 @@ class UNetRPP(BaseModel, AutoPaddingModel):
 
         return x
 
-    def forward(self, x: Tensor,time, x_self_cond = None, embedded_cond = None, x_pos = None, *args, **kwargs) :
+    def forward(self, x: Tensor,time, x_self_cond = None, embedded_cond = None, *args, **kwargs) :
         x, old_shape = self._maybe_padding(data_tensor=x)
         if self.config.mode=="Sample" and self.config.orography_conditioning:
             self.spatial_conditions=True
@@ -1224,11 +1220,6 @@ class UNetRPP(BaseModel, AutoPaddingModel):
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))                
             x = torch.cat((x_self_cond, x), dim = 1)
         
-        if self.config.patch_diffusion:
-            device = x.device
-            x_pos = x_pos.to(device)
-            x = torch.cat((x,x_pos),dim=1)
-
         t = self.time_mlp(time)   
         
         ################## Embedded condition

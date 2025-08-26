@@ -56,6 +56,61 @@
       "default": "simple",
       "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
     },
+    "trainng_configuration":{
+      "type": "string",
+      "enum": [
+        "mirror",
+        "rectangular",
+        "zero"
+      ],
+      "default": "rectangular",
+      "description": "way to fill the invalid datas when working with the big domain, rectangular configuration means no filling"
+    },
+    "domain_type":{
+      "type": "string",
+      "enum": [
+        "small",
+        "big"
+      ],
+      "default": "small",
+      "description": "Type of domain used : small domain or big domain"
+    },
+    "compile_model":{
+      "type": "boolean",
+      "default": false,
+      "description": "Compile the model, to accelerate training with U-Net architectures, or not"
+    },
+    "nb_layers":{
+      "type": "integer",
+      "default": 4,
+      "description": "Number of blocks in the U-Net architecture"
+    },
+    "transformers_num_stages":{
+      "type": "integer",
+      "default": 4,
+      "description": "Number of stages in the swinunetr architecture"
+    },
+    "transformers_depths":{
+      "type": "list",
+      "default": [2,2,2,2],
+      "description": "Depth/number of block in each stage in the swinunetr architecture"
+    },
+    "transformers_num_heads":{
+      "type": "list",
+      "default": [3,6,12,24],
+      "description": "Number of head attention of each stage in the swinunetr architecture"
+    },
+    "model_used":{
+      "type": "string",
+      "enum": ["unet",
+      "swinunetr",
+      "karras_unet",
+      "UViT",
+      "UNETRPP"
+    ],
+      "default": "unet",
+      "description": "Type of model used when training and sampling"
+    },
     "elucidated_diffusion_sampler": {
       "type": "boolean",
       "default": false,
@@ -319,6 +374,11 @@
         0.99
       ],
       "description": "Betas for the Adam optimizer"
+    },
+    "use_AMP": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable mixed precision during training"
     },
     "epochs": {
       "type": "integer",

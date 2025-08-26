@@ -11,7 +11,6 @@ from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 from ddpm.ddpm_base import Ddpm_base
-from ddpm.patch_loss import Patch_EDMLoss
 from utils.distributed import is_main_gpu, synchronize
 import mlflow
 from utils import plotter_inconditionnal
@@ -20,8 +19,6 @@ import torch.amp
 from ddpm import normalize
 from pickle import dump
 from utils.utils import plot_loss_during_training
-
-rank = int(os.environ.get("LOCAL_RANK",0))
 
 class Trainer(Ddpm_base):
 
@@ -90,92 +87,7 @@ class Trainer(Ddpm_base):
             else:
                 # Move other keys to GPU
                 batch[key] = batch[key].to(self.gpu_id)
-        return batch        
-        
-    def patchify(self, images, patch_size, padding=None): #TODO : comment the function
-        """Function that selects a random patch of "patch_size" in the images "images"
-        and returns the patch, and the normalized position of each of its pixels
-
-        Args:
-            images (tensor): tensor of size (B,C,H,W), images
-            patch_size (int): the patch size that will be selected (squared patch) 
-            padding (_type_, optional): add padding  
-
-        Returns:
-            padded : tensor of shape (B,)
-            image_pos : tensor of shape (B,) and contains the positions of each pixel of the patch
-        """
-        
-        device = images.device
-        batch_size = images.size(0)
-        resolution = self.config.image_size
-
-        if padding is not None:
-            padded = torch.zeros((images.size(0), images.size(1), images.size(2) + padding * 2,
-                                  images.size(3) + padding * 2), dtype=images.dtype, device=device)
-            padded[:, :, padding:-padding, padding:-padding] = images
-        else:
-            padded = images
-
-        h, w = padded.size(2), padded.size(3)
-        th, tw = patch_size, patch_size
-
-        if w == tw and h == th:
-            i = torch.zeros((batch_size,), device=device).long()
-            j = torch.zeros((batch_size,), device=device).long()
-        else:
-            i = torch.randint(0, h - th + 1, (batch_size,), device=device)
-            j = torch.randint(0, w - tw + 1, (batch_size,), device=device)
-
-        rows = torch.arange(th, dtype=torch.long, device=device) + i[:, None]
-        columns = torch.arange(tw, dtype=torch.long, device=device) + j[:, None]
-        padded = padded.permute(1, 0, 2, 3)
-        padded = padded[:, torch.arange(batch_size)[:, None, None], rows[:, torch.arange(th)[:, None]],
-                 columns[:, None]]
-        padded = padded.permute(1, 0, 2, 3)
-
-        x_pos = torch.arange(tw, dtype=torch.long, device=device).unsqueeze(0).repeat(th, 1).unsqueeze(0).unsqueeze(0).repeat(batch_size, 1, 1, 1)
-        y_pos = torch.arange(th, dtype=torch.long, device=device).unsqueeze(1).repeat(1, tw).unsqueeze(0).unsqueeze(0).repeat(batch_size, 1, 1, 1)
-        x_pos = x_pos + j.view(-1, 1, 1, 1)
-        y_pos = y_pos + i.view(-1, 1, 1, 1)
-        x_pos = (x_pos / (resolution[1] - 1) - 0.5) * 2.
-        y_pos = (y_pos / (resolution[0] - 1) - 0.5) * 2.
-        images_pos = torch.cat((x_pos, y_pos), dim=1)
-
-        return padded, images_pos
-            
-    
-    def _combine_batch_dict(self, batch : dict, padding = None):
-        """Function to use when patching the images, to concatenate with the input batch. 
-        Creates a dict with the patch_size of the selected patch and with the positions of its pixels
-        Args:
-            images (tensor): image of shape 
-            padding (int, optional): Add padding to select the batch. Defaults to None.
-
-        Returns:
-            dict: dict containing the patch size (int) and the pixel positions (tensor)
-        """
-        img = batch["img"]
-        mask = (torch.abs(img) < 1000)
-        img = img.masked_fill(~mask,0.5) #TODO only for patch diffusion
-        
-        real_p = self.config.real_p 
-        p_list = np.array([(1-real_p)*2/5, (1-real_p)*3/5, real_p])
-        sizes = self.config.patch_sizes
-        patch_list = np.array([sizes[0],sizes[1],sizes[2]]) #choose in the config the patch sizes
-        patch_size = int(np.random.choice(patch_list, p=p_list)) #choosing randomly the patch size
-        patch_size_tup = (patch_size,patch_size)
-
-        
-        patch, image_pos = self.patchify(img, patch_size, padding)
-        batch["img"] = patch #replace the full image by the random patch
-        
-        patch_dict = {
-            "image_pos": image_pos,
-            "patch_size": patch_size,
-        }
-        batch_combined = {**batch,**patch_dict}
-        return batch_combined
+        return batch
    
     def _run_batch(self, batch, scaler, validation=False):
         """
@@ -241,9 +153,6 @@ class Trainer(Ddpm_base):
                 ["leadtime"] if self.leatimes_conditioning else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            if self.config.patch_diffusion:
-                batch_prep = self._combine_batch_dict(batch_prep)  
-                  
             loss = self._run_batch(batch_prep,scaler)
             total_loss += loss
 
@@ -522,22 +431,8 @@ class Trainer(Ddpm_base):
                 "Sampling more than 6 images may take a long time because sampling uses only the main GPU."
             )
         self.logger.info(f"Sampling {nb_img} images...")
-        image_pos = None
-        if self.config.patch_diffusion:
             
-            resolution = self.config.image_size
-            x_pos = torch.arange(0, 0+resolution[1]).view(1, -1).repeat(resolution[0], 1)
-            y_pos = torch.arange(0, resolution[0]).view(-1, 1).repeat(1, resolution[1])
-            x_pos = (x_pos / (resolution[1] - 1) - 0.5) * 2.
-            y_pos = (y_pos / (resolution[0] - 1) - 0.5) * 2.
-            
-            image_pos = torch.stack([x_pos, y_pos], dim=0)
-            image_pos = image_pos.unsqueeze(0).repeat(nb_img, 1, 1, 1)
-            b,_,h,w = image_pos.shape
-            patch_size = (h,w)
-            patch_tensor = torch.tensor(patch_size, dtype=torch.float32)
-            
-        samples = super()._sample_batch(nb_img=nb_img, condition=condition,image_pos=image_pos, ensemble_mean=ensemble_mean)
+        samples = super()._sample_batch(nb_img=nb_img, condition=condition, ensemble_mean=ensemble_mean)
         for i, img in enumerate(samples):
             filename = (
                 f"_sample_{ep}_{i}.npy"

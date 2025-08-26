@@ -340,8 +340,6 @@ class UViT(nn.Module):
         self.spatial_conditions = spatial_conditions
         input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
         
-        channels = channels + 2 if self.config.patch_diffusion else channels
-
         if var_cond:
             input_channels += channels
         if mean_cond:
@@ -452,7 +450,7 @@ class UViT(nn.Module):
         self.final_res_block = ResnetBlock(init_dim * 2, init_dim, time_emb_dim = time_dim)
         self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1)
 
-    def forward(self, x, time, x_self_cond=None, embedded_cond=None, x_pos=None, patch_size=None):
+    def forward(self, x, time, x_self_cond=None, embedded_cond=None):
 
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
