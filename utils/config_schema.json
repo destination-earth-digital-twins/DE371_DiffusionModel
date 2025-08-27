@@ -91,12 +91,12 @@
       "description": "Number of stages in the swinunetr architecture"
     },
     "transformers_depths":{
-      "type": "list",
+      "type": "array",
       "default": [2,2,2,2],
       "description": "Depth/number of block in each stage in the swinunetr architecture"
     },
     "transformers_num_heads":{
-      "type": "list",
+      "type": "array",
       "default": [3,6,12,24],
       "description": "Number of head attention of each stage in the swinunetr architecture"
     },

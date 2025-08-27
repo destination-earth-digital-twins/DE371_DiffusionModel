@@ -28,7 +28,7 @@ from torch import Tensor
 from torch.nn.functional import scaled_dot_product_attention
 from monai.networks.layers.utils import get_act_layer, get_norm_layer
 
-from ddpm.base import AutoPaddingModel, BaseModel, ModelType
+from ddpm.ddpm_base import AutoPaddingModel, BaseModel, ModelType
 import math
 
 rank = int(os.environ.get("LOCAL_RANK",0))
