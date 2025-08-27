@@ -19,9 +19,9 @@ import pandas as pd
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
-
+import random
 from ddpm.normalize import var_dict, SpecialNormalize
-from utils.utils import filter_dates, filter_lead_times
+from utils.utils import filter_dates, filter_lead_times, mirror_fill
 
 from torch.utils.data import Dataset, Sampler
 import torch.distributed as dist
@@ -76,6 +76,31 @@ class ISDataset(Dataset):
             self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
             # Normalizing
             self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
+        if self.config.training_configuration == "mirror":
+            self.init_mirror_filling()
+        
+    def init_mirror_filling(self):
+        """ 
+        That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
+        """
+        data_path = self.config.data_dir
+
+        #choose a random file in data folder
+        files = [f for f in os.listdir(data_path)]
+        file_name = random.choice(files)
+        file = os.path.join(data_path,file_name)
+
+        img = np.load(file)
+        img=torch.from_numpy(img).to("cuda")
+
+        img = img.unsqueeze(0)
+        img = img.permute((0,3,1,2))
+        crop = self.config.crop
+        img = img[:,:,crop[0]:crop[1],crop[2]:crop[3]]
+        mask = (torch.abs(img) < 1000)
+
+
+        self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
 
     def inversion_transforms(self):
         """
@@ -102,7 +127,12 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
-        
+        print("dans get item sample shape", sample.shape)
+        if self.config.training_configuration=="mirror":
+            #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+            sample[:,self.invalid_y_vert,self.invalid_x_vert] = sample[:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+            sample[:,self.invalid_y_horiz,self.invalid_x_horiz] = sample[:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                
         mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
         var_cond = self.config.var_conditioning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values

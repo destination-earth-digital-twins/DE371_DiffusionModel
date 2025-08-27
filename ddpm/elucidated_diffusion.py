@@ -183,7 +183,7 @@ class ElucidatedDiffusion(nn.Module):
 
     @torch.no_grad()
 
-    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, image_pos=None, orog_cond=None):
+    def sample(self, batch_size = 16, num_sample_steps = None, condition=None, lt_cond=None, clamp = False, orog_cond=None):
 
         num_sample_steps = default(num_sample_steps, self.num_sample_steps)
         
@@ -368,15 +368,7 @@ class ElucidatedDiffusion(nn.Module):
     
         elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
             
-            img_filled = img.clone().to(img.device)
-            
-            for batch in range(self.config.batch_size):
-                
-                #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
-                img_filled[batch,:,self.invalid_y_vert,self.invalid_x_vert] = img_filled[batch,:,self.valid_y_vert,self.valid_x_vert] #vertical filling
-                img_filled[batch,:,self.invalid_y_horiz,self.invalid_x_horiz] = img_filled[batch,:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
-                
-            img = normalize_to_neg_one_to_one(img_filled) #filled img normalized
+            img = normalize_to_neg_one_to_one(img) #filled img normalized
             
             sigmas = self.noise_distribution(batch_size)
             padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
