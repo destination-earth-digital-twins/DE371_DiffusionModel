@@ -245,10 +245,8 @@ class ISDataset(Dataset):
             ]
             norm_sample = sample.transpose((1, 2, 0))
             norm_sample = self.transform(norm_sample)
-            if return_denorm:
-                return norm_sample, torch.tensor(sample)
-            else :
-                return norm_sample
+            
+            return norm_sample
         else: #if using big domain datas
             if type(file_name) == list:
                 file_name = file_name[0]

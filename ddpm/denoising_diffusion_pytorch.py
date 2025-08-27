@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Tuple, Union
 import numpy as np
 from torch import nn
-from ddpm.base import AutoPaddingModel, BaseModel, ModelType
+from ddpm.ddpm_base import AutoPaddingModel, BaseModel, ModelType
 from utils.plotter_inconditionnal import plotter3D_3var
 from PIL import Image
 import torch
@@ -40,8 +40,6 @@ from monai.networks.layers import DropPath, trunc_normal_
 from monai.utils import ensure_tuple_rep, look_up_option, optional_import
 from monai.utils.deprecate_utils import deprecated_arg
 from utils.utils import mirror_fill
-
-rank = int(os.environ.get("LOCAL_RANK",0))
 
 # constants
 
@@ -112,13 +110,6 @@ def Downsample(dim, dim_out = None):
         
     )
     
-def Downsample_maxpool(dim, dim_out = None):
-    return nn.Sequential(
-        nn.MaxPool2d(kernel_size = 2, stride = 2), #increases receptive field, but does not increase channels size
-        nn.Conv2d(dim, dim*4,kernel_size=1),
-        nn.Conv2d(dim * 4, default(dim_out, dim), 1)
-        
-    )
 
 class RMSNorm(Module):
     def __init__(self, dim):
@@ -302,8 +293,6 @@ class Unet(Module):
         out_dim = None,
         dim_mults = (1, 2, 4, 8, 16),
         channels = 3,
-        x_pos = None, #Added to use patch diffusion
-        patch_size=None, #Added to use patch diffusion
         spatial_conditions = False,
         n_conditions = 1,
         orog_cond = False,
@@ -324,15 +313,11 @@ class Unet(Module):
         super().__init__()
 
         # determine dimensions
-        self.x_pos = x_pos
-        self.patch_size=patch_size
         self.config = config
         self.channels = channels
         self.spatial_conditions = spatial_conditions
         input_channels = channels * ((n_conditions + 1) if spatial_conditions else 1)
         
-        channels = channels + 2 if self.config.patch_diffusion else channels
-
         if var_cond:
             input_channels += channels
         if mean_cond:
@@ -401,20 +386,12 @@ class Unet(Module):
             is_last = ind >= (num_resolutions - 1)
 
             attn_klass = FullAttention if layer_full_attn else LinearAttention
-            if self.config.use_maxpool:
-                self.downs.append(ModuleList([
-                    resnet_block(dim_in, dim_in),
-                    resnet_block(dim_in, dim_in),
-                    attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
-                    Downsample_maxpool(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
-                
-                ]))
-            else :
-                self.downs.append(ModuleList([
-                    resnet_block(dim_in, dim_in),
-                    resnet_block(dim_in, dim_in),
-                    attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
-                    Downsample(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
+            
+            self.downs.append(ModuleList([
+                resnet_block(dim_in, dim_in),
+                resnet_block(dim_in, dim_in),
+                attn_klass(dim_in, dim_head = layer_attn_dim_head, heads = layer_attn_heads),
+                Downsample(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
                 
                 ]))
         mid_dim = dims[-1]
@@ -435,7 +412,6 @@ class Unet(Module):
             ]))
 
         default_out_dim = channels * (1 if not learned_variance else 2)
-        default_out_dim = default_out_dim -4 if config.patch_diffusion else default_out_dim
         self.out_dim = default(out_dim, default_out_dim)
         self.final_res_block = resnet_block(init_dim * 2, init_dim)
         self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1) 
@@ -444,7 +420,7 @@ class Unet(Module):
     def downsample_factor(self):
         return 2 ** (len(self.downs) - 1)
 
-    def forward(self, x, time, x_self_cond = None, embedded_cond = None, x_pos=None, patch_size=None):
+    def forward(self, x, time, x_self_cond = None, embedded_cond = None):
         
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
             
@@ -454,11 +430,6 @@ class Unet(Module):
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
             
-        if self.config.patch_diffusion:
-            device = x.device
-            x_pos = x_pos.to(device)
-            x = torch.cat((x,x_pos),dim=1)
-        
         x = self.init_conv(x)
         r = x.clone()
 
@@ -628,7 +599,7 @@ class GaussianDiffusion(Module):
         # SDEdit flag setting
         self.sdedit_flag = False
         self.num_edition_timesteps = int(num_edition_timesteps)
-        if num_edition_timesteps < timesteps - 1 :
+        if num_edition_timesteps < timesteps -1 :
             self.sdedit_flag = True
             print(f'Warning : num_edition_timesteps : {num_edition_timesteps} < timesteps : {timesteps} ; SDEdit mode activated')
 
@@ -1436,15 +1407,10 @@ class SwinUNETR(nn.Module):
         if self.spatial_conditions:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))                
             x = torch.cat((x_self_cond, x), dim = 1)
-        
-        if self.config.patch_diffusion:
-            device = x.device
-            x_pos = x_pos.to(device)
-            x = torch.cat((x,x_pos),dim=1)
 
         t = self.time_mlp(time)   
          
-        ################## Embedded condition
+        # Embedded condition
         if embedded_cond is not None:
             cond_embedding = self.emb_mlp(embedded_cond)
             t = t + cond_embedding 
@@ -1475,7 +1441,6 @@ class SwinUNETR(nn.Module):
                 continue
             
             else : 
-
                 dec = decoder(decoders[i-1], encoders[-i], t)
                 decoders.append(dec)
 
@@ -1958,7 +1923,7 @@ class BasicLayer(nn.Module):
         norm_layer: type[LayerNorm] = nn.LayerNorm,
         downsample: nn.Module | None = None,
         use_checkpoint: bool = False,
-    ) -> None:
+    ):
         """
         Args:
             dim: number of feature channels.

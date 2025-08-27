@@ -3,10 +3,14 @@ import os
 import warnings
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import Size, Tensor, nn
+from mfai.torch.padding import pad_batch, undo_padding
 from matplotlib import pyplot as plt
 from torchvision.transforms import transforms
-
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any, Optional, Tuple
+from mfai.torch.padding import pad_batch, undo_padding
 from utils.distributed import get_rank, is_main_gpu, get_rank_num
 
 
@@ -143,8 +147,6 @@ class Ddpm_base:
         Args:
             nb_img (int): Number of images to sample.
             condition: Optional condition for conditional sampling.
-            image_pos : Optional image position encoding when using patch diffusion
-            image_pos : Optional image position encoding when using patch diffusion
         Returns:
             numpy.ndarray: Array of sampled images.
         """
@@ -155,6 +157,7 @@ class Ddpm_base:
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition, image_pos=image_pos, lt_cond=lt_cond, orog_cond=orog_cond)
+
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
         if not self.config.predict_residue:
             ensemble_mean = torch.zeros_like(sampled_images)
@@ -203,7 +206,7 @@ class Ddpm_base:
         
     def plot_grid_big_domain(self, file_name, np_img):
         """
-        Plot a grid of images.
+        Plot a grid of images, used for full AROME domain.
         Args:
             file_name (str): Name of the file to save the plot.
             np_img (numpy.ndarray): Array of images to plot.
@@ -218,18 +221,16 @@ class Ddpm_base:
         axes = axes.flatten()
         fig.suptitle("model sample",y=0.7)
         img = np_img[0].detach()
-        # img = img.masked_fill(~mask,float("nan"))
-        # img = np.where(np.abs(img) > 1, np.nan,img)
+
         for id, var in enumerate(var_names):
             var_id=dict_var[var]
             ax = axes[id]
             im=ax.imshow(img[id],cmap = colormap[id],origin='lower')
-            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04)
+            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04, shrink=0.21)
             ax.set_title(f'{var}',fontsize=12)
             ax.axis('off')
        
         plt.tight_layout()
-                
         # Save the plot to the specified file path
         plt.savefig(
             os.path.join(f"{self.config.output_dir}" , f"{self.config.run_name}", "samples", file_name),
@@ -238,13 +239,9 @@ class Ddpm_base:
         plt.close()
         
 
-from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Any, Optional, Tuple
-from torch import Size
-import torch
-
-from mfai.torch.padding import pad_batch, undo_padding
+##################################################
+#Next part is used for UnetRPP, from MFAI library#
+##################################################
 
 class ModelType(Enum):
     """
@@ -258,4 +255,159 @@ class ModelType(Enum):
     VISION_TRANSFORMER = 3
     LLM = 4
     MULTIMODAL_LLM = 5
+    PANGU = 6
 
+
+class ModelABC(ABC):
+    # concrete subclasses shoudl set register to True
+    # to be included in the registry of available models.
+    register: bool = False
+
+    in_channels: int
+    out_channels: int
+    input_shape: tuple[int, ...]
+
+    @property
+    @abstractmethod
+    def onnx_supported(self) :
+        """
+        Indicates if our model supports onnx export.
+        """
+
+    @property
+    @abstractmethod
+    def settings_kls(self):
+        """
+        Returns the settings class for this model.
+        """
+
+    @property
+    @abstractmethod
+    def supported_num_spatial_dims(self):
+        """
+        Returns the number of input spatial dimensions supported by the model.
+        A 2d vision model supporting (H, W) should return (2,).
+        A model supporting both 2d and 3d inputs (by settings) should return (2, 3).
+        Once instanciated the model will be in 2d OR 3d mode.
+        """
+
+    @property
+    @abstractmethod
+    def settings(self):
+        """
+        Returns the settings instance used to configure for this model.
+        """
+
+    @property
+    @abstractmethod
+    def model_type(self):
+        """
+        Returns the model type.
+        """
+
+    @property
+    @abstractmethod
+    def num_spatial_dims(self):
+        """
+        Returns the number of spatial dimensions of the instanciated model.
+        """
+
+    @property
+    @abstractmethod
+    def features_last(self):
+        """
+        Indicates if the features are the last dimension in the input/output tensors.
+        Conv and ViT typically have features as the second dimension (Batch, Features, ...)
+        versus GNNs for which features are the last dimension (Batch, ..., Features)
+        """
+
+    @property
+    def features_second(self):
+        return not self.features_last
+
+    def check_required_attributes(self) :
+        # we check that the model has defined the following attributes.
+        # this must be called at the end of the __init__ of each subclass.
+        required_attrs = ["in_channels", "out_channels", "input_shape"]
+        for attr in required_attrs:
+            if not hasattr(self, attr):
+                raise AttributeError(f"Missing required attribute : {attr}")
+
+
+# Drived class to specify type hinting
+class BaseModel(ModelABC, nn.Module):
+    pass
+
+
+class AutoPaddingModel(ABC):
+    input_shape: tuple[int, ...]
+
+    @property
+    @abstractmethod
+    def settings(self):
+        """
+        Returns the settings instance used to configure for this model.
+        """
+
+    @abstractmethod
+    def validate_input_shape(self, input_shape: Size):
+        """Given an input shape, verifies whether the inputs fit with the
+            calling model's specifications.
+
+        Args:
+            input_shape (Size): The shape of the input data, excluding any batch dimension and channel dimension.
+                                For example, for a batch of 2D tensors of shape [B,C,W,H], [W,H] should be passed.
+                                For 3D data instead of shape [B,C,W,H,D], instead, [W,H,D] should be passed.
+
+        Returns:
+            tuple[bool, Size]: Returns a tuple where the first element is a boolean signaling whether the given input shape
+                                already fits the model's requirements. If that value is False, the second element contains the closest
+                                shape that fits the model, otherwise it will be None.
+        """
+
+    def _maybe_padding(self, data_tensor: Tensor):
+        """Performs an optional padding to ensure that the data tensor can be fed
+            to the underlying model. Padding will happen only if
+            autopadding was enabled via the settings.
+
+        Args:
+            data_tensor (Tensor): the input data to be potentially padded.
+
+        Returns:
+            tuple[Tensor, torch.Size]: the padded tensor, where the original data is found in the center,
+            and the old size. If padding not possible or the shape is already fine,
+            the data is returned untouched with it's old shape, which is unchanged.
+        """
+        old_shape = data_tensor.shape[-len(self.input_shape) :]
+
+        if not self.settings.autopad_enabled:
+            return data_tensor, old_shape
+
+        valid_shape, new_shape = self.validate_input_shape(
+            data_tensor.shape[-len(self.input_shape) :]
+        )
+        if not valid_shape:
+            return pad_batch(
+                batch=data_tensor, new_shape=new_shape, pad_value=0
+            ), old_shape
+        return data_tensor, old_shape
+
+    def _maybe_unpadding(
+        self,
+        data_tensor: Tensor,
+        old_shape: torch.Size,
+    ):
+        """Potentially removes the padding previously added to the given tensor. This action
+           is only carried out if autopadding was enabled via the settings.
+
+        Args:
+            data_tensor (Tensor): The data tensor from which padding is to be removed.
+            old_shape (torch.Size): The previous shape of the data tensor. It can either be
+            [W,H] or [W,H,D] for 2D and 3D data respectively. old_shape is returned by self._maybe_padding.
+
+        Returns:
+            Tensor: The data tensor with the padding removed, or untouched if already at the right shape.
+        """
+        if self.settings.autopad_enabled:
+            return undo_padding(data_tensor, old_shape=old_shape)
+        return data_tensor
