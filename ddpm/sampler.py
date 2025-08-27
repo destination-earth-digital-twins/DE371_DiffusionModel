@@ -127,12 +127,16 @@ class Sampler(Ddpm_base):
                 
                 # print('date, lt, member_id', (batch["date"],batch["leadtime"],batch["member_id"]))
                 # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
+                orog_cond=None
                 if self.config.sampling_mode == 'conditioned_input':
                     conditioning_sets = batch['condition_tensor']
                 elif self.config.sampling_mode == 'conditioned_sdedit':
                     conditioning_sets = batch["img"]
+                    if self.config.orography_conditioning : 
+                        orog_cond = batch['condition_tensor'].permute(1, 0, 2, 3, 4)
                 else :
                     raise NotImplementedError
+                    
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
@@ -142,22 +146,20 @@ class Sampler(Ddpm_base):
                     self.logger.info(
                         f"Launching sampling for {save_path} on device {self.gpu_id}")
                     # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
-                    conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
-                    if self.config.n_var != self.config.n_var_in_dataset:
-                            # Build empty channels to extend the generated data with, in order to match the shape of the dataset (e.g. rr)
-                            zero_pad = torch.zeros(conditioning_sets.shape[1], self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
-                            # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
-                            ensemble = torch.cat([
-                                torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
-                                for set in conditioning_sets
-                            ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-                    else:
-                            # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
-                            ensemble = torch.cat([
-                                self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id)).unsqueeze(0)
-                                for set in conditioning_sets
-                            ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
-
+                conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
+                if self.config.n_var != self.config.n_var_in_dataset:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
+                        ensemble = torch.cat([
+                            torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), orog_cond=orog.to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                            for set, orog in zip(conditioning_sets, orog_cond)
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                else:
+                        # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
+                        ensemble = torch.cat([
+                            self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), orog_cond=orog.to(self.gpu_id)).unsqueeze(0)
+                            for set, orog in zip(conditioning_sets, orog_cond)
+                        ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
+                      
                     # saving generated ensemble
                     np.save(save_path, ensemble.numpy())
 

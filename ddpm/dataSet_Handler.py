@@ -152,10 +152,17 @@ class ISDataset(Dataset):
 
         if self.config.orography_conditioning:
             orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-            condition_tensor = torch.cat([condition_tensor, orography], dim=1)
+            if not self.config.sampling_mode == 'conditioned_sdedit':
+                condition_tensor = torch.cat([condition_tensor, orography], dim=1)
+            else :
+                condition_tensor = orography
 
         if self.config.sampling_mode == 'conditioned_sdedit':
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+            # if self.config.orography_conditioning:
+            #     orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
+            #     sample = torch.cat([sample, orography], dim=1)
+                
         
         sample_id = re.search(r"\d+", file_name).group()
 

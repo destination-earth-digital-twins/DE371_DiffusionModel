@@ -452,7 +452,7 @@ class UViT(nn.Module):
 
     def forward(self, x, time, x_self_cond=None, embedded_cond=None):
 
-        if self.spatial_conditions:
+        if self.spatial_conditions or x_self_cond is not None:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
 
