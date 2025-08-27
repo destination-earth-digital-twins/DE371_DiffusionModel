@@ -240,7 +240,6 @@ class ElucidatedDiffusion(nn.Module):
             cond_2d = condition if self.spatial_conditions else None
             
             if self.config.orography_conditioning and not self.spatial_conditions:
-                self.spatial_conditions= True
                 cond_2d = orog_cond
             
             cond_emb = lt_cond if self.embedding_cond_dims is not None else None
@@ -254,6 +253,8 @@ class ElucidatedDiffusion(nn.Module):
             
             if sigma_next != 0:
                 cond_2d = condition if self.spatial_conditions else None
+                if self.config.orography_conditioning and not self.spatial_conditions:
+                    cond_2d = orog_cond
                 cond_emb = lt_cond if self.embedding_cond_dims is not None else None
                 model_output_next = self.preconditioned_network_forward(images_next, sigma_next, cond_2d = cond_2d, embedded_cond= cond_emb, clamp = clamp)
                 denoised_prime_over_sigma = (images_next - model_output_next) / sigma_next

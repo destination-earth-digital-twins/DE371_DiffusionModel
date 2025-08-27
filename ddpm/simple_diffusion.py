@@ -346,7 +346,7 @@ class UViT(nn.Module):
             input_channels += channels
         if orog_cond:
             input_channels += 1
-
+        
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
 
@@ -451,11 +451,10 @@ class UViT(nn.Module):
         self.final_conv = nn.Conv2d(init_dim, self.out_dim, 1)
 
     def forward(self, x, time, x_self_cond=None, embedded_cond=None):
-
+        
         if self.spatial_conditions or x_self_cond is not None:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
-
         x = self.init_conv(x)
         r = x.clone()
 
