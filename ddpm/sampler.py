@@ -28,6 +28,11 @@ class Sampler(Ddpm_base):
         """
         super().__init__(model, config, dataloader, inversion_transforms=inversion_transforms)
         self.loss_func = loss_dict["L1Loss"]
+        # Temporal consistency
+        self.fixed_forward_noise=config.fixed_forward_noise
+        self.forward_noise=None
+        self.fixed_sampling_noise=config.fixed_sampling_noise
+        self.sampling_noise=None
 
     @torch.no_grad()
     def _guided_sample_batch(self, truth_sample_batch, guidance_loss_scale=100, random_noise=False):
@@ -125,8 +130,39 @@ class Sampler(Ddpm_base):
                     conditioning_sets = batch["img"]
                 else :
                     raise NotImplementedError
+                
                 lt = batch['leadtime'][0]
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
+                if self.fixed_forward_noise :
+                    # if not self.config.progressive_noise_model or lt == 0:
+                        filename = "forward_noise_{date}_1.pt" .format(date = d)
+                        forward_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "forward_noise", filename)
+                        os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "forward_noise"), exist_ok=True)
+                        if os.path.isfile(forward_noise_path):
+                            self.forward_noise = torch.load(forward_noise_path).to(self.gpu_id)
+                        else :
+                            if lt+1 == 1:
+                                self.forward_noise = torch.randn((self.config.n_var, x, y), device = self.gpu_id)
+                                torch.save(self.forward_noise,forward_noise_path)
+                                self.logger.info(f"Forward noise saved in {forward_noise_path} for leadtime : {lt}")
+                            else :
+                                raise IndexError(f'At {d}_{lt} should have been created before.')
+
+                if self.fixed_sampling_noise :
+                    # if not self.config.progressive_noise_model or lt == 0:
+                        filename = "sampling_noise_{date}_1.pt" .format(date = d)
+                        sampling_noise_path = os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise", filename)
+                        os.makedirs(os.path.join(self.config.output_dir, self.config.run_name, "sampling_noise"), exist_ok=True)
+                        if os.path.isfile(sampling_noise_path):
+                            self.sampling_noise = torch.load(sampling_noise_path).to(self.gpu_id)
+                        else :
+                            if lt+1 == 1:
+                                self.sampling_noise = torch.randn((len(conditioning_sets),self.config.n_var, x, y), device = self.gpu_id)
+                                torch.save(self.sampling_noise,sampling_noise_path)
+                                self.logger.info(f"Sampling noise saved in {sampling_noise_path} for leadtime : {lt}")
+                            else :
+                                raise IndexError(f'At {d}_{lt} should have been created before.')
+
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
 
@@ -140,13 +176,13 @@ class Sampler(Ddpm_base):
                             zero_pad = torch.zeros(conditioning_sets.shape[1], self.config.n_var_in_dataset - self.config.n_var, x, y ).to(self.gpu_id)
                             # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, u, v, t2m
                             ensemble = torch.cat([
-                                torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id))), dim=1).unsqueeze(0) # concatenate an empty rr channel
+                                torch.cat((zero_pad, self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), forward_noise=self.forward_noise, sampling_noise=self.sampling_noise)), dim=1).unsqueeze(0) # concatenate an empty rr channel
                                 for set in conditioning_sets
                             ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
                     else:
                             # Generates a member for all n_sampling_conditioning_sets set from the conditioning_sets, rr, u, v, t2m
                             ensemble = torch.cat([
-                                self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id)).unsqueeze(0)
+                                self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), forward_noise=self.forward_noise, sampling_noise=self.sampling_noise).unsqueeze(0)
                                 for set in conditioning_sets
                             ], dim=0).cpu().reshape(-1, self.config.n_var_in_dataset, x, y ) # reshape -> [n_sampling_conditioning_sets*16, 4, 256, 256]
 

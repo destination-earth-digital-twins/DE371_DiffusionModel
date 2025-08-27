@@ -324,6 +324,16 @@
       "default": 150,
       "description": "Number of epochs to train the model"
     },
+    "fixed_forward_noise" :{
+      "type": "boolean",
+      "default": false,
+      "description": "Use a fixed forward noise"
+    },
+    "fixed_sampling_noise" :{
+      "type": "boolean",
+      "default": false,
+      "description": "Use a fixed sampling noise"
+    },
     "num_workers": {
       "type": "integer",
       "default": 1,
