@@ -127,7 +127,6 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
-        print("dans get item sample shape", sample.shape)
         if self.config.training_configuration=="mirror":
             #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
             sample[:,self.invalid_y_vert,self.invalid_x_vert] = sample[:,self.valid_y_vert,self.valid_x_vert] #vertical filling
@@ -145,7 +144,8 @@ class ISDataset(Dataset):
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
   
         # Get the date, lt, and member id of the current member
-        row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        
+        row = self.labels.iloc[idx] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
         if self.config.guiding_col is not None:

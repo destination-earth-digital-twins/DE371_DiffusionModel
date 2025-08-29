@@ -424,9 +424,7 @@ class Unet(Module):
         
         assert all([divisible_by(d, self.downsample_factor) for d in x.shape[-2:]]), f'your input dimensions {x.shape[-2:]} need to be divisible by {self.downsample_factor}, given the unet'
             
-        if self.config.mode=="Sample" and self.config.orography_conditioning:
-            self.spatial_conditions=True
-        if self.spatial_conditions:
+        if self.spatial_conditions or x_self_cond is not None:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
             

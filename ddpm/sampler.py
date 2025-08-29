@@ -9,7 +9,7 @@ from utils.distributed import is_main_gpu
 from utils.guided_loss import loss_dict
 from utils.plotter import online_plot, online_plot_var, online_plot_mean, online_plot_quantiles
 from datetime import datetime
-
+import matplotlib.pyplot as plt
 
 class Sampler(Ddpm_base):
     def __init__(
@@ -122,7 +122,6 @@ class Sampler(Ddpm_base):
             # Goes through every 16 members sample batches (= 1 whole AROME ensemble, as the sampler reads the dataset sequentially when sampling)
             for batch_idx, batch in tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc="Sampling ", unit="batch"):
                 
-                # print('date, lt, member_id', (batch["date"],batch["leadtime"],batch["member_id"]))
                 # Get the list containing the n_sampling_conditioning_sets sets of conditionning members (tensor of shape [n_members_dataset, n_sampling_conditioning_sets, n_condition*n_var, x, y])
                 orog_cond=None
                 if self.config.sampling_mode == 'conditioned_input':
@@ -138,7 +137,6 @@ class Sampler(Ddpm_base):
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
-
                 self.logger.info(f"Launching sampling for {save_path} on device {self.gpu_id}")
                 # Transpose the array-> array of shape [n_sampling_conditioning_sets, n_members_dataset, n_conditions*n_var, H, W]
                 conditioning_sets = conditioning_sets.permute(1, 0, 2, 3, 4)
@@ -163,7 +161,6 @@ class Sampler(Ddpm_base):
                         sample = self._sample_batch(nb_img=len(set), condition=set.to(self.gpu_id), lt_cond=batch['leadtime'].to(self.gpu_id), ensemble_mean=batch['ensemble_mean_tensor'].to(self.gpu_id), orog_cond=orog.to(self.gpu_id))
                         ensemble.append(sample.cpu().numpy())
                     ensemble = np.array(ensemble).reshape(-1, self.config.n_var_in_dataset, x, y )
-                
                 # saving generated ensemble
                 np.save(save_path, ensemble)
 
