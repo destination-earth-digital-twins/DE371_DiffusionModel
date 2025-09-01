@@ -21,7 +21,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         super().__init__(*args, **kwargs)
 
     @torch.no_grad()
-    def sample(self, batch_size, return_all_timesteps=False, condition=None, image_pos=None, lt_cond=None):
+    def sample(self, batch_size, return_all_timesteps=False, condition=None, lt_cond=None, orog_cond=None):
         """
         Generate samples using conditioned diffusion.
         Args:
@@ -44,7 +44,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         )
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, return_all_timesteps=False, condition=None):
+    def p_sample_loop(self, shape, return_all_timesteps=False, condition=None, orog_cond=None):
         """
         Sample from conditioned diffusion using a loop over timesteps.
         Args:
@@ -70,7 +70,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         return ret
 
     @torch.no_grad()
-    def ddim_sample(self, shape, return_all_timesteps=False, condition=None):
+    def ddim_sample(self, shape, return_all_timesteps=False, condition=None,orog_cond=None):
         """
         Sample from conditioned diffusion using ddim sampling.
         Args:

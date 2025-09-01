@@ -56,7 +56,7 @@
       "default": "simple",
       "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
     },
-    "trainng_configuration":{
+    "training_configuration":{
       "type": "string",
       "enum": [
         "mirror",

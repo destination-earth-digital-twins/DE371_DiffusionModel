@@ -427,7 +427,7 @@ class Unet(Module):
         if self.spatial_conditions or x_self_cond is not None:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim = 1)
-            
+
         x = self.init_conv(x)
         r = x.clone()
 
@@ -893,7 +893,7 @@ class GaussianDiffusion(Module):
         Args:
             batch_size (int): Number of samples to generate.
             return_all_timesteps (bool): Whether to return samples at all timesteps.
-            condition: Additional conditioning information (only used with SDEdit config)
+            condition: Additional conditioning information (used with SDEdit config, or when using orography conditioning)
         Returns:
             torch.Tensor: Generated samples.
         """

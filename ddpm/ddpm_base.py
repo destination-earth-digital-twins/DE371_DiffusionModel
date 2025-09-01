@@ -156,6 +156,8 @@ class Ddpm_base:
         if condition is None:
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
+            print("condition", condition, condition.shape)
+            print("orog cond',", orog_cond)
             sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond, orog_cond=orog_cond)
 
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled

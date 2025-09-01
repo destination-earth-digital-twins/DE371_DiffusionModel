@@ -210,7 +210,6 @@ def load_train_objs(config):
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
-                b_scale=config.b_scale,
                 # schedule_fn_kwargs={"start" : config.sigmoid_schedule_start, "end" : config.sigmoid_schedule_end, "tau" : config.sigmoid_schedule_tau}
             )
         else:
@@ -223,7 +222,6 @@ def load_train_objs(config):
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
                 num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000,
-                b_scale=config.b_scale,
                 schedule_fn_kwargs={"start" : config.sigmoid_schedule_start, "end" : config.sigmoid_schedule_end, "tau" : config.sigmoid_schedule_tau}
             )
     else:
