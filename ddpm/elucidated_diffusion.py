@@ -104,29 +104,6 @@ class ElucidatedDiffusion(nn.Module):
     def device(self):
         return next(self.model.parameters()).device
 
-    def init_mirror_filling(self):
-        """ 
-        That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
-        """
-        data_path = self.config.data_dir
-
-        #choose a random file in data folder
-        files = [f for f in os.listdir(data_path)]
-        file_name = random.choice(files)
-        file = os.path.join(data_path,file_name)
-
-        img = np.load(file)
-        img=torch.from_numpy(img).to("cuda")
-
-        img = img.unsqueeze(0)
-        img = img.permute((0,3,1,2))
-        crop = self.config.crop
-        img = img[:,:,crop[0]:crop[1],crop[2]:crop[3]]
-        mask = (torch.abs(img) < 1000)
-
-
-        self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
-
     # derived preconditioning params - Table 1
 
     def c_skip(self, sigma):
@@ -337,85 +314,29 @@ class ElucidatedDiffusion(nn.Module):
         
         assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'
         assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
-        assert self.config.training_configuration in ["zero", "mirror", "rectangular"], f"training_configuration must be 'zero', 'mirror' or 'rectangular' and is {self.config.training_configuration}"
-        #TODO : stock the mask in memory (self.mask) to use the condition with different variables
         
-        if self.config.training_configuration == "zero": #filling invalid datas outside AROME with 0
             
-            img_filled = img.masked_fill(~mask,0.5) 
-            img = normalize_to_neg_one_to_one(img_filled) 
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+        img = normalize_to_neg_one_to_one(img) #filled img normalized
+        sigmas = self.noise_distribution(batch_size)
+        padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
+        noise = torch.randn_like(img)
+        noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
+        cond_2d = None
+        if self.spatial_conditions:
+            cond_2d = kwargs.get('condition_tensor')
 
-            noise = torch.randn_like(img)
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-
-            cond_2d = None
-            if self.spatial_conditions:
-                cond_2d = kwargs.get('condition_tensor')
-            
-            cond_emb = None
-            if self.embedding_cond_dims is not None:
-                cond_emb = kwargs.get('leadtime')
-                    
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
-            
-            denoised = denoised.masked_fill(~mask,0.)#filling outside with zeros to compute loss
-            img = img.masked_fill(~mask,0.) #filling outside with zeros to compute loss
-            
-            losses = F.mse_loss(denoised,img,reduction='none')
-            losses = reduce(losses,'b ... -> b','mean')
-            losses = losses * self.loss_weight(sigmas)
-            return losses.mean()
-    
-        elif self.config.training_configuration == "mirror": #filling datas outside AROME with mirrored datas
-            
-            img = normalize_to_neg_one_to_one(img) #filled img normalized
-            
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-            noise = torch.randn_like(img)
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-    
-            cond_2d = None
-            
-            if self.spatial_conditions:
-                cond_2d = kwargs.get('condition_tensor')
-
-            cond_emb = None
-            
-            if self.embedding_cond_dims is not None:
-                cond_emb = kwargs.get('leadtime')
-            
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
-            losses = F.mse_loss(denoised,img,reduction='none')
-            losses = reduce(losses,'b ... -> b','mean')
-            losses = losses * self.loss_weight(sigmas)
-            return losses.mean()
-        else :
-            img = normalize_to_neg_one_to_one(img)
-            sigmas = self.noise_distribution(batch_size)
-            padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
-            noise = torch.randn_like(img)
-
-            noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
-
-            # Conditioned diffusion :
-            cond_2d = None
-            if self.spatial_conditions:
-                cond_2d = kwargs.get('condition_tensor')
-            
-            cond_emb = None
-            if self.embedding_cond_dims is not None:
-                cond_emb = kwargs.get('leadtime')
-
-            denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
-
-            losses = F.mse_loss(denoised, img, reduction = 'none')
-            losses = reduce(losses, 'b ... -> b', 'mean')
-
-            losses = losses * self.loss_weight(sigmas)
-            return losses.mean()
+        cond_emb = None
+        
+        if self.embedding_cond_dims is not None:
+            cond_emb = kwargs.get('leadtime')
+        
+        denoised = self.preconditioned_network_forward(noised_images, sigmas, cond_2d = cond_2d, embedded_cond= cond_emb)
+        
+        losses = F.mse_loss(denoised,img,reduction='none')
+        losses = reduce(losses,'b ... -> b','mean')
+        losses = losses * self.loss_weight(sigmas)
+        
+        return losses.mean()
 
 
 

@@ -127,51 +127,7 @@ def load_train_objs(config):
     dim_mults = tuple(2 ** i for i in range(config.nb_layers))
     n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
 
-
-    if config.model_used == "swinunetr": 
-        umodel = SwinUNETR(
-            dim = 64,
-            in_channels=len(config.var_indexes),
-            out_channels=len(config.var_indexes),
-            img_size=config.image_size,
-            spatial_conditions = use_cond,
-            n_conditions=config.n_conditions,
-            var_cond=config.var_conditionning,
-            mean_cond=config.mean_conditionning,
-            orog_cond = config.orography_conditioning,
-            config = config,
-            n_labels_embeded_cond=n_lt,
-        )
-    
-    elif config.model_used == "karras_unet":
-        umodel= KarrasUnet(
-            dim=64,
-            config=config,
-            channels=len(config.var_indexes),
-            spatial_conditions=use_cond,
-            num_downsamples=3,
-            n_conditions=config.n_conditions,
-            var_cond=config.var_conditionning,
-            mean_cond=config.mean_conditionning,
-            orog_cond=config.orography_conditioning,
-            n_labels_embeded_cond = n_lt,
-        )
-    
-    elif config.model_used == "UNETRPP":
-        umodel=UNetRPP(
-            dim = 64,
-            in_channels = len(config.var_indexes),
-            out_channels = len(config.var_indexes),
-            config = config,
-            spatial_conditions = use_cond,
-            n_conditions = config.n_conditions,
-            orog_cond = config.orography_conditioning,
-            var_cond = config.var_conditionning,
-            mean_cond = config.mean_conditionning,
-            n_labels_embeded_cond = n_lt,
-        )
-    
-    elif config.model_used == "UViT":
+    if config.model_used == "UViT":
         umodel=UViT(
             dim = 64,
             init_dim = len(config.var_indexes),

@@ -103,10 +103,7 @@
     "model_used":{
       "type": "string",
       "enum": ["unet",
-      "swinunetr",
-      "karras_unet",
-      "UViT",
-      "UNETRPP"
+      "UViT"
     ],
       "default": "unet",
       "description": "Type of model used when training and sampling"
