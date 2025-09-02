@@ -14,7 +14,6 @@ from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from ddpm.denoising_diffusion_pytorch import SwinUNETR
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
@@ -26,10 +25,8 @@ from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
 from utils.utils import batch_output_sample_files
 import numpy as np
 from pickle import dump
-from ddpm.karras_unet import KarrasUnet 
-from ddpm.UNETRPP import UNetRPP
 from ddpm.simple_diffusion import UViT
-# from ddpm.denoising_diffusion_pytorch import SwinUNETRSettings
+
 rank = int(os.environ.get("LOCAL_RANK",0))
 
 #os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
