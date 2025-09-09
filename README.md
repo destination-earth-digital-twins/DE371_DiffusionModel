@@ -222,5 +222,9 @@ apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/fi
 
 Or it is possible to run a python file by using the files available in the slurm folder and filling the 'yaml_path' argument with the config you want to use. You can also choose the duration of the job. Then, juste use the following command :
 ```bash
-sbatch file.sh
+sbatch ./slurm/apptainer_stuff/sample_meluxina.sh.sh
+```
+or 
+```bash
+sbatch ./slurm/apptainer_stuff/train_meluxina.sh.sh
 ```
