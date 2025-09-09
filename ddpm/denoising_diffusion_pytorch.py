@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Tuple, Union
 import numpy as np
 from torch import nn
-from ddpm.ddpm_base import AutoPaddingModel, BaseModel, ModelType
 from utils.plotter_inconditionnal import plotter3D_3var
 from PIL import Image
 import torch
