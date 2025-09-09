@@ -23,11 +23,6 @@
 "S_noise": 1.003
 "rho": 7
 
-#parameters for swinunetr
-"transformers_num_stages" : 4
-"transformers_depths": [2,2,2,2] #length must be equal to nb_stage_transformers
-"transformers_num_heads": [3,6,12,24] #length must be equal to nb_stage_transformers
-
 # Data parameters
 "data_dir": "/project/home/p200177/DE_371/datasets/dataset_Meteo_France_big_domain_optim"
 "csv_file": "/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/big_domain_optim_u_v_t2m/big_domain_optim_train_u_v_t2m.csv"

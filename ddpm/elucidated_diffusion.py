@@ -95,10 +95,7 @@ class ElucidatedDiffusion(nn.Module):
         self.S_tmin = S_tmin
         self.S_tmax = S_tmax
         self.S_noise = S_noise
-        self.config = config
-        if self.config.training_configuration == "mirror":
-            # init data for mirroring   
-            self.init_mirror_filling()  
+        self.config = config 
         
     @property
     def device(self):
@@ -307,9 +304,7 @@ class ElucidatedDiffusion(nn.Module):
     
     def forward(self, img, *args, **kwargs):
         #TODO change terminology from cond_2d to cond 
-        
-        mask = (torch.abs(img) < 1000) #need modification when adding variables
-        
+                
         batch_size, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
         
         assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'

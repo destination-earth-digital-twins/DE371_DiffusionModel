@@ -281,7 +281,7 @@ class Unet(Module):
         config,
         init_dim = None,
         out_dim = None,
-        dim_mults = (1, 2, 4, 8, 16),
+        dim_mults = (1, 2, 4, 8),
         channels = 3,
         spatial_conditions = False,
         n_conditions = 1,
@@ -430,7 +430,7 @@ class Unet(Module):
 
         h = []
 
-        for i,(block1, block2, attn, downsample) in enumerate(self.downs):
+        for block1, block2, attn, downsample in self.downs:
             x = block1(x, t)
             
             h.append(x)
@@ -448,7 +448,7 @@ class Unet(Module):
         x = self.mid_attn(x) + x
         x = self.mid_block2(x, t)
  
-        for i,(block1, block2, attn, upsample) in enumerate(self.ups):
+        for block1, block2, attn, upsample in self.ups:
             x = torch.cat((x, h.pop()), dim = 1)
 
             x = block1(x, t)
@@ -659,10 +659,6 @@ class GaussianDiffusion(Module):
 
         self.normalize = normalize_to_neg_one_to_one if auto_normalize else identity
         self.unnormalize = unnormalize_to_zero_to_one if auto_normalize else identity
-
-        if self.config.training_configuration == "mirror":
-            # init data for mirroring   
-            self.init_mirror_filling()
 
     @property
     def device(self):

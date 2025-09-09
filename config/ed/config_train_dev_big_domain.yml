@@ -9,8 +9,6 @@
 "compile_model": true
 "nb_layers": 4 
 "model_used": "unet" # in ["unet","swinunetr","karras_unet"]
-"patch_diffusion": false # wether patch images or not
-
 
 # Sampling parameters (not important while training)
 "ddim_timesteps": 10

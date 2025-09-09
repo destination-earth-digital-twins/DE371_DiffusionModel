@@ -181,8 +181,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
 
         loss = mse_loss(model_out, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
-        loss_weight = extract(self.loss_weight, t, loss.shape)
-        loss = loss * loss_weight
+        loss = loss * extract(self.loss_weight, t, loss.shape)
         return loss.mean()
 
     def forward(self, img, *args, **kwargs):

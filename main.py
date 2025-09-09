@@ -426,18 +426,7 @@ if __name__ == "__main__":
 
     # Execute the main training or sampling function based on the mode
     if config.mode == "Train":
-        # if rank==0:
-            # 
-            # torch.cuda.memory._record_memory_history(enabled="all")
-
         main_train(config)
-        # s = torch.cuda.memory._snapshot()
-        # print("ok")
-        # if rank == 0:
-        #     with open(f'snapshot.pickle',"wb") as f:
-        #         dump(s,f)   
-        #         print("on est ici")
-        #     torch.cuda.memory._record_memory_history(enabled=None)
         
     elif config.mode != "Train":
         main_sample(config)
