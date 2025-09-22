@@ -132,9 +132,8 @@ class Sampler(Ddpm_base):
                         orog_cond = batch['condition_tensor'].permute(1, 0, 2, 3, 4)
                 else :
                     raise NotImplementedError
+                    
                 lt = batch['leadtime'][0]
-                print("dans sampling, lt = " , lt )
-
                 d = datetime.strptime(batch['date'][0], '%Y-%m-%d').date()
                 filename = filename_format.format(date = d, leadtime = lt + 1) # lt + 1 to match MetScore's indicing
                 save_path = os.path.join(self.config.output_dir, self.config.run_name, "samples", filename)
