@@ -6,7 +6,7 @@ This code uses https://github.com/lucidrains/denoising-diffusion-pytorch as a ba
 The generation process consists in the progressive denoising of random gaussian noise images until they fit the targeted distribution of the training data.
 This work allows two types of samples generation :
   - unconditional generation : The model generates random samples relevant to the training set (the climatology)
-  - conditional generation : The is constrained with parameters relevant from an ensemble, in order to generate members from this specific ensemble.
+  - conditional generation : The model is constrained with parameters relevant from an ensemble, in order to generate members from this specific ensemble.
 
 ## Project structure
 
