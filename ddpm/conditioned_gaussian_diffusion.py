@@ -1,13 +1,13 @@
 import torch
-from denoising_diffusion_pytorch import GaussianDiffusion
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch import (
+from ddpm.denoising_diffusion_pytorch import GaussianDiffusion
+from ddpm.denoising_diffusion_pytorch import (
     default,
     extract,
 )
 from einops import reduce, rearrange
 from torch.nn.functional import mse_loss
 from tqdm import tqdm
-
+from utils.plotter_inconditionnal import plotter3D_3var
 
 class ConditionedGaussianDiffusion(GaussianDiffusion):
     # OUTDATED FOR NOW. USED IN DDIM
@@ -21,7 +21,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         super().__init__(*args, **kwargs)
 
     @torch.no_grad()
-    def sample(self, batch_size, return_all_timesteps=False, condition=None):
+    def sample(self, batch_size, return_all_timesteps=False, condition=None, lt_cond=None, orog_cond=None):
         """
         Generate samples using conditioned diffusion.
         Args:
@@ -44,7 +44,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         )
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, return_all_timesteps=False, condition=None):
+    def p_sample_loop(self, shape, return_all_timesteps=False, condition=None, orog_cond=None):
         """
         Sample from conditioned diffusion using a loop over timesteps.
         Args:
@@ -70,7 +70,7 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         return ret
 
     @torch.no_grad()
-    def ddim_sample(self, shape, return_all_timesteps=False, condition=None):
+    def ddim_sample(self, shape, return_all_timesteps=False, condition=None,orog_cond=None):
         """
         Sample from conditioned diffusion using ddim sampling.
         Args:
@@ -136,7 +136,8 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         t,
         noise=None,
         offset_noise_strength=None,
-        condition_tensor=None
+        condition_tensor=None,
+        variance_normalization=False
     ):
         """
         Calculate pixel-wise loss for conditioned diffusion.
@@ -164,6 +165,8 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
         x_self_cond = condition_tensor
 
+        x = x / x.std(axis=(1,2,3), keepdims=True) if variance_normalization else x
+
         model_out = self.model(x, t, x_self_cond)
 
         if self.objective == "pred_noise":
@@ -178,7 +181,6 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
 
         loss = mse_loss(model_out, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
-
         loss = loss * extract(self.loss_weight, t, loss.shape)
         return loss.mean()
 
@@ -192,22 +194,11 @@ class ConditionedGaussianDiffusion(GaussianDiffusion):
         Returns:
             torch.Tensor: Forward pass result.
         """
-        (
-            b,
-            c,
-            h,
-            w,
-            device,
-            img_size,
-        ) = (
-            *img.shape,
-            img.device,
-            self.image_size,
-        )
-        assert (
-            h == img_size[0] and w == img_size[1]
-        ), f"height and width of image must be {img_size}"
-        t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
-
+        b, c, h, w, device, image_size, channels = *img.shape, img.device, self.image_size, self.channels
+            
+        assert h == image_size[0] and w == image_size[1], f'height and width of image must be {image_size} but they are (h={h},w={w})'
+        assert c == channels, f'mismatch of image channels. It must be {channels} but it is {c}'
+            
         img = self.normalize(img)
+        t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
         return self.p_losses(img, t, *args, **kwargs)

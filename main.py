@@ -7,13 +7,13 @@ import sys
 import time
 import warnings
 from multiprocessing import cpu_count
-
+import cProfile
+import pstats
 import torch
 from torch import distributed as dist
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
 from ddpm import dataSet_Handler
 from ddpm.conditioned_gaussian_diffusion import ConditionedGaussianDiffusion
 from ddpm.elucidated_diffusion import ElucidatedDiffusion
@@ -22,7 +22,14 @@ from ddpm.sampler import Sampler
 from ddpm.trainer import Trainer
 from utils.config import Config
 from utils.distributed import get_rank_num, get_rank, is_main_gpu, synchronize
+from utils.utils import batch_output_sample_files
+import numpy as np
+from pickle import dump
+from ddpm.simple_diffusion import UViT
 
+rank = int(os.environ.get("LOCAL_RANK",0))
+
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 warnings.filterwarnings(
     "ignore",
     message="This DataLoader will create .* worker processes in total.*",
@@ -104,6 +111,7 @@ def load_train_objs(config):
         or config.mode == "Sample"
         and "conditioned_input" in config.sampling_mode
     )
+    
 
     use_cond_sdedit = (
         config.guiding_col is not None
@@ -113,37 +121,61 @@ def load_train_objs(config):
     )
     
     # Create a U-Net model and a diffusion model based on configuration
+    dim_mults = tuple(2 ** i for i in range(config.nb_layers))
     n_lt =  config.n_leadtimes if config.leatimes_conditioning else None
-    umodel = Unet(
-        dim=64,
-        dim_mults=(1, 2, 4, 8),
-        channels=len(config.var_indexes),
-        spatial_conditions=use_cond,
-        n_conditions=config.n_conditions,
-        var_cond=config.var_conditioning,
-        mean_cond=config.mean_conditioning,
-        orog_cond=config.orography_conditioning,
-        n_labels_embeded_cond = n_lt,
-    )
+
+    if config.model_used == "UViT":
+        umodel=UViT(
+            dim = 64,
+            init_dim = len(config.var_indexes),
+            out_dim = len(config.var_indexes),
+            config=config,
+            channels=len(config.var_indexes),
+            spatial_conditions=use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
+            n_labels_embeded_cond = n_lt,
+        )
+        
+    else :
+        umodel = Unet(
+            dim=64,
+            config=config,
+            dim_mults=dim_mults,
+            channels=len(config.var_indexes),
+            spatial_conditions=use_cond,
+            n_conditions=config.n_conditions,
+            var_cond=config.var_conditionning,
+            mean_cond=config.mean_conditionning,
+            orog_cond=config.orography_conditioning,
+            n_labels_embeded_cond = n_lt,
+        )
+
     if config.elucidated_diffusion_sampler == False:
-        if use_cond:
+        if use_cond :
             model = ConditionedGaussianDiffusion(
                 umodel,
+                config,
                 image_size=config.image_size,
                 timesteps=1000,
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
+                # schedule_fn_kwargs={"start" : config.sigmoid_schedule_start, "end" : config.sigmoid_schedule_end, "tau" : config.sigmoid_schedule_tau}
             )
         else:
             model = GaussianDiffusion(
                 umodel,
+                config,
                 image_size=config.image_size,
                 timesteps=1000,
                 beta_schedule=config.beta_schedule,
                 auto_normalize=config.auto_normalize,
                 sampling_timesteps=config.ddim_timesteps,
-                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000
+                num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else 1000,
+                schedule_fn_kwargs={"start" : config.sigmoid_schedule_start, "end" : config.sigmoid_schedule_end, "tau" : config.sigmoid_schedule_tau}
             )
     else:
         model = ElucidatedDiffusion(
@@ -161,17 +193,21 @@ def load_train_objs(config):
             S_tmin = config.S_tmin,
             S_tmax = config.S_tmax,
             S_noise = config.S_noise,
+            config = config,
             num_edition_timesteps=config.num_edition_timesteps if use_cond_sdedit else config.ddim_timesteps,
             n_leadtimes=n_lt
             )
         
-            
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.lr, betas=config.adam_betas
-    )
     
+    optimizer = torch.optim.Adam(
+    model.parameters(), lr=config.lr, betas=config.adam_betas  #set foreach=False to reduce memory consumption : but loss of performance
+    )
     if config.compile_model:
-        model.compile()
+        model.compile(fullgraph=False)
+    
+    total_params = sum(p.numel() for p in model.parameters())
+    if rank==0:
+        print("number of parameters in the model : ", total_params)
     return model, optimizer
 
 
@@ -198,11 +234,12 @@ def prepare_dataloader(config, path, csv_file, num_workers=None, validation=Fals
         persistent_workers=True if num_workers is None else False,
         # non_blocking=True,
         shuffle=not torch.cuda.device_count() >= 2,
-        num_workers=cpu_count() if num_workers is None else num_workers,
+        num_workers=cpu_count() if num_workers is None else num_workers, #MODIF HERE cpu_count
         sampler=(
             dataSet_Handler.CustomDistributedSampler(train_set) if config.mode == "Sample"
             else DistributedSampler(train_set, rank=get_rank_num(), shuffle=False, drop_last=False)
-            )
+            ),
+        drop_last=True
 
     )
     
@@ -337,6 +374,9 @@ def convert_to_type(value, type_list):
 
 if __name__ == "__main__":
 
+    # os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
+    # with open("faulthandler_run_var_env.log","w") as f:
+    #     faulthandler.enable(file=f)
     # Parse command line arguments and load configuration
     parser = argparse.ArgumentParser(
         description="Deep Learning Training and Testing Script"
@@ -387,6 +427,7 @@ if __name__ == "__main__":
     # Execute the main training or sampling function based on the mode
     if config.mode == "Train":
         main_train(config)
+        
     elif config.mode != "Train":
         main_sample(config)
 

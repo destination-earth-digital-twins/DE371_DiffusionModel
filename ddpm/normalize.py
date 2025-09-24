@@ -67,17 +67,19 @@ class SpecialNormalize(object):
             raise TypeError(
                 f"Input sample should be a torch tensor. Got {type(sample)}."
             )
-        if sample.ndim != 3:
+        if sample.ndim != 3 and sample.ndim != 4:
             raise ValueError(
-                f"Expected sample to be a tensor image of size (C, H, W). Got tensor.size() = {sample.size()}."
-            )
-
+                f"Expected sample to be a tensor image of size (C, H, W) or (C, H, W, M). Got tensor.size() = {sample.size()}."
+            )                    
         for var in self.data_transforms:
             if self.data_transforms[var] is not None:
                 sample[var_dict[var]] = self.data_transforms[var].direct(sample[var_dict[var]])
+        
+        sample[sample==9999]=torch.nan # invalid pixels set to nan to normalize images
 
         sample = (sample - self.offset) / self.scale
-        
+        sample = torch.nan_to_num(sample,nan = 9999.)
+
         return sample
 
     def denorm(self, sample):

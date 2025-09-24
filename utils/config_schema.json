@@ -56,6 +56,43 @@
       "default": "simple",
       "description": "Sampling mode: Choose between simple, conditioned (model trained to approach a condition), or guided (model trained unconditionally)"
     },
+    "training_configuration":{
+      "type": "string",
+      "enum": [
+        "mirror",
+        "rectangular",
+        "zero"
+      ],
+      "default": "rectangular",
+      "description": "way to fill the invalid datas when working with the big domain, rectangular configuration means no filling"
+    },
+    "domain_type":{
+      "type": "string",
+      "enum": [
+        "small",
+        "big"
+      ],
+      "default": "small",
+      "description": "Type of domain used : small domain or big domain"
+    },
+    "compile_model":{
+      "type": "boolean",
+      "default": false,
+      "description": "Compile the model, to accelerate training with U-Net architectures, or not"
+    },
+    "nb_layers":{
+      "type": "integer",
+      "default": 4,
+      "description": "Number of blocks in the U-Net architecture"
+    },
+    "model_used":{
+      "type": "string",
+      "enum": ["unet",
+      "UViT"
+    ],
+      "default": "unet",
+      "description": "Type of model used when training and sampling"
+    },
     "elucidated_diffusion_sampler": {
       "type": "boolean",
       "default": false,
@@ -268,15 +305,16 @@
       "description": "Constant file for normalisation, linear scaling"
     },
     "image_size": {
-      "type": "integer",
-      "default": 128,
+      "type": "array",
+      "default": [712,1120],
       "description": "Size of the input image"
     },
     "scheduler": {
       "type": "string",
       "enum": [
         "ReduceLROnPlateau",
-        "OneCycleLR"
+        "OneCycleLR",
+        "RootLR"
       ],
       "default": "OneCycleLR",
       "description": "Use scheduler for learning rate during training"
@@ -319,6 +357,11 @@
       ],
       "description": "Betas for the Adam optimizer"
     },
+    "use_AMP": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable/disable mixed precision during training"
+    },
     "epochs": {
       "type": "integer",
       "default": 150,
@@ -326,7 +369,7 @@
     },
     "num_workers": {
       "type": "integer",
-      "default": 1,
+      "default": 1, 
       "description": "Number of workers to load data"
     },
     "guidance_loss_scale": {
@@ -338,7 +381,9 @@
       "type": "string",
       "enum": [
         "cosine",
-        "linear"
+        "linear",
+        "simple_linear",
+        "sigmoid"
       ],
       "default": "linear",
       "description": "Type of beta schedule (cosine or linear)"

@@ -203,3 +203,28 @@ If values are not specified in the configuration file, they will be replaced by 
 
 ## Apptainer and Slurm
 
+To run the previous commands on meluXina, it is necessary to be in the folder DE371_DiffusionModel. 
+It is possible to run an interactive environment with the following commands : 
+```yaml
+#Choose the duration of the job : 
+#4 hours job : 
+salloc -A p200177 -t 04:00:00 -p gpu -q short -N 1 -G 4 
+#48 hours job :
+salloc -A p200177 -t 48:00:00 -p gpu -q default -N 1 -G 4 
+
+#Launch the container :
+export APPTAINER_BINDPATH="/project/home/p200177/DE_371:/project/home/p200177/DE_371/,/project/scratch/p200177/DE_371:/project/scratch/p200177/DE_371/" 
+module load env/release/2023.1
+module load env/staging/2023.1
+module load Apptainer/1.2.4-GCCcore-12.3.0 
+apptainer run --nv /project/home/p200177/DE_371/resources/apptainer_container/final_diffusion/container.sif
+```
+
+Or it is possible to run a python file by using the files available in the slurm folder and filling the 'yaml_path' argument with the config you want to use. You can also choose the duration of the job. Then, juste use the following command :
+```bash
+sbatch ./slurm/apptainer_stuff/sample_meluxina.sh
+```
+or 
+```bash
+sbatch ./slurm/apptainer_stuff/train_meluxina.sh
+```

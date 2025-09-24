@@ -1,12 +1,14 @@
 import logging
 import os
 import warnings
-
+import numpy as np
 import torch
-import torch.nn as nn
+from torch import Size, Tensor, nn
 from matplotlib import pyplot as plt
 from torchvision.transforms import transforms
-
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any, Optional, Tuple
 from utils.distributed import get_rank, is_main_gpu, get_rank_num
 
 
@@ -18,14 +20,16 @@ class Ddpm_base:
         dataloader=None,
         val_dataloader=False,
         inversion_transforms=None,
-    ) -> None:
-        """
+    ):
+        
+        """ 
         Initialize the Trainer.
         Args:
             model (torch.nn.Module): The neural network model.
             config: Configuration settings.
             dataloader: DataLoader for training data.
         """
+        
         self.optimizer = None
         self.scheduler = None
         self.config = config
@@ -135,7 +139,7 @@ class Ddpm_base:
 
         self.epochs_run += 1
 
-    def _sample_batch(self, nb_img=4, condition=None,  lt_cond=None, ensemble_mean=None):
+    def _sample_batch(self, nb_img=4, condition=None,  lt_cond=None, ensemble_mean=None, orog_cond=None):
         """
         Sample a batch of images.
         Args:
@@ -144,15 +148,17 @@ class Ddpm_base:
         Returns:
             numpy.ndarray: Array of sampled images.
         """
+
         if nb_img <= 0:
             return []  # No images to sample, return an empty list
         if condition is None:
             sampled_images = self.model.sample(batch_size=nb_img)
         else:
-            sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond)
+            sampled_images = self.model.sample(batch_size=nb_img, condition=condition, lt_cond=lt_cond, orog_cond=orog_cond)
+
         # member = residue + ensemble_mean when sampling. ensemble_mean is torch.zeros if the residue prediction is disabled
         if not self.config.predict_residue:
-            ensemble_mean = torch.zeros_like(ensemble_mean)
+            ensemble_mean = torch.zeros_like(sampled_images)
         sampled_images = torch.add(sampled_images, ensemble_mean)
         
         if self.config.invert_norm == True:
@@ -195,3 +201,38 @@ class Ddpm_base:
             bbox_inches="tight",
         )
         plt.close()
+        
+    def plot_grid_big_domain(self, file_name, np_img):
+        """
+        Plot a grid of images, used for full AROME domain.
+        Args:
+            file_name (str): Name of the file to save the plot.
+            np_img (numpy.ndarray): Array of images to plot.
+        """
+        nb_image = len(np_img)
+        
+        var_names = ["u","v","t2m"]
+        dict_var={'u':0,'v':1,'t2m':2}
+        colormap=["viridis","viridis","coolwarm"]
+        
+        fig, axes = plt.subplots(1, 3, figsize=(12, 10))
+        axes = axes.flatten()
+        fig.suptitle("model sample",y=0.7)
+        img = np_img[0].detach()
+
+        for id, var in enumerate(var_names):
+            var_id=dict_var[var]
+            ax = axes[id]
+            im=ax.imshow(img[id],cmap = colormap[id],origin='lower')
+            plt.colorbar(im,ax=ax,fraction=0.046,pad=0.04, shrink=0.21)
+            ax.set_title(f'{var}',fontsize=12)
+            ax.axis('off')
+       
+        plt.tight_layout()
+        # Save the plot to the specified file path
+        plt.savefig(
+            os.path.join(f"{self.config.output_dir}" , f"{self.config.run_name}", "samples", file_name),
+            bbox_inches="tight", dpi = 1500
+        )
+        plt.close()
+        

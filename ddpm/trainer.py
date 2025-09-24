@@ -2,18 +2,23 @@ import csv
 import os
 import time
 from pathlib import Path
-
+import time
 import numpy as np
 import torch
 import wandb
 from torch import distributed as dist
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+import matplotlib.pyplot as plt
 from ddpm.ddpm_base import Ddpm_base
 from utils.distributed import is_main_gpu, synchronize
 import mlflow
-
+from utils import plotter_inconditionnal
+from torch.profiler import profile, record_function, ProfilerActivity
+import torch.amp
+from ddpm import normalize
+from pickle import dump
+from utils.utils import plot_loss_during_training
 
 class Trainer(Ddpm_base):
 
@@ -56,7 +61,8 @@ class Trainer(Ddpm_base):
                 anneal_strategy="cos",
                 pct_start=0.1,
             )
-
+        elif self.config.scheduler == "RootLR":
+            self.scheduler = None
         else:
             self.scheduler = None
         self._using_scheduler = self.config.scheduler is not None
@@ -82,7 +88,7 @@ class Trainer(Ddpm_base):
                 # Move other keys to GPU
                 batch[key] = batch[key].to(self.gpu_id)
         return batch
-
+   
     def _run_batch(self, batch, scaler, validation=False):
         """
         Run a single training batch.
@@ -98,19 +104,20 @@ class Trainer(Ddpm_base):
             self.optimizer.zero_grad()
 
             if self.config.use_AMP:  
+                
                 with torch.autocast(device_type='cuda'):
                     torch.cuda.synchronize()            
                     loss = self.model(**batch)
                 scaler.scale(loss).backward()
-
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
                 scaler.step(self.optimizer)
                 
                 scaler.update()
                 
             else : 
-
                 loss = self.model(**batch)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
                 self.optimizer.step()
         
         return loss
@@ -123,8 +130,8 @@ class Trainer(Ddpm_base):
         Returns:
             float: Average loss for the epoch.
         """
-
         iters = len(self.dataloader)
+        current_iter = 0
         if dist.is_initialized():
             self.dataloader.sampler.set_epoch(epoch)
         total_loss = 0
@@ -139,14 +146,14 @@ class Trainer(Ddpm_base):
             disable=not is_main_gpu(),
         )
         for i, batch in loop:
-
+            current_iter +=1
             needs_keys = ["img"] + (
                 ["condition_tensor"] if self.guided_diffusion else []
             ) + (
                 ["leadtime"] if self.leatimes_conditioning else []
             )
             batch_prep = self._prepare_batch(batch, needs_keys)
-            loss = self._run_batch(batch_prep, scaler)
+            loss = self._run_batch(batch_prep,scaler)
             total_loss += loss
 
             if is_main_gpu():
@@ -163,9 +170,15 @@ class Trainer(Ddpm_base):
                 }
                 self._log(i, log)
 
-            if self._using_scheduler and self.config.scheduler == "OneCycleLR":
-                self.scheduler.step()
-
+            if self._using_scheduler:
+                if self.config.scheduler == "OneCycleLR":
+                    self.scheduler.step()
+                elif self.config.scheduler == "RootLR":
+                    lr_ref=2e-4
+                    lr_iter=512
+                    iter_idx = epoch + i
+                    self.optimizer.param_groups[0]['lr'] = lr_ref / np.sqrt(max(iter_idx / lr_iter, 1))
+                
         self.logger.debug(
             f"Epoch {epoch} | Batchsize: {self.config.batch_size} | Steps: {len(self.dataloader) * epoch} | "
             f"Last loss: {total_loss / len(self.dataloader)} | "
@@ -184,8 +197,9 @@ class Trainer(Ddpm_base):
                     next(iter(self.dataloader)), ["condition_tensor"]
                 )
                 condition = condition["condition_tensor"][: self.config.n_sample]
+            self.model.eval()    
             self.sample_train(str(epoch), self.config.n_sample, condition, torch.zeros(self.config.n_sample, self.config.n_var, self.config.crop[1] - self.config.crop[0], self.config.crop[3] - self.config.crop[2]).to(self.gpu_id))
-
+            self.model.train()
         # validation loss computation (optional, default :  yes)
         total_val_loss = torch.tensor(0.0,dtype=torch.float32)
         
@@ -212,20 +226,18 @@ class Trainer(Ddpm_base):
                     ["condition_tensor"] if self.guided_diffusion else []
                 )
                 batch_prep = self._prepare_batch(batch, needs_keys)
-                loss = self._run_batch(batch_prep, validation=True)
+                loss, _, _ = self._run_batch(batch_prep, validation=True)
                 total_val_loss += loss
 
                 if is_main_gpu():
                     val_loop.set_postfix_str(f"Loss : {total_val_loss / (i + 1):.6f}")
 
-            total_val_loss = total_val_loss / len(self.val_dataloader)
+            total_val_loss = torch.div(total_val_loss,len(self.val_dataloader))
 
             self.model.train()
 
-        if epoch % self.config.any_time == 0.0:
-            synchronize()
 
-        return total_loss / len(self.dataloader), total_val_loss 
+        return torch.div(total_loss, len(self.dataloader)), total_val_loss 
 
     def _save_snapshot(self, epoch, path, train_loss, val_loss):
         """
@@ -252,7 +264,7 @@ class Trainer(Ddpm_base):
                 "CROP": self.config.crop,
             },
         }
-        if self._using_scheduler:
+        if self._using_scheduler and self.config.scheduler in ["ReduceLROnPlateau","OneCycleLR"]:
             snapshot["SCHEDULER_STATE"] = self.scheduler.state_dict()
         torch.save(snapshot, path)
         self.logger.info(
@@ -290,6 +302,14 @@ class Trainer(Ddpm_base):
             },
         )
 
+    def learning_rate_schedule(self, cur_nimg, batch_size, ref_lr=100e-4, ref_batches=70e3, rampup_Mimg=10):
+        lr = ref_lr
+        if ref_batches > 0:
+            lr /= np.sqrt(max(cur_nimg / (ref_batches * batch_size), 1))
+        if rampup_Mimg > 0:
+            lr *= min(cur_nimg / (rampup_Mimg * 1e6), 1)
+        return lr
+
     def _init_mlflow(self):
         # OUTDATED FOR NOW.
         mlflow.set_tracking_uri(self.config.ml_tracking_uri)
@@ -308,6 +328,7 @@ class Trainer(Ddpm_base):
         """
         scaler = torch.amp.GradScaler()
         filename_format = "sample_epoch{epoch}_{i}.npy"
+        losses = [] #to plot loss at each epoch
         if is_main_gpu():
 
             if self.config.use_wandb:
@@ -326,6 +347,11 @@ class Trainer(Ddpm_base):
 
         for epoch in loop:
             avg_train_loss, avg_val_loss = self._run_epoch(epoch, scaler)
+            loss = avg_train_loss.detach().cpu().numpy()
+            losses.append(loss)
+            save_path_plot = os.path.join(self.config.output_dir,self.config.run_name, "loss_plot")
+            plot_loss_during_training(losses,save_path_plot,"loss durant l'entraînement")
+            
             if is_main_gpu():
                 loop.set_postfix_str(
                     f"Epoch loss : {avg_train_loss:.5f} | Epoch val loss : {avg_val_loss:.5f} | Lr : {(self.optimizer.param_groups[0]['lr'] if self._using_scheduler else self.config.lr):.6f}"
@@ -404,8 +430,8 @@ class Trainer(Ddpm_base):
             Warning(
                 "Sampling more than 6 images may take a long time because sampling uses only the main GPU."
             )
-
         self.logger.info(f"Sampling {nb_img} images...")
+            
         samples = super()._sample_batch(nb_img=nb_img, condition=condition, ensemble_mean=ensemble_mean)
         for i, img in enumerate(samples):
             filename = (
@@ -421,7 +447,10 @@ class Trainer(Ddpm_base):
             )
             np.save(save_path, img.cpu())
         if self.config.plot:
-            self.plot_grid(f"samples_grid_{ep}.jpg", samples.cpu())
+            sample_path = f"samples/sample_grid_{ep}.jpg"
+            save_plot_path = os.path.join(self.config.output_dir, self.config.run_name,sample_path)
+            
+            self.plot_grid_big_domain(save_plot_path, samples.cpu())
         self.logger.info(
             f"Sampling done. Images saved in {os.path.join(self.config.output_dir, self.config.run_name, 'samples')}"
         )

@@ -13,19 +13,21 @@ DataSet:DataLoader classes for test samples
 import os
 import re
 
+import time
 import numpy as np
 import pandas as pd
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
-
+import random
 from ddpm.normalize import var_dict, SpecialNormalize
-from utils.utils import filter_dates, filter_lead_times
+from utils.utils import filter_dates, filter_lead_times, mirror_fill
 
 from torch.utils.data import Dataset, Sampler
 import torch.distributed as dist
 
 ################
+
 class ISDataset(Dataset):
     def __init__(self, config, path, csv_file):
         """
@@ -74,6 +76,31 @@ class ISDataset(Dataset):
             self.orography = self.orography[self.config.crop[0]:self.config.crop[1],self.config.crop[2]:self.config.crop[3]]
             # Normalizing
             self.orography_normalized = (self.orography - self.orography.mean()) / self.orography.max()
+        if self.config.training_configuration == "mirror":
+            self.init_mirror_filling()
+        
+    def init_mirror_filling(self):
+        """ 
+        That function defines variables that allow to fill the invalid datas of an image by valid datas, like a mirror
+        """
+        data_path = self.config.data_dir
+
+        #choose a random file in data folder
+        files = [f for f in os.listdir(data_path)]
+        file_name = random.choice(files)
+        file = os.path.join(data_path,file_name)
+
+        img = np.load(file)
+        img=torch.from_numpy(img).to("cuda")
+
+        img = img.unsqueeze(0)
+        img = img.permute((0,3,1,2))
+        crop = self.config.crop
+        img = img[:,:,crop[0]:crop[1],crop[2]:crop[3]]
+        mask = (torch.abs(img) < 1000)
+
+
+        self.valid_x_vert,self.invalid_x_vert,self.valid_y_vert,self.invalid_y_vert,self.valid_x_horiz,self.invalid_x_horiz,self.valid_y_horiz,self.invalid_y_horiz = mirror_fill(img,mask)
 
     def inversion_transforms(self):
         """
@@ -89,6 +116,7 @@ class ISDataset(Dataset):
         """
         return len(self.labels)
 
+
     def __getitem__(self, idx):
         """
         Get a sample from the dataset.
@@ -99,7 +127,11 @@ class ISDataset(Dataset):
         """
         file_name = self.labels.iloc[idx, 0] # Name of the current sample in the dataset
         sample = self.file_to_torch(file_name) # target
-        
+        if self.config.training_configuration=="mirror":
+            #filling datas outside AROME with mirrored datas, need to do vertical filling then horizontal filling 
+            sample[:,self.invalid_y_vert,self.invalid_x_vert] = sample[:,self.valid_y_vert,self.valid_x_vert] #vertical filling
+            sample[:,self.invalid_y_horiz,self.invalid_x_horiz] = sample[:,self.valid_y_horiz,self.valid_x_horiz] #horizontal filling
+                
         mean_cond = self.config.mean_conditioning # Use the mean as a condition ?
         var_cond = self.config.var_conditioning # Use the var as a condition ?
         mean_var_dir = self.config.mean_var_dir # Dir containing the pre-computed mean and var values
@@ -112,7 +144,8 @@ class ISDataset(Dataset):
         condition_tensor = self.get_conditioning_members(ensemble_df, idx)
   
         # Get the date, lt, and member id of the current member
-        row = ensemble_df.iloc[0] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
+        
+        row = self.labels.iloc[idx] if not ensemble_df.empty else {"Date": "", "LeadTime": 0, "Member": ""}
         date = str(pd.to_datetime(row["Date"]).strftime('%Y-%m-%d'))
         lt = row["LeadTime"]
         if self.config.guiding_col is not None:
@@ -149,14 +182,19 @@ class ISDataset(Dataset):
 
         if self.config.orography_conditioning:
             orography = self.orography_normalized.unsqueeze(0).expand(self.n_conditioning_sets, -1, -1, -1)
-            condition_tensor = torch.cat([condition_tensor, orography], dim=1)
+            if not self.config.sampling_mode == 'conditioned_sdedit':
+                condition_tensor = torch.cat([condition_tensor, orography], dim=1)
+            else :
+                condition_tensor = orography
 
         if self.config.sampling_mode == 'conditioned_sdedit':
             sample = sample.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
+                
         
         sample_id = re.search(r"\d+", file_name).group()
 
         return {"id_in_csv": idx, "img": sample, "img_id": sample_id, "condition_tensor": condition_tensor, "ensemble_mean_tensor": ensemble_mean_tensor, "member_id": member, "date": date, "leadtime": lt}
+
 
 
     def get_conditioning_members(self, ensemble_df, idx):
@@ -165,9 +203,8 @@ class ISDataset(Dataset):
             and returns the result
 
             Args:
-                ensemble_df (df): the sub df contatining the considered ensemble
+                ensemble_df (df): the sub df containing the considered ensemble
                 idx (int): ID in the __getitem__.
-
             Returns:
                 torch.Tensor: The resulting tensor of shape [n_sampling_conditioning_sets*n_conditions*n_var, self.height_dim, self.width_dim] 
         """
@@ -197,6 +234,7 @@ class ISDataset(Dataset):
             condition = condition.unsqueeze(0).expand_as(torch.zeros(self.n_conditioning_sets, self.config.n_var*self.config.n_conditions, self.height_dim, self.width_dim))
             return condition
     
+    
     def df_to_torch(self, ens_df, n_cond):
         """
             sample members from the ensemble df.
@@ -223,16 +261,36 @@ class ISDataset(Dataset):
         Returns:
             torch.Tensor: Torch tensor representing the sample.
         """
-        if type(file_name) == list:
-            file_name = file_name[0]
-        sample_path = os.path.join(self.data_dir, file_name)
-        sample = np.float32(np.load(sample_path + ".npy"))[
-            self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
-        ]
-        sample = sample.transpose((1, 2, 0))
-        sample = self.transform(sample)
-        return sample
+        assert self.config.domain_type == 'small' or self.config.domain_type == 'big', f"domain_type must be 'small' or 'big' and is {self.config.domain_type}"
+        
+        if self.config.domain_type=='small': #adding this to the config because data shape for small and big domain are not the same ((VAR,LAT,LON) AND (LAT,LON,VAR))
+            if type(file_name) == list:
+                file_name = file_name[0]
+            sample_path = os.path.join(self.data_dir, file_name)
+            sample = np.float32(np.load(sample_path + ".npy"))[
+                self.config.VI, self.CI[0] : self.CI[1], self.CI[2] : self.CI[3]
+            ]
+            norm_sample = sample.transpose((1, 2, 0))
+            norm_sample = self.transform(norm_sample)
+            
+            return norm_sample
+        else: #if using big domain datas
+            if type(file_name) == list:
+                file_name = file_name[0]
+            sample_path = os.path.join(self.data_dir, file_name)
+            try:
+                sample = np.float32(np.load(sample_path))
+            except Exception as e :
+                print(f"Erreur pour le fichier {e}")
+            sample = sample[
+                self.CI[0] : self.CI[1],
+                self.CI[2] : self.CI[3],
+                ]
+            sample = self.transform(sample)
 
+            return sample
+    
+    
 class CustomDistributedSampler(Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, drop_last=False):
         if num_replicas is None:
@@ -249,10 +307,10 @@ class CustomDistributedSampler(Sampler):
         if not drop_last and len(self.dataset) % self.num_replicas != 0:
             self.num_samples += 1
 
-        self.total_size = self.num_samples * self.num_replicas
+        self.total_size = torch.mul(self.num_samples, self.num_replicas)
 
     def __iter__(self):
-        start = self.rank * self.num_samples
+        start = torch.mul(self.rank, self.num_samples)
         end = min(start + self.num_samples, len(self.dataset))
         indices = list(range(start, end))
         return iter(indices)

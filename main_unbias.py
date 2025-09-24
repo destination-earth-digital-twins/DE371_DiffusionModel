@@ -48,12 +48,12 @@ if __name__=="__main__" :
     parser.add_argument('--output_dir',type = str, default='/project/home/p200177/DE_371/experiments_WP1/DIFFUSION_experiments_AROME/sdedit/sampling_sdedit_ddpm/sampling_10steps/unbiased_samples/')
 
     ########################## CONTROL of Data to invert ######################
-    parser.add_argument("--dates_file", type=str, default='Large_lt_val_labels_ens.csv')
+    parser.add_argument("--dates_file", type=str, default='/project/home/p200177/DE_371/datasets/big_domain_stats_and_csv/big_domain_optim_u_v_t2m/big_domain_optim_val_u_v_t2m.csv')
     parser.add_argument("--date_start", type=str, default = "2020-07-01")
     parser.add_argument("--date_stop", type=str, default = "2021-07-02")
     parser.add_argument("--leadtimes", type=str2intlist, default=[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45])
     parser.add_argument("--var_indices", type=str2intlist, default=[0,1,2,3])
-    
+    parser.add_argument("--crop", type=str2intlist, default=[7,711,0,1120])
     params = parser.parse_args()
 
     # create output and pack directories
@@ -61,7 +61,7 @@ if __name__=="__main__" :
         os.makedirs(params.output_dir)
 
     ################## loading dates and file names ##
-    df = pd.read_csv(params.real_data_dir + params.dates_file)
+    df = pd.read_csv(params.dates_file) # use directly full csv path
     df_date = df.copy()
     df_date['Date'] = pd.to_datetime(df_date['Date'])
     df_extract = df_date[(df_date['Date']>=params.date_start) & (df_date['Date']<=params.date_stop)]
@@ -80,14 +80,20 @@ if __name__=="__main__" :
                 # Loading AROME ensemble   
                 df0 = df_extract[(df_extract['Date']==date_) & (df_extract['LeadTime']==lt-1)]
                 Nb = len(df0)
-                Ens_AROME = np.zeros((Nb,) + tuple((4,256,256)))
+                Ens_AROME = np.zeros((Nb,) + tuple((3,crop[1] - crop[0],crop[3] - crop[2])))
+                print("Ens AROME shape", Ens_AROME.shape)
                 for i,s in enumerate(df0['Name']):
-                    sn = np.load(f'{params.real_data_dir}{s}.npy')[params.var_indices,:,:].astype(np.float32)
+                    file_path = os.path.join(params.real_data_dir,s)
+                    sn = np.load(file_path)[:,:,params.var_indices].astype(np.float32)
+                    crop = params.crop
+                    if np.sum(crop)>512: #means we are using big domain datas
+                        sn = sn.transpose(2,0,1)
+                        sn = sn[:,crop[0]:crop[1],crop[2]:crop[3]]
                     Ens_AROME[i] = sn
-                Ens_AROME = Ens_AROME[:,1:,:,:]
+                Ens_AROME = Ens_AROME[:,:,:,:]
                 # Loading Generated ensemble
                 # Ens_Gen = np.load(f'{params.gen_data_dir}4var_fake_ensemble_{datename}_{lt}.npy')
-                Ens_Gen = np.load(f'{params.gen_data_dir}genFsemble_{datename}_{lt}_1000_16.npy')
+                Ens_Gen = np.load(f'{params.gen_data_dir}/4var_fake_ensemble_{datename}_{lt}.npy')[:,1:,:,:] #not debiaising rr because i am only using u v t
                 
                 # Creating unbiased new ensemble
                 Ens_Gen_unbiased = Ens_Gen + np.expand_dims(Ens_AROME.mean(axis=0),0) - np.expand_dims(Ens_Gen.mean(axis=0),0)
