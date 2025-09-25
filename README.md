@@ -1,6 +1,12 @@
 # DDPM-for-meteo
 
-This repository contains the source code of a denoising model based on probabilistic diffusion, implemented using Python. The model is designed for weather image denoising.
+This repository contains the source code of a denoising model based on probabilistic diffusion, implemented using Python. The model is designed for weather image denoising. The goal is to enrich the AROME-EPS dataset by generating members emulating the training data.
+This code uses https://github.com/lucidrains/denoising-diffusion-pytorch as a basis.
+
+The generation process consists in the progressive denoising of random gaussian noise images until they fit the targeted distribution of the training data.
+This work allows two types of samples generation :
+  - unconditional generation : The model generates random samples relevant to the training set (the climatology)
+  - conditional generation : The model is constrained with parameters relevant from an ensemble, in order to generate members from this specific ensemble.
 
 ## Project structure
 
@@ -12,6 +18,10 @@ The project is structured as follows:
 │   ├── dataSet_Handler.py                  # Data manager
 │   ├── ddpm_base.py                        # Basic model implementation/trainer/sampler
 │   ├── conditionend_gaussian_diffusion.py  # Conditioned diffusion implementation
+│   ├── denoising_diffusion_pytorch.py      # Core model script
+│   ├── elucidated_diffusion.py             # Fast sampler implementation
+│   ├── normalize.py                        # Utilitary file for normalization
+│   ├── special_transforms.py               # Specific normalization for certain variables
 │   ├── sampler.py                          # Sampler implementation
 │   └── trainer.py                          # Trainer implementation
 └── utils
@@ -19,14 +29,16 @@ The project is structured as follows:
     ├── config.py                           # Configuration manager
     ├── config_schema.json                  # Configuration schema, default values
     ├── distributed.py                      # Manager for the multi GPU distribution
-    ├── guided_loss.py                      # Loss implementation for the conditioned diffusion
+    └── guided_loss.py                      # Loss implementation for the conditioned diffusion
 ├── slurm/apptainer_stuff
 │   ├── train_meluxina.sh                   # Launch a training job 
 │   ├── sample_meluxina.sh                  # Launch a samplig job
+│   └── unbias_sample_meluxina.sh           # Launch a job to unbias the generated samples
 ├── main.py                                 # Code entry point
 ├── requirements.txt                        # Project dependencies
-├── config_sample.yml                       # Exemple of sampling configuration
-├── config_train.yml                        # Exemple of training configuration
+├── config                                  # config exemples
+│   ├── ed                                    # 3var u, v, t2m
+│   └── ed_4var                               # 4var rr, u, v, t2m
 └── README.md                               # This file
 ```
 
@@ -37,8 +49,35 @@ You can install dependencies by running the following command:
 pip install -r requirements.txt
 ```
 
-This code uses https://github.com/lucidrains/denoising-diffusion-pytorch.
+## The AROME-EPS Dataset
 
+The dataset comprises 516 AROME ensemble forecasts covering the period from June 15th, 2020, to November 12th, 2021. Each ensemble forecast is composed of 16 members and includes lead times at 1-hour intervals, ranging up to 45 hours. It follows that [516x45x16=371520]() individual samples are available for training if each members of the enseble at a given lead time is considered individually.
+
+The data is restricted to a region encompassing the south and center of France with a resolution of [256x256]. Four variables are here considered: the precipitation (rr in mm/h) the horizontal (u) and vertical (v) in m/s components of the wind speed vector at 10 meters and the temperature at 2 meters (t2m)in K. Each individual sample can be conceptualized as a tensor with 4 channels, a width of 256 and a height of 256 [4, 256, 256].
+
+To efficiently load and organize the dataset, a metadata CSV file is utilized. The file structure is illustrated below:
+
+| Name          | Importance | PosX | PosY | Date       | LeadTime | Member |
+|---------------|------------|------|------|------------|----------|--------|
+| ...           | ...        | ...  | ...  | ...        | ...      | ...    |
+| _sample1440   | 1,0        | 256  | 256  | 2021-06-02 | 0        | 0      |
+| _sample1441   | 1,0        | 256  | 256  | 2021-06-02 | 0        | 1      |
+| _sample1442   | 1,0        | 256  | 256  | 2021-06-02 | 0        | 2      |
+| _sample1443   | 1,0        | 256  | 256  | 2021-06-02 | 0        | 3      |
+| _sample1444   | 1,0        | 256  | 256  | 2021-06-02 | 0        | 4      |
+
+- **`Name`**: A unique identifier for each sample.
+- **`Importance`**: Importance level.
+- **`PosX` and `PosY`**: Size of the image [**TO BE CONFIRMED**]
+- **`Date`**: Date of the ensemble forecast.
+- **`LeadTime`**: Lead time in hours.
+- **`Member`**: Member index within the ensemble.
+
+This metadata file plays a crucial role in loading the dataset efficiently and ensuring the proper association of each sample with its corresponding attributes. Please update the file path in your code to reflect the location of your metadata CSV file.
+
+The files containing the values for normalization can be generated in the subfolder **preprocessing/Preprocess_datas_IS_split**.  
+
+Each folder presented here includes its own description file.
 
 ## Directions for use
 
@@ -50,74 +89,16 @@ The main code is located in the `main.py` file and can be run in different modes
 Execute the code with the following command:
 
 ```bash
-python main.py --yaml_path [path_to_config_yaml] --debug [other_options]
+python main.py --yaml_path [path_to_config_yaml]
 ```
-Note that the path to the YAML configuration file is not mandatory, so the `--yaml_path` option is not mandatory. The default values are in `utils/config_schema.json`.
+Note that the path to the YAML configuration file is not mandatory, so the `--yaml_path` option is not mandatory. The default values are in `utils/config_schema.json`. More generally this file contains the exhaustive list and the description of all the parameters.
+
 ### Remark : 
 You can also override the configuration options in the YAML file by specifying them directly on the command line. For example, to modify the batch size, you can add the option --batch_size [new_value].
 
 ## Available options
 
-You can customize the behavior of this code by modifying/creating your own configuration. Here's a list of available options and their descriptions:
-
-### General parameters :
-- `mode` : The execution mode, you can choose between “Train” for training or “Sample” for sampling.
-- `run_name` : The name of the training session or resuming directory.
-- `batch_size` : The batch size (by default 32).
-- `any_time` : The frequency of epochs at which the code saves the model and generates samples (by default 400).
-- `model_path` : The path to the model to load and resume training if necessary (no path will start training from the beginning).
-- `debug` : Active les journaux de débogage (par défaut : désactivé).
-### Sampling parameters :
-- `ddim_timesteps` : If not None, will sample from the ddim method with the specified number of time steps.
-- `plot` : Activate to plot and save generated samples.
-- `guided` : Path to conditioned data.
-- `n_sample` : Number of samples to generate.
-- `random_noise` : Use random noise for x_start in conditioned sampling.
-### Data parameters :
-- `data_dir` : Data directory.
-- `v_i` : Variables number.
-- `var_indexes` : Variable names (list).
-- `crop` : Cropping parameters for the images.
-- `auto_normalize` : Automatic normalization (disabled by default).
-- `invert_norm` : Reverse normalization of image samples (disabled by default).
-- `image_size` : Image size.
-- `mean_file` : Path to the mean file.
-- `max_file` : Path to the max file.
-- `guiding_col` : Column to be used for conditioned sampling. Required when using conditioned mode.
-- `csv_file` : Path to the labels csv file (Required when using conditioned mode).
-- `dataset_config_file` : reprocessing configuration file path (only used if `rr` is one of the variables). 
-### Model parameters :
-- `scheduler` : Use a scheduler for the learning rate.
-- `scheduler_epoch` : Number of epochs for the scheduler to ajust the learning rate (safe for resuming).
-- `resume` : Resume from a checkpoint.
-- `lr` : Learning rate.
-- `adam_betas` : Bêtas for the Adam optimizer.
-- `epochs` : Number of training steps.
-- `beta_schedule` : Type of bêtas scheduler (cosine or linear).
-### Monitoring parameters :
-- `use_mlflow`: activate mlflow log
-- `ml_tracking_uri`: path to log mlflow
-- `ml_experiment_name`: mlflow experience name
-
-- `wandbproject` : Name of the Wandb project.
-- `use_wandb` : activate Wandb.
-- `entityWDB` : Nom of the Wandb entity.
-
-- `log_by_iteration`: `false` by default. If `true` : log the loss and the lr on every steps. 
-
-
-### Pre-processing file parameters(exemple in config/rr_dataset_config.yml):
-- `stat_folder` : Path to the directory that contains the normalization constants.
-- `stat_version`: Gives an identifier for the normalization constants (by default : "rr")
-- `rr_transform`: Parameters for the pe-processing of the precipitations
-  - `log_transform_iteration` : How many times the log(1 + x) function is applied (0 to 2 typically)
-  - `symetrization`: Random application (1/2) of a "-" sign before the samples of a strongly asymetric distribution in 0. False by default
-  - `gaussian_std`: Threshold below which Gaussian noise is applied. Default 0 (no action).
-- `normalization`: Normalization strategy
-  - `type`: Choice of normalization format “mean” (data normalized mean 0, min/max between -0.95 and 0.95), “minmax”: data normalized min to -1 and max to 1, “quant”: data normalized by quantiles 1% and 99% (x <- -1 + 2(x-q01)/(q99-q01))
-  - `per_pixel` : If normalization is performed on a per-pixel basis (requires spatialized constant files).default false
-  - `for_rr`:
-    - `blur_iteration`: Applies N successive Gaussian blurs if normalization is per pixel, on rr only. Default 1 
+You can customize the behavior of this code by modifying/creating your own configuration. Config exemples are available in 
 
 #### To resume a training, 2 possibilities :
 
@@ -128,78 +109,23 @@ By default, the lr scheduler is `None` (constant learning rate). You must define
 
 ## Exemples
 
-1. Train the modem:
+1. Train the model:
 
 ```python
-python main.py --yaml_path config_train.yml --batch_size 64 --lr 0.0001
+python main.py --yaml_path your_training_config.yml --batch_size 64 --lr 0.0001
 ```
 
-2. Test (Sample) the model
+2. Test (Sample) the model:
 
 ```python
-python main.py --yaml_path config_sample.yml
+python main.py --yaml_path your_sampling_config.yml
 ```
 
-3. Training with several GPUs 
-```python
-python torch.distributed.run --standalone --nproc_per_node gpu main.py --yaml_path config_sample.yml
-```
-
-4. Resume training from a checkpoint:
+3. Resume training from a checkpoint:
 
 ```python
 python main.py --yaml_path config_train.yml --model_path checkpoints/checkpoint.pt --resume
 ```
-warning, `--model_path` and `--resume` can be simply specified in the yaml file.
+Functional exemples of yaml files are available in the config folder.
 
-### Exemple of YAML config file:
-
-```yaml
-{
-  # General parameters
-  "mode": "Train",
-  "run_name": "run_train",
-  "batch_size": 4,
-  "any_time": 25,
-
-  # Sampling parameters
-  "ddim_timesteps": 500,
-  "plot": true,
-  "sampling_mode": "simple",
-  "n_sample": 4,
-  "random_noise": true,
-
-  # Data parameters
-  "data_dir": "/path/to/your/data/",
-  "csv_file": "your_data_labels.csv",
-  "v_i": 3,
-  "var_indexes": [ "u", "v", "t2m" ],
-  "crop": [ 0,256,0,256 ],
-  "invert_norm": false,
-  "image_size": 256,
-  "mean_file": "mean_data.npy",
-  "max_file": "max_data.npy",
-  "guiding_col": "your_guiding_column",
-
-  # Model parameters
-  "scheduler": true,
-  "scheduler_epoch": 500,
-  "resume": false,
-  "epochs": 500,
-  "beta_schedule": "linear",
-
-  # Tracking parameters
-  "use_mlflow": true, # activation mlflow log
-  "ml_tracking_uri": "../mlruns", # path to log mlflow
-  "ml_experiment_name": "ddpm", # experience name
-
-  "wandbproject": "your_wandb_project",
-  "use_wandb": true,
-  "entityWDB": "your_entity"
-}
-```
-
-If values are not specified in the configuration file, they will be replaced by default values or by overloading when the `main.py` file is called.
-
-## Apptainer and Slurm
-
+!WARNING! Don't forget to change the paths in config file.
