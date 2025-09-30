@@ -15,11 +15,10 @@ Also, to achieve a proper training, it is important to condition the model by th
 and :
 ```
 "sampling_mode": "conditioned_input"
-
 ```
 and :
 ```
-"path_to_orography" : "/project/home/p200177/DE_371/avritj/orography_mirror_filled.npy"
+"path_to_orography" : "/project/home/p200177/DE_371/avritj/orography_mirror_filled.npy" #TODO : put this file into the project resources
 ```
 
 Then, to train on big domain : 
@@ -28,8 +27,14 @@ Then, to train on big domain :
 "domain_type" : "big" #probably going to be modified because redundant with crop
 ```
 
+To replace invalid values : 
 ```
-"model_used": "unet" to train with the unet (other choices avalaible, see the config.json file)
+"training_configuration": "mirror" #gonna get removed as this is the best filling method so far
+```
+
+
+```
+"model_used": "unet" to train with the unet (other choices avalaible, see the config_schema.json file)
 ```
 
 if training with the U-Net, we advise setting "use_AMP" and "compile_model" to True, as it fastens greatly the training. 
