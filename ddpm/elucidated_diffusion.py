@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 from einops import rearrange, repeat, reduce
+import noise
 
 # helpers
 
@@ -51,7 +52,8 @@ class ElucidatedDiffusion(nn.Module):
         S_tmax = 50,
         S_noise = 0.0,
         num_edition_timesteps=5,
-        n_leadtimes=14
+        n_leadtimes=14,
+        noise_color='white'
     ):
         super().__init__()
         #assert net.random_or_learned_sinusoidal_cond
@@ -90,6 +92,7 @@ class ElucidatedDiffusion(nn.Module):
         self.S_tmin = S_tmin
         self.S_tmax = S_tmax
         self.S_noise = S_noise
+        self.noise_color = noise_color
         
     @property
     def device(self):
@@ -170,7 +173,7 @@ class ElucidatedDiffusion(nn.Module):
             
             # images is noise at the beginning
             init_sigma = sigmas[0]
-            images = init_sigma * torch.randn(shape, device = self.device)
+            images = init_sigma * noise.make_noise(target=self.noise_color, dims=shape).to(self.device)
 
         
         else :
@@ -185,7 +188,7 @@ class ElucidatedDiffusion(nn.Module):
             # Noising condition
             condition_sdedit = normalize_to_neg_one_to_one(condition)
             init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
-            noise = torch.randn_like(condition_sdedit, device = self.device)
+            noise = noise.make_noise(target=self.noise_color, dims=condition_sdedit.shape).to(self.device)
 
             images = init_sigma * noise  + condition_sdedit
 
@@ -199,7 +202,7 @@ class ElucidatedDiffusion(nn.Module):
         for sigma, sigma_next, gamma in tqdm(sigmas_and_gammas, desc = 'sampling time step'):
             sigma, sigma_next, gamma = map(lambda t: t.item(), (sigma, sigma_next, gamma))
 
-            eps = self.S_noise * torch.randn(shape, device = self.device) # stochastic sampling # Algorithm 2 : line 4
+            eps = self.S_noise * noise.make_noise(target=self.noise_color, dims=shape).to(self.device) # stochastic sampling # Algorithm 2 : line 4
 
             sigma_hat = sigma + gamma * sigma # Algorithm 2 : line 5
             images_hat = images + sqrt(sigma_hat ** 2 - sigma ** 2) * eps # Algorithm 2 : line 6
@@ -239,13 +242,13 @@ class ElucidatedDiffusion(nn.Module):
         sigmas = self.sample_schedule(num_sample_steps)
 
         if not self.sdedit_flag:
-            images  = sigmas[0] * torch.randn(shape, device = device)
+            images  = sigmas[0] * noise.make_noise(target=self.noise_color, dims=shape).to(self.device)
         
         else :
             # Noising condition
             condition = normalize_to_neg_one_to_one(condition)
             init_sigma = sigmas[num_sample_steps - self.num_edition_timesteps]
-            noise = torch.randn_like(condition, device = self.device)
+            noise = noise.make_noise(target=self.noise_color, dims=condition.shape).to(self.device)
 
             images = init_sigma * noise  + condition
 
@@ -295,7 +298,7 @@ class ElucidatedDiffusion(nn.Module):
         sigmas = self.noise_distribution(batch_size)
         padded_sigmas = rearrange(sigmas, 'b -> b 1 1 1')
 
-        noise = torch.randn_like(img)
+        noise = noise.make_noise(target=self.noise_color, dims=img.shape).to(self.device)
 
         noised_images = img + padded_sigmas * noise  # alphas are 1. in the paper
 
